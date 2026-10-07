@@ -1,0 +1,98 @@
+import type { Checks, Column, Person, ReviewerState } from "./contract.js";
+
+export interface Actor {
+  login: string;
+  avatarUrl: string | null;
+  isBot: boolean;
+}
+
+export type GitHubReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED" | "PENDING";
+
+export interface PullSnapshot {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  isDraft: boolean;
+  createdAt: string;
+  updatedAt: string;
+  headRefName: string;
+  baseRefName: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  author: Actor | null;
+  reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
+  checks: Checks;
+  requestedReviewers: Person[];
+  requestedTeams: string[];
+  latestReviews: Array<{ author: Actor; state: GitHubReviewState }>;
+  reviews: Array<{ author: Actor; state: GitHubReviewState }>;
+  commentAuthors: Actor[];
+  unresolvedThreads: number;
+}
+
+export function isAutomated(actor: Actor): boolean {
+  return actor.isBot || /\[bot\]$/i.test(actor.login) || /copilot/i.test(actor.login) || actor.login === "github-actions";
+}
+
+function isReviewer(actor: Actor, pull: PullSnapshot): boolean {
+  return !isAutomated(actor) && actor.login !== pull.author?.login;
+}
+
+export function humanFeedbackCount(pull: PullSnapshot): number {
+  const comments = pull.commentAuthors.filter((actor) => isReviewer(actor, pull)).length;
+  const reviews = pull.reviews.filter((review) => review.state !== "PENDING" && isReviewer(review.author, pull)).length;
+  return comments + reviews;
+}
+
+function humanLatestReviews(pull: PullSnapshot) {
+  return pull.latestReviews.filter((review) => isReviewer(review.author, pull));
+}
+
+function isApproved(pull: PullSnapshot): boolean {
+  if (pull.reviewDecision !== null) return pull.reviewDecision === "APPROVED";
+  const latest = humanLatestReviews(pull);
+  return latest.some((review) => review.state === "APPROVED") && !latest.some((review) => review.state === "CHANGES_REQUESTED");
+}
+
+function hasHumanFeedback(pull: PullSnapshot): boolean {
+  return humanFeedbackCount(pull) > 0 || humanLatestReviews(pull).some((review) => review.state !== "PENDING");
+}
+
+export function columnFor(pull: PullSnapshot): Column {
+  if (pull.isDraft) return "draft";
+  if (isApproved(pull)) return "ready";
+  if (hasHumanFeedback(pull)) return "reviewing";
+  return "open";
+}
+
+const REVIEWER_STATES: Partial<Record<GitHubReviewState, ReviewerState>> = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes-requested",
+  COMMENTED: "commented",
+};
+
+export interface Viewer {
+  login: string;
+  teams: ReadonlySet<string>;
+}
+
+export function isRequestedFrom(pull: PullSnapshot, viewer: Viewer): boolean {
+  if (pull.author?.login === viewer.login) return false;
+  if (pull.requestedReviewers.some((person) => person.login === viewer.login)) return true;
+  const reviewed = pull.latestReviews.some((review) => review.author.login === viewer.login);
+  return !reviewed && pull.requestedTeams.some((team) => viewer.teams.has(team));
+}
+
+export function reviewersOf(pull: PullSnapshot): Array<Person & { state: ReviewerState }> {
+  const reviewed = humanLatestReviews(pull).flatMap((review) => {
+    const state = REVIEWER_STATES[review.state];
+    return state === undefined ? [] : [{ login: review.author.login, avatarUrl: review.author.avatarUrl, state }];
+  });
+  const seen = new Set(reviewed.map((reviewer) => reviewer.login));
+  const requested = pull.requestedReviewers
+    .filter((person) => !seen.has(person.login))
+    .map((person) => ({ ...person, state: "requested" as const }));
+  return [...reviewed, ...requested];
+}

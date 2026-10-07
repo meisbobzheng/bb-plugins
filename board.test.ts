@@ -1,0 +1,138 @@
+import { describe, expect, it } from "vitest";
+import { columnFor, humanFeedbackCount, isAutomated, isRequestedFrom, reviewersOf, type Actor, type PullSnapshot } from "./board";
+
+const human = (login: string): Actor => ({ login, avatarUrl: null, isBot: false });
+const bot = (login: string): Actor => ({ login, avatarUrl: null, isBot: true });
+
+function pull(overrides: Partial<PullSnapshot> = {}): PullSnapshot {
+  return {
+    repo: "acme/app",
+    number: 1,
+    title: "Change",
+    url: "https://github.com/acme/app/pull/1",
+    isDraft: false,
+    createdAt: "2026-10-01T00:00:00Z",
+    updatedAt: "2026-10-02T00:00:00Z",
+    headRefName: "feature",
+    baseRefName: "main",
+    additions: 1,
+    deletions: 1,
+    changedFiles: 1,
+    author: human("author"),
+    reviewDecision: null,
+    checks: "none",
+    requestedReviewers: [],
+    requestedTeams: [],
+    latestReviews: [],
+    reviews: [],
+    commentAuthors: [],
+    unresolvedThreads: 0,
+    ...overrides,
+  };
+}
+
+describe("isAutomated", () => {
+  it.each([
+    [bot("github-actions"), true],
+    [human("github-actions"), true],
+    [human("dependabot[bot]"), true],
+    [human("copilot-pull-request-reviewer"), true],
+    [human("Copilot"), true],
+    [human("alice"), false],
+  ])("%o is automated: %s", (actor, expected) => {
+    expect(isAutomated(actor)).toBe(expected);
+  });
+});
+
+describe("columnFor", () => {
+  it("puts drafts in draft even when approved", () => {
+    expect(columnFor(pull({ isDraft: true, reviewDecision: "APPROVED" }))).toBe("draft");
+  });
+
+  it("keeps PRs with only bot, Copilot, and author comments in open", () => {
+    const quiet = pull({
+      commentAuthors: [bot("github-actions"), human("author"), human("Copilot")],
+      reviews: [{ author: bot("copilot-pull-request-reviewer"), state: "COMMENTED" }],
+    });
+    expect(columnFor(quiet)).toBe("open");
+    expect(humanFeedbackCount(quiet)).toBe(0);
+  });
+
+  it("moves PRs with a human comment or review into reviewing", () => {
+    expect(columnFor(pull({ commentAuthors: [human("alice")] }))).toBe("reviewing");
+    expect(columnFor(pull({ reviews: [{ author: human("bob"), state: "CHANGES_REQUESTED" }] }))).toBe("reviewing");
+  });
+
+  it("ignores pending reviews", () => {
+    const pending = { author: human("bob"), state: "PENDING" as const };
+    expect(columnFor(pull({ reviews: [pending], latestReviews: [pending] }))).toBe("open");
+  });
+
+  it("counts a latest review that fell outside the recent reviews window", () => {
+    expect(columnFor(pull({ reviewDecision: "REVIEW_REQUIRED", latestReviews: [{ author: human("bob"), state: "COMMENTED" }] }))).toBe("reviewing");
+  });
+
+  it("uses GitHub's review decision for ready", () => {
+    expect(columnFor(pull({ reviewDecision: "APPROVED" }))).toBe("ready");
+    const needsMore = pull({
+      reviewDecision: "REVIEW_REQUIRED",
+      latestReviews: [{ author: human("bob"), state: "APPROVED" }],
+      reviews: [{ author: human("bob"), state: "APPROVED" }],
+    });
+    expect(columnFor(needsMore)).toBe("reviewing");
+  });
+
+  it("treats a human approval as ready when the repo requires no reviews", () => {
+    const approved = pull({
+      latestReviews: [{ author: human("bob"), state: "APPROVED" }],
+      reviews: [{ author: human("bob"), state: "APPROVED" }],
+    });
+    expect(columnFor(approved)).toBe("ready");
+    const blocked = pull({
+      latestReviews: [
+        { author: human("bob"), state: "APPROVED" },
+        { author: human("carol"), state: "CHANGES_REQUESTED" },
+      ],
+    });
+    expect(columnFor(blocked)).toBe("reviewing");
+  });
+});
+
+describe("reviewersOf", () => {
+  it("lists human reviews first and then outstanding requests", () => {
+    const reviewers = reviewersOf(
+      pull({
+        latestReviews: [
+          { author: human("bob"), state: "APPROVED" },
+          { author: bot("copilot-pull-request-reviewer"), state: "COMMENTED" },
+          { author: human("dave"), state: "DISMISSED" },
+        ],
+        requestedReviewers: [
+          { login: "bob", avatarUrl: null },
+          { login: "erin", avatarUrl: null },
+        ],
+      }),
+    );
+    expect(reviewers.map((reviewer) => [reviewer.login, reviewer.state])).toEqual([
+      ["bob", "approved"],
+      ["erin", "requested"],
+    ]);
+  });
+});
+
+describe("isRequestedFrom", () => {
+  const me = { login: "me", teams: new Set(["acme/core"]) };
+
+  it("counts direct requests and team requests until you review", () => {
+    expect(isRequestedFrom(pull({ requestedReviewers: [{ login: "me", avatarUrl: null }] }), me)).toBe(true);
+    expect(isRequestedFrom(pull({ requestedTeams: ["acme/core"] }), me)).toBe(true);
+    expect(isRequestedFrom(pull({ requestedTeams: ["acme/other"] }), me)).toBe(false);
+    expect(
+      isRequestedFrom(pull({ requestedTeams: ["acme/core"], latestReviews: [{ author: human("me"), state: "COMMENTED" }] }), me),
+    ).toBe(false);
+  });
+
+  it("never counts the author, whom CODEOWNERS teams often include", () => {
+    expect(isRequestedFrom(pull({ author: human("me"), requestedTeams: ["acme/core"] }), me)).toBe(false);
+  });
+});
