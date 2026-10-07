@@ -76,6 +76,9 @@ range. The editor offers:
 - **Comment now**: posts a single review comment immediately.
 - **Suggest change**: inserts a GitHub suggestion block with the selected new
   lines.
+- **Ask agent**: sends the text as a question to the review thread, with the
+  selected lines quoted, instead of to GitHub. The answer appears in the
+  **Review thread** tab.
 
 A finding's **Comment** button opens the editor on the finding's lines with its
 title and explanation. **Submit review** posts every pending comment in one

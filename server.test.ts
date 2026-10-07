@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFakePluginHost, makePluginAgentConfigurationContext, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { RunOptions } from "./github";
-import { FINDINGS_TOOL, REVIEW_SKILL, createPlugin, parsePullArgument, reviewMessage, summaryPrompt } from "./server";
+import { FINDINGS_TOOL, REVIEW_SKILL, askMessage, createPlugin, parsePullArgument, reviewMessage, summaryPrompt } from "./server";
 
 const HEAD = "1".repeat(40);
 const BASE = "2".repeat(40);
@@ -120,6 +120,20 @@ describe("prompts", () => {
     const message = reviewMessage({ repo: "acme/app", number: 7, baseRefName: "main" });
     expect(message.startsWith(`${REVIEW_SKILL} review pr 7`)).toBe(true);
     expect(message).toContain(FINDINGS_TOOL);
+  });
+});
+
+describe("askMessage", () => {
+  it("quotes the selected lines and names the version they come from", () => {
+    const message = askMessage(
+      { repo: "acme/app", number: 7, headSha: HEAD, mergeBaseSha: MERGE_BASE },
+      { path: "a.go", side: "deletions", startLine: 3, endLine: 4 },
+      "x := 1\ny := 2",
+      "Why was this removed?",
+    );
+    expect(message).toBe(
+      `Question from the PR Board diff about a.go lines 3-4 at the merge base ${MERGE_BASE.slice(0, 12)}:\n\n\`\`\`\nx := 1\ny := 2\n\`\`\`\n\nWhy was this removed?`,
+    );
   });
 });
 

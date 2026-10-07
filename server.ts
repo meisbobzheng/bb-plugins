@@ -108,6 +108,23 @@ export function reviewMessage(pull: Pick<PullDetail, "repo" | "number" | "baseRe
   ].join(" ");
 }
 
+export function askMessage(
+  pull: Pick<PullDetail, "repo" | "number" | "headSha" | "mergeBaseSha">,
+  target: { path: string; side: "additions" | "deletions"; startLine: number; endLine: number },
+  code: string | null,
+  question: string,
+): string {
+  const lines = target.startLine === target.endLine ? `line ${target.startLine}` : `lines ${target.startLine}-${target.endLine}`;
+  const version =
+    target.side === "additions" ? `the PR head ${pull.headSha.slice(0, 12)}` : `the merge base ${pull.mergeBaseSha.slice(0, 12)}`;
+  return [
+    `Question from the PR Board diff about ${target.path} ${lines} at ${version}:`,
+    ...(code === null ? [] : ["", "```", code, "```"]),
+    "",
+    question,
+  ].join("\n");
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -524,6 +541,21 @@ export function createPlugin(deps: PluginDeps) {
         await github.setViewed(pullNodeId, path, viewed);
         pullCache.delete(pullKey({ repo, number }));
         return {};
+      },
+      askAgent: async ({ repo, number, question, ...target }) => {
+        const pull = { repo, number };
+        const [{ threadId }, detail] = await Promise.all([openReview(pull), pullDetail(pull, false)]);
+        const file = detail.files.find((candidate) => candidate.path === target.path);
+        const sourcePath = target.side === "deletions" ? (file?.previousPath ?? target.path) : target.path;
+        const source = await fileAt(repo, target.side === "additions" ? detail.headSha : detail.mergeBaseSha, sourcePath).catch(() => null);
+        const code = source?.content?.split("\n").slice(target.startLine - 1, target.endLine).join("\n") ?? null;
+        const result = await bb.sdk.threads.send({
+          threadId,
+          mode: "auto",
+          input: [{ type: "text", text: askMessage(detail, target, code, question), mentions: [] }],
+        });
+        publish(pull);
+        return { threadId, delivery: result.delivery };
       },
       dismissFinding: ({ id, dismissed }) => {
         const pull = store.dismissFinding(id, dismissed);

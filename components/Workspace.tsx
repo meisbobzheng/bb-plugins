@@ -123,6 +123,7 @@ function Workspace({
 }) {
   const rpc = useRpc<typeof rpcContract>();
   const navigate = useBbNavigate();
+  const appPanel = experimental_useAppPanel();
   const pull = { repo: detail.repo, number: detail.number };
   const review = state ?? EMPTY_STATE;
   const [diffStyle, setDiffStyle] = usePreference<DiffStyle>("diff-style", "split", DIFF_STYLES);
@@ -256,6 +257,19 @@ function Workspace({
       setComposer(null);
       toast.success("Comment posted");
       await refreshDetail();
+    },
+    async askAgent(target, question) {
+      await rpc.call("askAgent", {
+        ...pull,
+        path: target.path,
+        side: target.side,
+        startLine: target.startLine,
+        endLine: target.endLine,
+        question,
+      });
+      setComposer(null);
+      appPanel.openFixedTab({ surface: { kind: "current" }, tab: REVIEW_THREAD_TAB });
+      toast.success("Asked the review thread");
     },
     async reply(commentId, body) {
       await rpc.call("reply", { ...pull, commentId, body });

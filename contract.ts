@@ -270,6 +270,10 @@ export const rpcContract = defineRpcContract({
     input: z.object({ ...pullRef, pullNodeId: z.string().min(1), path: pathSchema, viewed: z.boolean() }).strict(),
     output: empty,
   },
+  askAgent: {
+    input: z.object({ ...pullRef, ...commentTargetSchema, question: bodySchema }).strict(),
+    output: z.object({ threadId: z.string(), delivery: z.enum(["sent", "queued"]) }),
+  },
   dismissFinding: {
     input: z.object({ id: z.string().min(1), dismissed: z.boolean() }).strict(),
     output: empty,
