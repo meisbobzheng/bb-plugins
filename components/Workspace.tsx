@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Markdown, experimental_useAppPanel, useBbNavigate, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { experimental_useAppPanel, useBbNavigate, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { UPDATES_CHANNEL } from "../channel";
 import type {
@@ -14,22 +14,35 @@ import type {
 } from "../contract";
 import type { DiffStyle } from "../highlight";
 import { isCommentable } from "../patch";
-import { BOARD_PANEL, REVIEW_THREAD_TAB, type PullRoute } from "../routes";
+import { REVIEW_THREAD_TAB, type PullRoute } from "../routes";
+import { cn } from "../lib/utils";
 import type { Composer, ReviewActions } from "./Annotations";
-import { Avatar } from "./bits";
+import { ToolbarToggle } from "./bits";
+import { errorMessage, useCached } from "./cache";
 import { DiffPane, type DefinitionRequest, type DiffFocus } from "./DiffPane";
 import { DefinitionPicker, PeekPane, type PeekTarget } from "./PeekPane";
 import { Sidebar, type SidebarTab } from "./Sidebar";
 import { SubmitReviewDialog } from "./SubmitReview";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
-import { errorMessage, useLoad } from "./use-load";
 import { usePreference } from "./use-preference";
+import { WorkspaceHeader } from "./WorkspaceHeader";
+import { useWidth } from "./use-width";
 
 type Location = { kind: "diff"; path: string; focus: DiffFocus | null } | { kind: "peek"; target: PeekTarget };
 
+type DiffStylePreference = DiffStyle | "auto";
+
 const HISTORY_LIMIT = 50;
-const DIFF_STYLES = ["split", "unified"] as const;
+const NARROW_WIDTH = 900;
+const SPLIT_MIN_WIDTH = 860;
+const DIFF_STYLE_OPTIONS: ReadonlyArray<{ id: DiffStylePreference; label: string; icon: string | null }> = [
+  { id: "auto", label: "Auto", icon: null },
+  { id: "split", label: "Split", icon: "Columns2" },
+  { id: "unified", label: "Unified", icon: "Rows2" },
+];
+const DIFF_STYLES = DIFF_STYLE_OPTIONS.map((option) => option.id);
+const lastPaths = new Map<string, string>();
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
@@ -39,15 +52,6 @@ function samePull(payload: unknown, pull: PullRoute): boolean {
   if (typeof payload !== "object" || payload === null) return true;
   const { repo, number } = payload as { repo?: unknown; number?: unknown };
   return repo === pull.repo && number === pull.number;
-}
-
-function ToolbarToggle({ pressed, label, icon, onClick }: { pressed: boolean; label: string; icon: string; onClick(): void }) {
-  return (
-    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" aria-pressed={pressed} title={label} onClick={onClick}>
-      <Icon name={icon} className="size-3.5" />
-      <span className="hidden lg:inline">{label}</span>
-    </Button>
-  );
 }
 
 function useReviewThread(pull: PullRoute, onReady: () => void) {
@@ -75,23 +79,29 @@ function useReviewThread(pull: PullRoute, onReady: () => void) {
 export function ReviewWorkspace({ pull }: { pull: PullRoute }) {
   const rpc = useRpc<typeof rpcContract>();
   const key = `${pull.repo}#${pull.number}`;
-  const [detail, reloadDetail] = useLoad(`detail:${key}`, () => rpc.call("pull", { ...pull, refresh: false }));
-  const [state, reloadState] = useLoad(`state:${key}`, () => rpc.call("reviewState", pull));
-  useRealtime(UPDATES_CHANNEL, (payload) => {
-    if (samePull(payload, pull)) reloadState();
+  const force = useRef(false);
+  const detail = useCached(`detail:${key}`, () => {
+    const refresh = force.current;
+    force.current = false;
+    return rpc.call("pull", { ...pull, refresh });
   });
-  useReviewThread(pull, reloadState);
-  const refreshDetail = useCallback(
-    () => rpc.call("pull", { ...pull, refresh: true }).then(() => reloadDetail()),
-    [pull.repo, pull.number, reloadDetail, rpc],
-  );
+  const state = useCached(`state:${key}`, () => rpc.call("reviewState", pull));
+  useRealtime(UPDATES_CHANNEL, (payload) => {
+    if (samePull(payload, pull)) state.reload();
+  });
+  useReviewThread(pull, state.reload);
+  const refreshDetail = useCallback(() => {
+    force.current = true;
+    detail.reload();
+  }, [detail.reload]);
 
-  if (detail.status === "loading") return <p className="p-5 text-sm text-muted-foreground">Loading {key}…</p>;
-  if (detail.status === "error") {
-    return (
+  if (detail.value === null) {
+    return detail.error === null ? (
+      <p className="p-5 text-sm text-muted-foreground">Loading {key}…</p>
+    ) : (
       <div className="space-y-3 p-5 text-sm">
-        <p className="text-destructive">{detail.message}</p>
-        <Button size="sm" variant="outline" onClick={reloadDetail}>
+        <p className="text-destructive">{detail.error}</p>
+        <Button size="sm" variant="outline" onClick={detail.reload}>
           Retry
         </Button>
       </div>
@@ -101,8 +111,9 @@ export function ReviewWorkspace({ pull }: { pull: PullRoute }) {
     <Workspace
       key={key}
       detail={detail.value}
-      state={state.status === "ready" ? state.value : null}
-      reloadState={reloadState}
+      refreshing={detail.refreshing}
+      state={state.value}
+      reloadState={state.reload}
       refreshDetail={refreshDetail}
     />
   );
@@ -112,32 +123,45 @@ const EMPTY_STATE: ReviewState = { agent: { threadId: null, running: false, find
 
 function Workspace({
   detail,
+  refreshing,
   state,
   reloadState,
   refreshDetail,
 }: {
   detail: PullDetail;
+  refreshing: boolean;
   state: ReviewState | null;
   reloadState(): void;
-  refreshDetail(): Promise<void>;
+  refreshDetail(): void;
 }) {
   const rpc = useRpc<typeof rpcContract>();
   const navigate = useBbNavigate();
   const appPanel = experimental_useAppPanel();
   const pull = { repo: detail.repo, number: detail.number };
   const review = state ?? EMPTY_STATE;
-  const [diffStyle, setDiffStyle] = usePreference<DiffStyle>("diff-style", "split", DIFF_STYLES);
+  const pullKey = `${detail.repo}#${detail.number}`;
+  const [rootRef, width] = useWidth<HTMLDivElement>();
+  const [mainRef, mainWidth] = useWidth<HTMLElement>();
+  const narrow = width !== null && width < NARROW_WIDTH;
+  const [diffStylePreference, setDiffStylePreference] = usePreference<DiffStylePreference>("diff-style", "auto", DIFF_STYLES);
+  const diffStyle: DiffStyle =
+    diffStylePreference === "auto" ? (mainWidth !== null && mainWidth < SPLIT_MIN_WIDTH ? "unified" : "split") : diffStylePreference;
   const [wrap, setWrap] = usePreference<boolean>("wrap", false);
   const [sidebarOpen, setSidebarOpen] = usePreference<boolean>("sidebar", true);
+  const [filesPanelOpen, setFilesPanelOpen] = usePreference<boolean>("files-panel", false);
+  const filesOpen = narrow ? filesPanelOpen : sidebarOpen;
+  const setFilesOpen = narrow ? setFilesPanelOpen : setSidebarOpen;
   const [tab, setTab] = useState<SidebarTab>("files");
-  const [location, setLocation] = useState<Location | null>(null);
+  const [location, setLocation] = useState<Location | null>(() => {
+    const path = lastPaths.get(pullKey);
+    return path !== undefined && detail.files.some((file) => file.path === path) ? { kind: "diff", path, focus: null } : null;
+  });
   const [history, setHistory] = useState<Location[]>([]);
   const [fullFiles, setFullFiles] = useState<ReadonlySet<string>>(new Set());
   const [composer, setComposer] = useState<Composer | null>(null);
   const [picker, setPicker] = useState<{ result: DefinitionResult; sha: string } | null>(null);
   const [viewed, setViewed] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [showDescription, setShowDescription] = useState(false);
   const [running, setRunning] = useState(false);
   const seq = useRef(0);
   const nextSeq = () => ++seq.current;
@@ -152,6 +176,10 @@ function Workspace({
     [firstPath, location],
   );
   const currentFile = current?.kind === "diff" ? (files.find((file) => file.path === current.path) ?? null) : null;
+  const currentIndex = currentFile === null ? -1 : files.indexOf(currentFile);
+  useEffect(() => {
+    if (currentFile !== null) lastPaths.set(pullKey, currentFile.path);
+  }, [currentFile?.path, pullKey]);
 
   const goTo = useCallback(
     (next: Location, remember: boolean) => {
@@ -256,7 +284,7 @@ function Workspace({
       });
       setComposer(null);
       toast.success("Comment posted");
-      await refreshDetail();
+      refreshDetail();
     },
     async askAgent(target, question) {
       await rpc.call("askAgent", {
@@ -273,11 +301,11 @@ function Workspace({
     },
     async reply(commentId, body) {
       await rpc.call("reply", { ...pull, commentId, body });
-      await refreshDetail();
+      refreshDetail();
     },
     async resolveThread(threadId, resolved) {
       await rpc.call("resolveThread", { ...pull, threadId, resolved });
-      await refreshDetail();
+      refreshDetail();
     },
     async dismissFinding(id, dismissed) {
       await rpc.call("dismissFinding", { id, dismissed });
@@ -333,7 +361,7 @@ function Workspace({
     const result = await rpc.call("submitReview", { ...pull, headSha: detail.headSha, event, body });
     toast.success(`Review submitted${result.comments > 0 ? ` with ${result.comments} comment${result.comments === 1 ? "" : "s"}` : ""}`);
     reloadState();
-    await refreshDetail();
+    refreshDetail();
   };
 
   useEffect(() => {
@@ -368,112 +396,104 @@ function Workspace({
   const peekTarget = current?.kind === "peek" ? current.target : null;
   const peekFile =
     peekTarget?.kind === "repo" && peekTarget.sha === detail.headSha ? files.find((file) => file.path === peekTarget.path) : undefined;
-  const openUrl = (url: string) => {
-    if (!navigate.openUrl(url)) window.open(url, "_blank", "noopener");
-  };
+  const sidebar = (
+    <Sidebar
+      files={files}
+      selectedPath={currentFile?.path ?? null}
+      findings={review.findings}
+      drafts={review.drafts}
+      threads={detail.threads}
+      tab={tab}
+      onTab={setTab}
+      onSelectFile={selectFile}
+      onToggleViewed={toggleViewed}
+      onSelectFinding={selectFinding}
+    />
+  );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <Button size="icon" variant="ghost" className="size-8 shrink-0" title="Back to the board" aria-label="Back to the board" onClick={() => navigate.toPluginPanel(BOARD_PANEL)}>
-          <Icon name="ArrowLeft" className="size-4" />
-        </Button>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {detail.isDraft ? <span className="shrink-0 rounded border border-border px-1 text-[10px] font-medium uppercase text-muted-foreground">Draft</span> : null}
-            <h1 className="truncate text-sm font-semibold" title={detail.title}>
-              {detail.title}
-            </h1>
-            <span className="shrink-0 text-sm text-muted-foreground">#{detail.number}</span>
-          </div>
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <Avatar person={detail.author} />
-            <span className="shrink-0">{detail.author.login}</span>
-            <span aria-hidden>·</span>
-            <Icon name="GitBranch" className="size-3 shrink-0" />
-            <span className="truncate font-mono">
-              {detail.headRefName} → {detail.baseRefName}
-            </span>
-            <span aria-hidden>·</span>
-            <span className="shrink-0 tabular-nums">
-              <span className="text-emerald-600 dark:text-emerald-400">+{detail.additions}</span>{" "}
-              <span className="text-red-600 dark:text-red-400">−{detail.deletions}</span>
-            </span>
-            {review.agent.running ? (
-              <span className="inline-flex shrink-0 items-center gap-1 text-sky-600 dark:text-sky-400">
-                <span className="size-1.5 animate-pulse rounded-full bg-current" aria-hidden />
-                agent working
-              </span>
-            ) : null}
-            {review.agent.findings > 0 ? (
-              <button type="button" className="shrink-0 text-amber-600 underline-offset-2 hover:underline dark:text-amber-400" onClick={() => setTab("findings")}>
-                {review.agent.findings} findings
-              </button>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <ToolbarToggle pressed={showDescription} label="Description" icon="AlignLeft" onClick={() => setShowDescription(!showDescription)} />
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" disabled={review.agent.threadId === null} onClick={() => review.agent.threadId !== null && navigate.toThread(review.agent.threadId)}>
-            <Icon name="MessageSquare" className="size-3.5" />
-            <span className="hidden lg:inline">Thread</span>
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openUrl(detail.url)}>
-            <Icon name="Github" className="size-3.5" />
-            <span className="hidden lg:inline">GitHub</span>
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={running} onClick={runReview} title="Send /thermo-nuclear-code-quality-review to the review thread">
-            <Icon name="Play" className="size-3.5" />
-            Run review
-          </Button>
-          <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => setSubmitOpen(true)}>
-            Submit review
-            {review.drafts.length > 0 ? <span className="rounded-full bg-background/25 px-1.5 tabular-nums">{review.drafts.length}</span> : null}
-          </Button>
-        </div>
-      </header>
-      {showDescription ? (
-        <div className="max-h-[40vh] shrink-0 overflow-y-auto border-b border-border px-5 py-3">
-          <Markdown content={detail.body.trim().length === 0 ? "_No description provided._" : detail.body} className="text-sm" />
-        </div>
-      ) : null}
-      <div className="flex min-h-0 flex-1">
-        {sidebarOpen ? (
-          <aside className="w-72 shrink-0 border-r border-border">
-            <Sidebar
-              files={files}
-              selectedPath={currentFile?.path ?? null}
-              findings={review.findings}
-              drafts={review.drafts}
-              threads={detail.threads}
-              tab={tab}
-              onTab={setTab}
-              onSelectFile={selectFile}
-              onToggleViewed={toggleViewed}
-              onSelectFinding={selectFinding}
-            />
-          </aside>
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
+      <WorkspaceHeader
+        detail={detail}
+        review={review}
+        narrow={narrow}
+        refreshing={refreshing}
+        running={running}
+        onShowFindings={() => {
+          setTab("findings");
+          setFilesOpen(true);
+        }}
+        onRunReview={runReview}
+        onSubmit={() => setSubmitOpen(true)}
+      />
+      <div className={cn("flex min-h-0 flex-1", narrow && "flex-col")}>
+        {filesOpen ? (
+          narrow ? (
+            <section className="h-[32vh] min-h-48 shrink-0 border-b border-border" aria-label="Files and findings">
+              {sidebar}
+            </section>
+          ) : (
+            <aside className="w-72 shrink-0 border-r border-border">{sidebar}</aside>
+          )
         ) : null}
-        <main className="relative flex min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
-            <Button size="icon" variant="ghost" className="size-7" aria-pressed={sidebarOpen} title="Toggle the file list" aria-label="Toggle the file list" onClick={() => setSidebarOpen(!sidebarOpen)}>
-              <Icon name="PanelLeft" className="size-3.5" />
+        <main ref={mainRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              aria-pressed={filesOpen}
+              title={narrow ? "Toggle files and findings" : "Toggle the file list"}
+              aria-label="Toggle the file list"
+              onClick={() => setFilesOpen(!filesOpen)}
+            >
+              <Icon name={narrow ? "ListView" : "PanelLeft"} fallback="PanelLeft" className="size-3.5" />
             </Button>
             <Button size="icon" variant="ghost" className="size-7" disabled={history.length === 0} title="Go back (⌥←)" aria-label="Go back" onClick={back}>
               <Icon name="ArrowLeft" className="size-3.5" />
             </Button>
-            <span className="min-w-0 flex-1 truncate px-1 font-mono text-xs" title={currentFile?.path}>
-              {currentFile?.path ?? (current?.kind === "peek" ? "Definition" : "")}
+            <Button size="icon" variant="ghost" className="size-7" disabled={currentIndex <= 0} title="Previous file (k)" aria-label="Previous file" onClick={() => stepFile(-1)}>
+              <Icon name="ArrowUp" className="size-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              disabled={currentIndex < 0 || currentIndex >= files.length - 1}
+              title="Next file (j)"
+              aria-label="Next file"
+              onClick={() => stepFile(1)}
+            >
+              <Icon name="ArrowDown" className="size-3.5" />
+            </Button>
+            <span className="min-w-0 flex-1 basis-40 truncate px-1 font-mono text-xs" title={currentFile?.path}>
+              {currentFile === null ? (current?.kind === "peek" ? "Definition" : "") : `${currentIndex + 1}/${files.length}  ${currentFile.path}`}
             </span>
-            <span className="hidden text-[11px] text-muted-foreground xl:inline">⌘-click a symbol to go to its definition · j/k files</span>
-            <ToolbarToggle pressed={diffStyle === "split"} label="Split" icon="Columns2" onClick={() => setDiffStyle(diffStyle === "split" ? "unified" : "split")} />
-            <ToolbarToggle pressed={wrap} label="Wrap" icon="TextWrap" onClick={() => setWrap(!wrap)} />
+            {narrow ? null : <span className="hidden text-[11px] text-muted-foreground 2xl:inline">⌘-click a symbol to go to its definition · j/k files</span>}
+            <div className="flex rounded-md border border-border p-0.5" role="group" aria-label="Diff layout">
+              {DIFF_STYLE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={diffStylePreference === option.id}
+                  title={option.id === "auto" ? `Auto: ${diffStyle} at this width` : option.label}
+                  aria-label={`${option.label} diff`}
+                  onClick={() => setDiffStylePreference(option.id)}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring aria-pressed:bg-state-active aria-pressed:text-foreground"
+                >
+                  {option.icon === null ? null : <Icon name={option.icon} className="size-3.5" aria-hidden />}
+                  {narrow && option.icon !== null ? null : option.label}
+                </button>
+              ))}
+            </div>
+            <ToolbarToggle pressed={wrap} label="Wrap" icon="TextWrap" showLabel={!narrow} onClick={() => setWrap(!wrap)} />
             {currentFile !== null ? (
               <>
                 <ToolbarToggle
                   pressed={fullFile}
                   label="Full file"
                   icon="Maximize2"
+                  showLabel={!narrow}
                   onClick={() =>
                     setFullFiles((previous) => {
                       const next = new Set(previous);
@@ -482,7 +502,13 @@ function Workspace({
                     })
                   }
                 />
-                <ToolbarToggle pressed={currentFile.viewed} label="Viewed" icon={currentFile.viewed ? "CircleCheck" : "Circle"} onClick={() => toggleViewed(currentFile)} />
+                <ToolbarToggle
+                  pressed={currentFile.viewed}
+                  label="Viewed"
+                  icon={currentFile.viewed ? "CircleCheck" : "Circle"}
+                  showLabel={!narrow}
+                  onClick={() => toggleViewed(currentFile)}
+                />
               </>
             ) : null}
           </div>

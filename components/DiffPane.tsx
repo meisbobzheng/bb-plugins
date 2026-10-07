@@ -10,7 +10,7 @@ import { AnnotationView, annotationKey, FindingCard, ThreadCard, type Annotation
 import { identifierAt, isModifierClick, useModifierUnderline, useScrollToLine, type LineFocus } from "./code";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
-import { useLoad } from "./use-load";
+import { useCached } from "./cache";
 
 export interface DefinitionRequest {
   sha: string;
@@ -86,7 +86,7 @@ export function DiffPane({
   const underline = useModifierUnderline();
   const oldPath = file.previousPath ?? file.path;
 
-  const [contents] = useLoad<Contents>(`${detail.headSha}:${file.path}`, async () => {
+  const contents = useCached<Contents>(`contents:${detail.repo}@${detail.headSha}:${file.path}`, async () => {
     const [old, next] = await Promise.all([
       file.status === "added" ? null : rpc.call("fileAt", { repo: detail.repo, sha: detail.mergeBaseSha, path: oldPath }),
       file.status === "removed" ? null : rpc.call("fileAt", { repo: detail.repo, sha: detail.headSha, path: file.path }),
@@ -95,23 +95,24 @@ export function DiffPane({
       old: file.status === "added" ? "" : (old?.content ?? null),
       new: file.status === "removed" ? "" : (next?.content ?? null),
     };
-  });
+  }, { immutable: true });
+  const loaded = contents.value;
 
   const fileDiff = useMemo((): FileDiffMetadata | null => {
-    if (file.patch === null || contents.status === "loading") return null;
+    if (file.patch === null || (loaded === null && contents.error === null)) return null;
     const patch = gitPatch(file, oldPath, file.patch);
     const cacheKey = `${detail.repo}@${detail.headSha}:${file.path}`;
-    if (contents.status === "ready" && contents.value.old !== null && contents.value.new !== null) {
+    if (loaded !== null && loaded.old !== null && loaded.new !== null) {
       const full = processFile(patch, {
         isGitDiff: true,
         cacheKey: `${cacheKey}:full`,
-        oldFile: { name: oldPath, contents: contents.value.old },
-        newFile: { name: file.path, contents: contents.value.new },
+        oldFile: { name: oldPath, contents: loaded.old },
+        newFile: { name: file.path, contents: loaded.new },
       });
       if (full !== undefined) return full;
     }
     return processFile(patch, { isGitDiff: true, cacheKey }) ?? null;
-  }, [contents, detail.headSha, detail.repo, file, oldPath]);
+  }, [contents.error, detail.headSha, detail.repo, file, loaded, oldPath]);
 
   const canExpand = fileDiff !== null && !fileDiff.isPartial;
   const { inlineFindings, fileFindings, inlineThreads, otherThreads } = useMemo(() => {
@@ -153,14 +154,12 @@ export function DiffPane({
           kind: "composer",
           composer,
           suggestion:
-            composer.side === "additions" && contents.status === "ready"
-              ? linesOf(contents.value.new, composer.startLine, composer.endLine)
-              : null,
+            composer.side === "additions" && loaded !== null ? linesOf(loaded.new, composer.startLine, composer.endLine) : null,
         },
       });
     }
     return list;
-  }, [composer, contents, detail.headSha, drafts, inlineFindings, inlineThreads]);
+  }, [composer, detail.headSha, drafts, inlineFindings, inlineThreads, loaded]);
 
   const handlers = useRef({ gutter: (_range: SelectedLineRange) => {}, token: (_props: TokenProps, _event: MouseEvent) => {} });
   handlers.current.gutter = (range) => {

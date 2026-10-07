@@ -6,7 +6,7 @@ import { cn } from "../lib/utils";
 import { Avatar, SeverityBadge, lineLabel, relativeTime } from "./bits";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
-import { errorMessage } from "./use-load";
+import { errorMessage } from "./cache";
 
 export interface CommentTarget {
   path: string;

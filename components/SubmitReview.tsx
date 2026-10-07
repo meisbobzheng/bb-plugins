@@ -4,7 +4,7 @@ import type { ReviewEvent } from "../contract";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
-import { errorMessage } from "./use-load";
+import { errorMessage } from "./cache";
 
 const EVENTS: ReadonlyArray<{ id: ReviewEvent; label: string; hint: string }> = [
   { id: "COMMENT", label: "Comment", hint: "Submit general feedback without explicit approval." },

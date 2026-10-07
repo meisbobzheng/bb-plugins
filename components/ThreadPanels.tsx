@@ -4,7 +4,7 @@ import type { rpcContract } from "../contract";
 import { BOARD_PANEL, parseWorkspacePath, workspacePath, type PullRoute } from "../routes";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
-import { useLoad } from "./use-load";
+import { useCached } from "./cache";
 
 function Hint({ children }: { children: string }) {
   return <p className="p-4 text-sm text-muted-foreground">{children}</p>;
@@ -12,12 +12,12 @@ function Hint({ children }: { children: string }) {
 
 function PullThread({ pull }: { pull: PullRoute }) {
   const rpc = useRpc<typeof rpcContract>();
-  const [state, reload] = useLoad(`thread:${pull.repo}#${pull.number}`, () => rpc.call("reviewState", pull));
-  useRealtime(UPDATES_CHANNEL, reload);
-  if (state.status === "loading") return <Hint>Loading the review thread…</Hint>;
-  if (state.status === "error") return <Hint>{state.message}</Hint>;
-  if (state.value.agent.threadId === null) return <Hint>Starting the review thread…</Hint>;
-  return <ThreadChat key={state.value.agent.threadId} threadId={state.value.agent.threadId} variant="compact" />;
+  const state = useCached(`state:${pull.repo}#${pull.number}`, () => rpc.call("reviewState", pull));
+  useRealtime(UPDATES_CHANNEL, state.reload);
+  const threadId = state.value?.agent.threadId ?? null;
+  if (state.value === null) return <Hint>{state.error ?? "Loading the review thread…"}</Hint>;
+  if (threadId === null) return <Hint>Starting the review thread…</Hint>;
+  return <ThreadChat key={threadId} threadId={threadId} variant="compact" />;
 }
 
 export function ReviewThreadTab({ subPath }: PluginNavPanelProps) {
@@ -29,9 +29,8 @@ export function ReviewThreadTab({ subPath }: PluginNavPanelProps) {
 export function ThreadDiffButton({ threadId, isCompactViewport }: PluginThreadHeaderActionProps) {
   const rpc = useRpc<typeof rpcContract>();
   const navigate = useBbNavigate();
-  const [pull] = useLoad(`pull-for:${threadId}`, () => rpc.call("pullForThread", { threadId }));
-  if (pull.status !== "ready" || pull.value === null) return null;
-  const route = pull.value;
+  const route = useCached(`pull-for:${threadId}`, () => rpc.call("pullForThread", { threadId })).value;
+  if (route === null) return null;
   return (
     <Button
       size="sm"

@@ -6,7 +6,7 @@ import { identifierAt, isModifierClick, useModifierUnderline, useScrollToLine } 
 import type { DefinitionRequest } from "./DiffPane";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
-import { useLoad } from "./use-load";
+import { useCached } from "./cache";
 
 export type PeekTarget =
   | { kind: "repo"; sha: string; path: string; line: number; seq: number }
@@ -34,11 +34,15 @@ export function PeekPane({
   const host = useRef<HTMLDivElement>(null);
   const underline = useModifierUnderline();
   const key = target.kind === "repo" ? `${target.sha}:${target.path}` : target.path;
-  const [content] = useLoad(key, () =>
-    target.kind === "repo"
-      ? rpc.call("fileAt", { repo: detail.repo, sha: target.sha, path: target.path })
-      : rpc.call("externalFile", { path: target.path }),
+  const content = useCached(
+    `peek:${detail.repo}:${key}`,
+    () =>
+      target.kind === "repo"
+        ? rpc.call("fileAt", { repo: detail.repo, sha: target.sha, path: target.path })
+        : rpc.call("externalFile", { path: target.path }),
+    { immutable: target.kind === "repo" },
   );
+  const file = content.value;
 
   const onToken = useRef<(props: TokenProps, event: MouseEvent) => void>(() => {});
   onToken.current = (props, event) => {
@@ -91,14 +95,14 @@ export function PeekPane({
         ) : null}
       </div>
       <div ref={host} className="pb-24">
-        {content.status === "loading" ? <p className="p-4 text-sm text-muted-foreground">Loading…</p> : null}
-        {content.status === "error" ? <p className="p-4 text-sm text-destructive">{content.message}</p> : null}
-        {content.status === "ready" && content.value.content === null ? (
-          <p className="p-4 text-sm text-muted-foreground">{UNAVAILABLE[content.value.unavailable ?? "missing"]}</p>
+        {file === null && content.error === null ? <p className="p-4 text-sm text-muted-foreground">Loading…</p> : null}
+        {file === null && content.error !== null ? <p className="p-4 text-sm text-destructive">{content.error}</p> : null}
+        {file !== null && file.content === null ? (
+          <p className="p-4 text-sm text-muted-foreground">{UNAVAILABLE[file.unavailable ?? "missing"]}</p>
         ) : null}
-        {content.status === "ready" && content.value.content !== null ? (
+        {file !== null && file.content !== null ? (
           <File
-            file={{ name: target.path, contents: content.value.content, cacheKey: `peek:${key}` }}
+            file={{ name: target.path, contents: file.content, cacheKey: `peek:${key}` }}
             options={options}
             selectedLines={selectedLines}
             disableWorkerPool

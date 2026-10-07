@@ -330,7 +330,8 @@ export function createPlugin(deps: PluginDeps) {
           }),
         ),
       );
-      return { viewer: me.login, repos: repoList, fetchedAt: new Date(deps.now()).toISOString(), cards, errors };
+      const fetchedAt = Math.min(deps.now(), ...repoList.map((repo) => boardCache.get(repo)?.at ?? deps.now()));
+      return { viewer: me.login, repos: repoList, fetchedAt: new Date(fetchedAt).toISOString(), cards, errors };
     }
 
     async function resolveProjectId(repo: string): Promise<string> {

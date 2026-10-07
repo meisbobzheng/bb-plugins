@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { Board, BoardCard, PullDetail, ReviewState } from "./contract";
@@ -10,11 +10,24 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 };
 
+const stored = new Map<string, string>();
+Object.defineProperty(window, "localStorage", {
+  configurable: true,
+  value: {
+    getItem: (key: string) => stored.get(key) ?? null,
+    setItem: (key: string, value: string) => void stored.set(key, value),
+    removeItem: (key: string) => void stored.delete(key),
+    clear: () => stored.clear(),
+  },
+});
+
 const app = await loadPluginApp(() => import("./app"));
 
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 const HEAD = "1".repeat(40);
 const MERGE_BASE = "3".repeat(40);
@@ -138,6 +151,46 @@ describe("board", () => {
       expect.objectContaining({ method: "toPluginPanel", path: "board", options: { subPath: "pr/acme/app/2" } }),
     );
   });
+
+  it("shows the last board at once on return and updates it in the background", async () => {
+    const first = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => BOARD } });
+    await first.findByText("Needs eyes");
+    first.lifecycle.unmount();
+
+    const slot = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => new Promise(() => {}) } });
+    expect(slot.getByText("Needs eyes")).toBeTruthy();
+    expect(slot.queryByText("Loading open pull requests…")).toBeNull();
+    expect(slot.getByRole("status").textContent).toContain("Updating");
+  });
+
+  it("lays the columns out as rows and remembers the choice", async () => {
+    const slot = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => BOARD } });
+    await slot.findByText("Needs eyes");
+    fireEvent.click(slot.getByRole("button", { name: "Rows" }));
+    const open = slot.getByRole("region", { name: "Open" });
+    expect(open.querySelector("ul")?.className).toContain("grid");
+    expect(window.localStorage.getItem("pr-board:board-layout")).toBe('"rows"');
+  });
+
+  it("hides, unhides, and shrinks pull requests, and collapses a column", async () => {
+    const slot = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => BOARD } });
+    await slot.findByText("Needs eyes");
+
+    fireEvent.click(slot.getByRole("button", { name: "Hide #2" }));
+    expect(slot.queryByText("Needs eyes")).toBeNull();
+    fireEvent.click(slot.getByRole("button", { name: "1 hidden" }));
+    expect(slot.getByText("Needs eyes")).toBeTruthy();
+    fireEvent.click(slot.getByRole("button", { name: "Unhide #2" }));
+    expect(slot.queryByRole("button", { name: "1 hidden" })).toBeNull();
+
+    fireEvent.click(slot.getByRole("button", { name: "Shrink #3" }));
+    expect(slot.getByRole("button", { name: "Expand #3" })).toBeTruthy();
+    expect(slot.getByText("Under review").className).toContain("truncate");
+
+    fireEvent.click(slot.getByRole("button", { name: /^Draft/ }));
+    expect(slot.queryByText("Draft work")).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem("pr-board:collapsed-columns") ?? "[]")).toEqual(["draft"]);
+  });
 });
 
 describe("review workspace", () => {
@@ -230,5 +283,18 @@ describe("review workspace", () => {
     fireEvent.click(slot.getByRole("button", { name: "Add to review" }));
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0]).toMatchObject({ repo: "acme/app", number: 7, id: null, path: "cmd/main.go", side: "additions", startLine: 3, endLine: 4 });
+  });
+
+  it("stacks the file list above a unified diff when the page is narrow", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 700, 900));
+    const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/7" }, { rpc: workspaceRpc(STATE) });
+    await slot.findByText("Add thing");
+    expect(slot.queryByRole("region", { name: "Files and findings" })).toBeNull();
+    await waitFor(() => expect(document.querySelector("diffs-container")?.shadowRoot?.querySelector("[data-unified]")).toBeTruthy());
+
+    fireEvent.click(slot.getByRole("button", { name: "Toggle the file list" }));
+    expect(slot.getByRole("region", { name: "Files and findings" })).toBeTruthy();
+    fireEvent.click(slot.getByRole("button", { name: "Split diff" }));
+    await waitFor(() => expect(document.querySelector("diffs-container")?.shadowRoot?.querySelector("[data-additions]")).toBeTruthy());
   });
 });

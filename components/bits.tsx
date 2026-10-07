@@ -1,5 +1,7 @@
 import type { Person, Severity } from "../contract";
 import { cn } from "../lib/utils";
+import { Button } from "./ui/button";
+import { Icon } from "./ui/icon";
 
 export function Avatar({ person, className, title }: { person: Person; className?: string; title?: string }) {
   if (person.avatarUrl === null) {
@@ -53,4 +55,36 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
 export function lineLabel(startLine: number | null, endLine: number | null): string {
   if (startLine === null || endLine === null) return "";
   return startLine === endLine ? `L${startLine}` : `L${startLine}–${endLine}`;
+}
+
+export function ToolbarToggle({
+  pressed,
+  label,
+  icon,
+  showLabel,
+  disabled = false,
+  onClick,
+}: {
+  pressed: boolean;
+  label: string;
+  icon: string;
+  showLabel: boolean;
+  disabled?: boolean;
+  onClick(): void;
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="h-7 px-2 text-xs"
+      aria-pressed={pressed}
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Icon name={icon} className="size-3.5" />
+      {showLabel ? label : null}
+    </Button>
+  );
 }

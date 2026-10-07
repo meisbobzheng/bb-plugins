@@ -29,8 +29,25 @@ Each card shows the number, title, author, age, size, CI status, reviewers
 (ring color: green approved, red changes requested, blue commented, grey
 requested), comment count, unresolved threads, and the review thread's state.
 Filter by text, or by **Requested** (review requested from you or one of your
-teams, until you review) and **Mine**. The board refreshes every minute and
-caches GitHub for 30 seconds; **Refresh** skips the cache.
+teams, until you review) and **Mine**.
+
+**Columns** lays the groups out side by side; **Rows** stacks them, each a grid
+of cards that wraps to the page width, so the page scrolls down. Rows is the
+default when the window is taller than it is wide. Click a group's header to
+collapse it.
+
+Hover a card for its actions: **Shrink** reduces it to one line (**Expand**
+restores it), **Hide** removes it from the board, and the external-link icon
+opens it on GitHub. **N hidden** in the toolbar shows hidden cards, faded, with
+**Unhide**. Layout, scope, collapsed groups, and shrunk and hidden PRs are kept
+in this client's local storage.
+
+The last board loads at once, including after a restart, and updates in the
+background: the toolbar shows **Updating…** while it fetches and **Updated
+<time>** after, where the time is when the server last read GitHub. The board
+refreshes every minute and when a review thread changes; the server caches
+GitHub for 30 seconds and **Refresh** skips that cache. It returns to where you
+scrolled.
 
 ## Review page
 
@@ -51,6 +68,9 @@ The review thread's chat is the page's **Review thread** panel tab. The
 **Review diff** button in a review thread's header opens the page from the
 thread.
 
+A PR's page also opens from the cache when you come back to it, on the file
+you last viewed, and refreshes in the background.
+
 The page has:
 
 - **Files**: every changed file with its status, finding, unresolved-thread,
@@ -66,6 +86,15 @@ The page has:
   above the diff.
 - **Description**: the PR body.
 - **Run review**: sends the review command to the thread again.
+
+The diff layout is **Auto** by default: split when the diff area is at least
+860 pixels wide, unified when it is narrower. **Split** and **Unified** fix it.
+The ↑ and ↓ buttons step through the files.
+
+On a page narrower than 900 pixels, such as a vertical monitor with the thread
+panel open, the file list and findings move into a collapsible panel above the
+diff (the list button toggles it), the header's actions move to their own row,
+and toolbar buttons show icons only.
 
 ### Commenting
 
