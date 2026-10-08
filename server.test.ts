@@ -165,6 +165,11 @@ describe("review threads", () => {
       },
       title: "Review app#7: Add thing",
       pluginMetadata: { repo: "acme/app", number: 7 },
+      providerId: "claude-code",
+      model: "claude-opus-5-5",
+      reasoningLevel: "high",
+      permissionMode: "auto",
+      executionInputSources: { providerId: "explicit", model: "explicit", reasoningLevel: "explicit", permissionMode: "explicit" },
     });
 
     await vi.waitFor(() => expect(harness.inspection.sdk.callsTo("threads.send")).toHaveLength(1));
@@ -176,6 +181,31 @@ describe("review threads", () => {
     const second = await harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
     expect(second).toEqual({ threadId: "thr_review", created: false });
     expect(harness.inspection.sdk.callsTo("threads.spawn")).toHaveLength(1);
+  });
+});
+
+describe("review execution settings", () => {
+  it("spawns with the configured model, effort, and mode, and the project's model when the model is empty", async () => {
+    const runner = fakeRunner();
+    const thread = makeThreadResponse({ id: "thr_review", environmentId: "env_1", status: "idle", deletedAt: null, archivedAt: null });
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "pr-board",
+      agentSkillIds: ["pr-board"],
+      settings: { repos: "acme/app", reviewModel: " ", reviewReasoning: "xhigh", reviewPermissionMode: "accept-edits" },
+      sdk: {
+        projects: { list: async () => [{ id: "proj_app", gitRemoteUrl: "git@github.com:acme/app.git" }] as never },
+        system: { config: async () => ({ primaryHostId: "host_1" }) as never },
+        threads: { spawn: async () => thread as never, get: async () => null as never, send: async () => ({ delivery: "queued" }) as never },
+        environments: { get: async () => ({ id: "env_1", status: "ready", path: "/tmp/worktree", hostId: "host_1" }) as never },
+      },
+    });
+    createPlugin({ run: runner.run, pollMs: 1, now: Date.now })(bb);
+    await harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
+    const [spawn] = harness.inspection.sdk.callsTo("threads.spawn");
+    const args = spawn?.[0] as Record<string, unknown>;
+    expect(args).toMatchObject({ providerId: "claude-code", reasoningLevel: "xhigh", permissionMode: "accept-edits" });
+    expect(args).not.toHaveProperty("model");
+    expect(args.executionInputSources).toEqual({ providerId: "explicit", reasoningLevel: "explicit", permissionMode: "explicit" });
   });
 });
 

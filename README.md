@@ -141,6 +141,14 @@ were.
 | --- | --- | --- |
 | Repositories | `private-tech-inc/hss` | Comma-separated `owner/repo` list for the board. |
 | Review project | none | Project that review threads start in when no project's remote matches. |
+| Review model | `claude-opus-5-5` | Claude Code model of new review threads. Empty uses the project's default. |
+| Review reasoning effort | `high` | `low`, `medium`, `high`, `xhigh`, or `max`. |
+| Review permission mode | `auto` | `auto` is Approve for me, `accept-edits` is Accept Edits, `full` is Full Access. |
+
+Review threads always run on Claude Code, because the review is the
+`/thermo-nuclear-code-quality-review` skill. The model, effort, and mode are set
+when a thread starts, so changing them affects new review threads only; change
+an existing thread from its composer.
 
 ## CLI
 

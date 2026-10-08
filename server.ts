@@ -22,6 +22,9 @@ import { createStore, type PullKey } from "./store.js";
 export { rpcContract };
 
 const WORKTREE_PROVIDER_ID = "git-worktree";
+const REVIEW_PROVIDER_ID = "claude-code";
+const REASONING_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+const PERMISSION_MODES = ["accept-edits", "auto", "full"] as const;
 export const REVIEW_SKILL = "/thermo-nuclear-code-quality-review";
 export const FINDINGS_TOOL = "pr_board_record_findings";
 const SKILL_NAME = "pr-board";
@@ -163,6 +166,26 @@ export function createPlugin(deps: PluginDeps) {
         type: "project",
         label: "Review project",
         description: "Project that review threads start in when no project's git remote matches the PR's repository.",
+      },
+      reviewModel: {
+        type: "string",
+        label: "Review model",
+        description: "Claude Code model new review threads run on. `bb provider models claude-code` lists the ids. Empty uses the project's default.",
+        default: "claude-opus-5-5",
+      },
+      reviewReasoning: {
+        type: "select",
+        label: "Review reasoning effort",
+        description: "Reasoning effort of new review threads.",
+        options: [...REASONING_LEVELS],
+        default: "high",
+      },
+      reviewPermissionMode: {
+        type: "select",
+        label: "Review permission mode",
+        description: '"auto" is Approve for me, "accept-edits" is Accept Edits, and "full" is Full Access.',
+        options: [...PERMISSION_MODES],
+        default: "auto",
       },
     });
     const store = createStore(bb.storage);
@@ -399,13 +422,31 @@ export function createPlugin(deps: PluginDeps) {
       if (!disposed.signal.aborted) await sendReview(threadId, pull);
     }
 
+    async function reviewExecution() {
+      const { reviewModel, reviewReasoning, reviewPermissionMode } = await settings.get();
+      const model = reviewModel.trim();
+      const explicit = "explicit" as const;
+      return {
+        providerId: REVIEW_PROVIDER_ID,
+        ...(model.length === 0 ? {} : { model }),
+        reasoningLevel: z.enum(REASONING_LEVELS).catch("high").parse(reviewReasoning),
+        permissionMode: z.enum(PERMISSION_MODES).catch("auto").parse(reviewPermissionMode),
+        executionInputSources: {
+          providerId: explicit,
+          ...(model.length === 0 ? {} : { model: explicit }),
+          reasoningLevel: explicit,
+          permissionMode: explicit,
+        },
+      };
+    }
+
     const opening = new Map<string, Promise<{ threadId: string; created: boolean }>>();
     async function openReviewOnce(pull: PullKey): Promise<{ threadId: string; created: boolean }> {
       const existing = await reviewThreadFor(pull);
       if (existing !== null) return { threadId: existing.id, created: false };
       const detail = await pullDetail(pull, true);
       if (detail.state !== "OPEN") throw new Error(`${pullKey(pull)} is ${detail.state.toLowerCase()}, not open`);
-      const [projectId, hostId] = await Promise.all([resolveProjectId(pull.repo), serverHostId()]);
+      const [projectId, hostId, execution] = await Promise.all([resolveProjectId(pull.repo), serverHostId(), reviewExecution()]);
       const thread = await bb.sdk.threads.spawn({
         projectId,
         environment: {
@@ -414,6 +455,7 @@ export function createPlugin(deps: PluginDeps) {
           machine: { type: "existing", hostId },
           inputs: { branch: detail.isCrossRepository ? { kind: "default" } : { kind: "named", name: `origin/${detail.headRefName}` } },
         },
+        ...execution,
         title: reviewThreadTitle(detail),
         prompt: summaryPrompt(detail),
         pluginMetadata: { repo: pull.repo, number: pull.number },
