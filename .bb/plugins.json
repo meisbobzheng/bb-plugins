@@ -1,0 +1,11 @@
+{
+  "$schema": "https://getbb.app/schemas/plugins.schema.json",
+  "schemaVersion": 1,
+  "name": "meisbobzheng-bb-plugins",
+  "plugins": [
+    { "name": "library", "source": "./bb-plugin-library" },
+    { "name": "pr-board", "source": "./bb-plugin-pr-board" },
+    { "name": "thread-meter", "source": "./bb-plugin-thread-meter" },
+    { "name": "thread-router", "source": "./bb-plugin-thread-router" }
+  ]
+}
