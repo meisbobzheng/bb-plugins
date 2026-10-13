@@ -1,0 +1,571 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { experimental_useAppPanel, useBbNavigate, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { toast } from "sonner";
+import { UPDATES_CHANNEL } from "../channel";
+import type {
+  Definition,
+  DefinitionResult,
+  Finding,
+  PullDetail,
+  PullFile,
+  ReviewEvent,
+  ReviewState,
+  rpcContract,
+} from "../contract";
+import type { DiffStyle } from "../highlight";
+import { isCommentable } from "../patch";
+import { REVIEW_THREAD_TAB, type PullRoute } from "../routes";
+import { cn } from "../lib/utils";
+import type { Composer, ReviewActions } from "./Annotations";
+import { ToolbarToggle } from "./bits";
+import { errorMessage, useCached } from "./cache";
+import { DiffPane, type DefinitionRequest, type DiffFocus } from "./DiffPane";
+import { DefinitionPicker, PeekPane, type PeekTarget } from "./PeekPane";
+import { Sidebar, type SidebarTab } from "./Sidebar";
+import { SubmitReviewDialog } from "./SubmitReview";
+import { Button } from "./ui/button";
+import { Icon } from "./ui/icon";
+import { usePreference } from "./use-preference";
+import { WorkspaceHeader } from "./WorkspaceHeader";
+import { useWidth } from "./use-width";
+
+type Location = { kind: "diff"; path: string; focus: DiffFocus | null } | { kind: "peek"; target: PeekTarget };
+
+type DiffStylePreference = DiffStyle | "auto";
+
+const HISTORY_LIMIT = 50;
+const NARROW_WIDTH = 900;
+const SPLIT_MIN_WIDTH = 860;
+const DIFF_STYLE_OPTIONS: ReadonlyArray<{ id: DiffStylePreference; label: string; icon: string | null }> = [
+  { id: "auto", label: "Auto", icon: null },
+  { id: "split", label: "Split", icon: "Columns2" },
+  { id: "unified", label: "Unified", icon: "Rows2" },
+];
+const DIFF_STYLES = DIFF_STYLE_OPTIONS.map((option) => option.id);
+const lastPaths = new Map<string, string>();
+
+function isTyping(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+}
+
+function samePull(payload: unknown, pull: PullRoute): boolean {
+  if (typeof payload !== "object" || payload === null) return true;
+  const { repo, number } = payload as { repo?: unknown; number?: unknown };
+  return repo === pull.repo && number === pull.number;
+}
+
+function useReviewThread(pull: PullRoute, onReady: () => void) {
+  const rpc = useRpc<typeof rpcContract>();
+  const appPanel = experimental_useAppPanel();
+  const ready = useRef(onReady);
+  ready.current = onReady;
+  useEffect(() => {
+    appPanel.openFixedTab({ surface: { kind: "current" }, tab: REVIEW_THREAD_TAB });
+    let current = true;
+    rpc
+      .call("openReview", pull)
+      .then((result) => {
+        if (!current) return;
+        if (result.created) toast.success("Started a review thread: it summarizes the PR, then runs the thermo-nuclear review.");
+        ready.current();
+      })
+      .catch((error: unknown) => toast.error(`Could not open the review thread: ${errorMessage(error)}`));
+    return () => {
+      current = false;
+    };
+  }, [pull.repo, pull.number]);
+}
+
+export function ReviewWorkspace({ pull }: { pull: PullRoute }) {
+  const rpc = useRpc<typeof rpcContract>();
+  const key = `${pull.repo}#${pull.number}`;
+  const force = useRef(false);
+  const detail = useCached(`detail:${key}`, () => {
+    const refresh = force.current;
+    force.current = false;
+    return rpc.call("pull", { ...pull, refresh });
+  });
+  const state = useCached(`state:${key}`, () => rpc.call("reviewState", pull));
+  useRealtime(UPDATES_CHANNEL, (payload) => {
+    if (samePull(payload, pull)) state.reload();
+  });
+  useReviewThread(pull, state.reload);
+  const refreshDetail = useCallback(() => {
+    force.current = true;
+    detail.reload();
+  }, [detail.reload]);
+
+  if (detail.value === null) {
+    return detail.error === null ? (
+      <p className="p-5 text-sm text-muted-foreground">Loading {key}…</p>
+    ) : (
+      <div className="space-y-3 p-5 text-sm">
+        <p className="text-destructive">{detail.error}</p>
+        <Button size="sm" variant="outline" onClick={detail.reload}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <Workspace
+      key={key}
+      detail={detail.value}
+      refreshing={detail.refreshing}
+      state={state.value}
+      reloadState={state.reload}
+      refreshDetail={refreshDetail}
+    />
+  );
+}
+
+const EMPTY_STATE: ReviewState = { agent: { threadId: null, running: false, findings: 0 }, findings: [], drafts: [] };
+
+function Workspace({
+  detail,
+  refreshing,
+  state,
+  reloadState,
+  refreshDetail,
+}: {
+  detail: PullDetail;
+  refreshing: boolean;
+  state: ReviewState | null;
+  reloadState(): void;
+  refreshDetail(): void;
+}) {
+  const rpc = useRpc<typeof rpcContract>();
+  const navigate = useBbNavigate();
+  const appPanel = experimental_useAppPanel();
+  const pull = { repo: detail.repo, number: detail.number };
+  const review = state ?? EMPTY_STATE;
+  const pullKey = `${detail.repo}#${detail.number}`;
+  const [rootRef, width] = useWidth<HTMLDivElement>();
+  const [mainRef, mainWidth] = useWidth<HTMLElement>();
+  const narrow = width !== null && width < NARROW_WIDTH;
+  const [diffStylePreference, setDiffStylePreference] = usePreference<DiffStylePreference>("diff-style", "auto", DIFF_STYLES);
+  const diffStyle: DiffStyle =
+    diffStylePreference === "auto" ? (mainWidth !== null && mainWidth < SPLIT_MIN_WIDTH ? "unified" : "split") : diffStylePreference;
+  const [wrap, setWrap] = usePreference<boolean>("wrap", false);
+  const [sidebarOpen, setSidebarOpen] = usePreference<boolean>("sidebar", true);
+  const [filesPanelOpen, setFilesPanelOpen] = usePreference<boolean>("files-panel", false);
+  const filesOpen = narrow ? filesPanelOpen : sidebarOpen;
+  const setFilesOpen = narrow ? setFilesPanelOpen : setSidebarOpen;
+  const [tab, setTab] = useState<SidebarTab>("files");
+  const [location, setLocation] = useState<Location | null>(() => {
+    const path = lastPaths.get(pullKey);
+    return path !== undefined && detail.files.some((file) => file.path === path) ? { kind: "diff", path, focus: null } : null;
+  });
+  const [history, setHistory] = useState<Location[]>([]);
+  const [fullFiles, setFullFiles] = useState<ReadonlySet<string>>(new Set());
+  const [composer, setComposer] = useState<Composer | null>(null);
+  const [picker, setPicker] = useState<{ result: DefinitionResult; sha: string } | null>(null);
+  const [viewed, setViewed] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const [running, setRunning] = useState(false);
+  const seq = useRef(0);
+  const nextSeq = () => ++seq.current;
+
+  const files = useMemo(
+    () => detail.files.map((file) => ({ ...file, viewed: viewed.get(file.path) ?? file.viewed })),
+    [detail.files, viewed],
+  );
+  const firstPath = files[0]?.path;
+  const current = useMemo(
+    (): Location | null => location ?? (firstPath === undefined ? null : { kind: "diff", path: firstPath, focus: null }),
+    [firstPath, location],
+  );
+  const currentFile = current?.kind === "diff" ? (files.find((file) => file.path === current.path) ?? null) : null;
+  const currentIndex = currentFile === null ? -1 : files.indexOf(currentFile);
+  useEffect(() => {
+    if (currentFile !== null) lastPaths.set(pullKey, currentFile.path);
+  }, [currentFile?.path, pullKey]);
+
+  const goTo = useCallback(
+    (next: Location, remember: boolean) => {
+      if (remember && current !== null) setHistory((previous) => [...previous.slice(-HISTORY_LIMIT), current]);
+      setLocation(next);
+      setPicker(null);
+    },
+    [current],
+  );
+  const back = useCallback(() => {
+    const last = history[history.length - 1];
+    if (last === undefined) return;
+    setHistory(history.slice(0, -1));
+    setLocation(last.kind === "diff" && last.focus !== null ? { ...last, focus: { ...last.focus, seq: ++seq.current } } : last);
+    setPicker(null);
+  }, [history]);
+
+  const selectFile = useCallback((path: string) => goTo({ kind: "diff", path, focus: null }, false), [goTo]);
+  const stepFile = useCallback(
+    (delta: number) => {
+      const index = files.findIndex((file) => file.path === currentFile?.path);
+      const next = files[Math.min(Math.max(index + delta, 0), files.length - 1)];
+      if (next !== undefined) selectFile(next.path);
+    },
+    [currentFile?.path, files, selectFile],
+  );
+
+  const fileForFinding = (finding: Finding): PullFile | undefined =>
+    files.find((file) => file.path === finding.path || file.previousPath === finding.path);
+
+  const selectFinding = (finding: Finding) => {
+    const file = fileForFinding(finding);
+    if (file === undefined) {
+      goTo({ kind: "peek", target: { kind: "repo", sha: detail.headSha, path: finding.path, line: finding.startLine ?? 1, seq: nextSeq() } }, true);
+      return;
+    }
+    const focus =
+      finding.startLine === null || finding.endLine === null
+        ? null
+        : { side: finding.side, line: finding.startLine, endLine: finding.endLine, seq: nextSeq() };
+    goTo({ kind: "diff", path: file.path, focus }, true);
+  };
+
+  const jumpTo = (definition: Definition, sha: string) => {
+    const focusAt = (side: DiffFocus["side"]): DiffFocus => ({ side, line: definition.line, endLine: definition.line, seq: nextSeq() });
+    if (definition.external) {
+      goTo({ kind: "peek", target: { kind: "external", path: definition.path, line: definition.line, seq: nextSeq() } }, true);
+      return;
+    }
+    if (sha === detail.headSha) {
+      const file = files.find((candidate) => candidate.path === definition.path && candidate.status !== "removed");
+      if (file !== undefined) return goTo({ kind: "diff", path: file.path, focus: focusAt("additions") }, true);
+    }
+    if (sha === detail.mergeBaseSha) {
+      const file = files.find((candidate) => (candidate.previousPath ?? candidate.path) === definition.path && candidate.status !== "added");
+      if (file !== undefined) return goTo({ kind: "diff", path: file.path, focus: focusAt("deletions") }, true);
+    }
+    goTo({ kind: "peek", target: { kind: "repo", sha, path: definition.path, line: definition.line, seq: nextSeq() } }, true);
+  };
+
+  const findDefinition = (request: DefinitionRequest) => {
+    const id = toast.loading(`Finding ${request.symbol}…`);
+    rpc
+      .call("definition", { ...pull, ...request })
+      .then((result) => {
+        toast.dismiss(id);
+        const [only, ...rest] = result.definitions;
+        if (only === undefined) toast(result.message ?? `No definition of ${request.symbol} found.`);
+        else if (rest.length === 0) jumpTo(only, request.sha);
+        else setPicker({ result, sha: request.sha });
+      })
+      .catch((error: unknown) => toast.error(errorMessage(error), { id }));
+  };
+
+  const actions: ReviewActions = {
+    async saveDraft(target, body) {
+      await rpc.call("saveDraft", {
+        ...pull,
+        id: target.draftId,
+        path: target.path,
+        side: target.side,
+        startLine: target.startLine,
+        endLine: target.endLine,
+        body,
+      });
+      setComposer(null);
+      reloadState();
+    },
+    async deleteDraft(id) {
+      await rpc.call("deleteDraft", { id });
+      reloadState();
+    },
+    async postComment(target, body) {
+      await rpc.call("postComment", {
+        ...pull,
+        headSha: detail.headSha,
+        path: target.path,
+        side: target.side,
+        startLine: target.startLine,
+        endLine: target.endLine,
+        body,
+      });
+      setComposer(null);
+      toast.success("Comment posted");
+      refreshDetail();
+    },
+    async askAgent(target, question) {
+      await rpc.call("askAgent", {
+        ...pull,
+        path: target.path,
+        side: target.side,
+        startLine: target.startLine,
+        endLine: target.endLine,
+        question,
+      });
+      setComposer(null);
+      appPanel.openFixedTab({ surface: { kind: "current" }, tab: REVIEW_THREAD_TAB });
+      toast.success("Asked the review thread");
+    },
+    async reply(commentId, body) {
+      await rpc.call("reply", { ...pull, commentId, body });
+      refreshDetail();
+    },
+    async resolveThread(threadId, resolved) {
+      await rpc.call("resolveThread", { ...pull, threadId, resolved });
+      refreshDetail();
+    },
+    async dismissFinding(id, dismissed) {
+      await rpc.call("dismissFinding", { id, dismissed });
+      reloadState();
+    },
+    composeFromFinding(finding) {
+      const file = fileForFinding(finding);
+      if (finding.startLine === null || finding.endLine === null || file === undefined) {
+        toast.error("This finding has no line range in the diff to comment on.");
+        return;
+      }
+      if (!isCommentable(file.patch, finding.side, finding.startLine, finding.endLine)) {
+        toast.error("GitHub only takes review comments inside the diff's hunks, and this finding is outside them.");
+        return;
+      }
+      if (currentFile?.path !== file.path) selectFile(file.path);
+      setComposer({
+        path: file.path,
+        side: finding.side,
+        startLine: finding.startLine,
+        endLine: finding.endLine,
+        draftId: null,
+        initialBody: `**${finding.title}**\n\n${finding.body}`.trim(),
+      });
+    },
+    editDraft(draft) {
+      setComposer({ ...draft, draftId: draft.id, initialBody: draft.body });
+    },
+    closeComposer() {
+      setComposer(null);
+    },
+  };
+
+  const toggleViewed = (file: PullFile) => {
+    const next = !file.viewed;
+    setViewed((previous) => new Map(previous).set(file.path, next));
+    rpc.call("setViewed", { ...pull, pullNodeId: detail.nodeId, path: file.path, viewed: next }).catch((error: unknown) => {
+      setViewed((previous) => new Map(previous).set(file.path, !next));
+      toast.error(errorMessage(error));
+    });
+  };
+
+  const runReview = () => {
+    setRunning(true);
+    rpc
+      .call("runReview", pull)
+      .then((result) => toast.success(result.delivery === "queued" ? "Review queued in the thread" : "Review started in the thread"))
+      .catch((error: unknown) => toast.error(errorMessage(error)))
+      .finally(() => setRunning(false));
+  };
+
+  const submitReview = async (event: ReviewEvent, body: string) => {
+    const result = await rpc.call("submitReview", { ...pull, headSha: detail.headSha, event, body });
+    toast.success(`Review submitted${result.comments > 0 ? ` with ${result.comments} comment${result.comments === 1 ? "" : "s"}` : ""}`);
+    reloadState();
+    refreshDetail();
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (isTyping(event.target) || event.metaKey) return;
+      if ((event.altKey && event.key === "ArrowLeft") || (event.ctrlKey && event.key === "-")) {
+        event.preventDefault();
+        back();
+      } else if (!event.altKey && !event.ctrlKey && (event.key === "j" || event.key === "k")) {
+        stepFile(event.key === "j" ? 1 : -1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [back, stepFile]);
+
+  const scoped = useMemo(() => {
+    const path = currentFile?.path;
+    const previousPath = currentFile?.previousPath;
+    const matches = (candidate: string) => candidate === path || candidate === previousPath;
+    return {
+      findings: review.findings.filter((finding) => !finding.dismissed && matches(finding.path)),
+      drafts: review.drafts.filter((draft) => draft.path === path),
+      threads: detail.threads.filter((thread) => thread.path === path),
+    };
+  }, [currentFile?.path, currentFile?.previousPath, detail.threads, review.drafts, review.findings]);
+
+  const fullFile = currentFile !== null && fullFiles.has(currentFile.path);
+  const showFullFile = () => {
+    if (currentFile !== null) setFullFiles((previous) => new Set(previous).add(currentFile.path));
+  };
+  const peekTarget = current?.kind === "peek" ? current.target : null;
+  const peekFile =
+    peekTarget?.kind === "repo" && peekTarget.sha === detail.headSha ? files.find((file) => file.path === peekTarget.path) : undefined;
+  const sidebar = (
+    <Sidebar
+      files={files}
+      selectedPath={currentFile?.path ?? null}
+      findings={review.findings}
+      drafts={review.drafts}
+      threads={detail.threads}
+      tab={tab}
+      onTab={setTab}
+      onSelectFile={selectFile}
+      onToggleViewed={toggleViewed}
+      onSelectFinding={selectFinding}
+    />
+  );
+
+  return (
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
+      <WorkspaceHeader
+        detail={detail}
+        review={review}
+        narrow={narrow}
+        refreshing={refreshing}
+        running={running}
+        onShowFindings={() => {
+          setTab("findings");
+          setFilesOpen(true);
+        }}
+        onRunReview={runReview}
+        onSubmit={() => setSubmitOpen(true)}
+      />
+      <div className={cn("flex min-h-0 flex-1", narrow && "flex-col")}>
+        {filesOpen ? (
+          narrow ? (
+            <section className="h-[32vh] min-h-48 shrink-0 border-b border-border" aria-label="Files and findings">
+              {sidebar}
+            </section>
+          ) : (
+            <aside className="w-72 shrink-0 border-r border-border">{sidebar}</aside>
+          )
+        ) : null}
+        <main ref={mainRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              aria-pressed={filesOpen}
+              title={narrow ? "Toggle files and findings" : "Toggle the file list"}
+              aria-label="Toggle the file list"
+              onClick={() => setFilesOpen(!filesOpen)}
+            >
+              <Icon name={narrow ? "ListView" : "PanelLeft"} fallback="PanelLeft" className="size-3.5" />
+            </Button>
+            <Button size="icon" variant="ghost" className="size-7" disabled={history.length === 0} title="Go back (⌥←)" aria-label="Go back" onClick={back}>
+              <Icon name="ArrowLeft" className="size-3.5" />
+            </Button>
+            <Button size="icon" variant="ghost" className="size-7" disabled={currentIndex <= 0} title="Previous file (k)" aria-label="Previous file" onClick={() => stepFile(-1)}>
+              <Icon name="ArrowUp" className="size-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              disabled={currentIndex < 0 || currentIndex >= files.length - 1}
+              title="Next file (j)"
+              aria-label="Next file"
+              onClick={() => stepFile(1)}
+            >
+              <Icon name="ArrowDown" className="size-3.5" />
+            </Button>
+            <span className="min-w-0 flex-1 basis-40 truncate px-1 font-mono text-xs" title={currentFile?.path}>
+              {currentFile === null ? (current?.kind === "peek" ? "Definition" : "") : `${currentIndex + 1}/${files.length}  ${currentFile.path}`}
+            </span>
+            {narrow ? null : <span className="hidden text-[11px] text-muted-foreground 2xl:inline">⌘-click a symbol to go to its definition · j/k files</span>}
+            <div className="flex rounded-md border border-border p-0.5" role="group" aria-label="Diff layout">
+              {DIFF_STYLE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={diffStylePreference === option.id}
+                  title={option.id === "auto" ? `Auto: ${diffStyle} at this width` : option.label}
+                  aria-label={`${option.label} diff`}
+                  onClick={() => setDiffStylePreference(option.id)}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring aria-pressed:bg-state-active aria-pressed:text-foreground"
+                >
+                  {option.icon === null ? null : <Icon name={option.icon} className="size-3.5" aria-hidden />}
+                  {narrow && option.icon !== null ? null : option.label}
+                </button>
+              ))}
+            </div>
+            <ToolbarToggle pressed={wrap} label="Wrap" icon="TextWrap" showLabel={!narrow} onClick={() => setWrap(!wrap)} />
+            {currentFile !== null ? (
+              <>
+                <ToolbarToggle
+                  pressed={fullFile}
+                  label="Full file"
+                  icon="Maximize2"
+                  showLabel={!narrow}
+                  onClick={() =>
+                    setFullFiles((previous) => {
+                      const next = new Set(previous);
+                      if (!next.delete(currentFile.path)) next.add(currentFile.path);
+                      return next;
+                    })
+                  }
+                />
+                <ToolbarToggle
+                  pressed={currentFile.viewed}
+                  label="Viewed"
+                  icon={currentFile.viewed ? "CircleCheck" : "Circle"}
+                  showLabel={!narrow}
+                  onClick={() => toggleViewed(currentFile)}
+                />
+              </>
+            ) : null}
+          </div>
+          {picker === null ? null : (
+            <DefinitionPicker
+              result={picker.result}
+              onClose={() => setPicker(null)}
+              onPick={(index) => {
+                const definition = picker.result.definitions[index];
+                if (definition !== undefined) jumpTo(definition, picker.sha);
+              }}
+            />
+          )}
+          <div className="min-h-0 flex-1 overflow-auto">
+            {current === null ? <p className="p-5 text-sm text-muted-foreground">This pull request has no changed files.</p> : null}
+            {current?.kind === "diff" && currentFile !== null ? (
+              <DiffPane
+                key={currentFile.path}
+                detail={detail}
+                file={currentFile}
+                findings={scoped.findings}
+                drafts={scoped.drafts}
+                threads={scoped.threads}
+                diffStyle={diffStyle}
+                wrap={wrap}
+                fullFile={fullFile}
+                focus={current.focus}
+                composer={composer?.path === currentFile.path ? composer : null}
+                actions={actions}
+                onCompose={setComposer}
+                onDefinition={findDefinition}
+                onShowFullFile={showFullFile}
+              />
+            ) : null}
+            {current?.kind === "peek" ? (
+              <PeekPane
+                key={`${current.target.kind}:${current.target.path}`}
+                detail={detail}
+                target={current.target}
+                wrap={wrap}
+                canOpenInDiff={peekFile !== undefined}
+                onOpenInDiff={() => {
+                  if (peekFile !== undefined) goTo({ kind: "diff", path: peekFile.path, focus: { side: "additions", line: current.target.line, endLine: current.target.line, seq: nextSeq() } }, true);
+                }}
+                onDefinition={findDefinition}
+              />
+            ) : null}
+          </div>
+        </main>
+      </div>
+      <SubmitReviewDialog
+        open={submitOpen}
+        onOpenChange={setSubmitOpen}
+        pendingComments={review.drafts.length}
+        isAuthor={detail.author.login === detail.viewer}
+        onSubmit={submitReview}
+      />
+    </div>
+  );
+}
