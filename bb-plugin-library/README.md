@@ -42,12 +42,16 @@ term's endpoints and specs, is in [topics.ts](topics.ts).
 bb library search [words…] [--kind <kind>] [--tag <tag>]… [--limit <n>] [--json]
 bb library show <id> [--json]
 bb library save --title <title> --body "$(cat flow.md)" [--kind <kind>] [--tag <tag>]… [--summary <text>] [--json]
+bb library update <id> [--title <title>] [--body "$(cat flow.md)"] [--kind <kind>] [--tag <tag>]… [--summary <text>] [--json]
 bb library tags [--json]
 bb library delete <id> [--json]
 ```
 
 `search` with no words lists the newest entries. Words match as prefixes;
 quote a phrase to match it exactly.
+
+`update` changes an entry in place and keeps its id. Omitted fields keep their
+values, a new body replaces the whole body, and detected tags are refreshed.
 
 ## Agent tools
 
@@ -56,6 +60,7 @@ quote a phrase to match it exactly.
 | `library_save` | Save Markdown with a title, optional kind, summary, and tags. |
 | `library_search` | Full-text search with kind and tag filters. |
 | `library_get` | Read one entry in full. |
+| `library_update` | Change an entry in place, keeping its id; omitted fields stay as they are. |
 
 The [skill](skills/library/SKILL.md) tells agents how to write entries that
 read well later.

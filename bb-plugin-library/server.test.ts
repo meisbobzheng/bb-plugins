@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createFakePluginHost, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { Entry, SearchResult } from "./contract";
 import { CHANGED_CHANNEL } from "./library";
-import plugin, { GET_TOOL, SAVE_TOOL, SEARCH_TOOL } from "./server";
+import plugin, { GET_TOOL, SAVE_TOOL, SEARCH_TOOL, UPDATE_TOOL } from "./server";
 
 const FLOW = [
   "```mermaid",
@@ -68,6 +68,36 @@ describe("agent tools", () => {
     const missing = await harness.behavior.callAgentTool(GET_TOOL, { id: "lib_00000000" });
     expect(missing).toMatchObject({ isError: true });
   });
+
+  it("updates an entry in place, keeping its id, source, and omitted fields", async () => {
+    const { harness, text } = await setup();
+    const saved = text(
+      await harness.behavior.callAgentTool(SAVE_TOOL, { title: "S6a attach", summary: "Attach", body: FLOW, tags: ["mme"] }, { threadId: "thr_1" }),
+    );
+    const id = /lib_[a-z0-9]{8}/.exec(saved)![0];
+
+    const body = `${FLOW}\nThe HSS then sends CLR to the old MME.`;
+    const reply = text(await harness.behavior.callAgentTool(UPDATE_TOOL, { id, body }));
+    expect(reply).toBe(`Updated ${id} "S6a attach" in the Library (Flow) with tags: mme, Attach, S6a, ULR/ULA, CLR/CLA.`);
+
+    const entry = (await harness.behavior.callRpc("entry", { id })) as Entry;
+    expect(entry).toMatchObject({ id, title: "S6a attach", summary: "Attach", kind: "flow", body, source: { threadId: "thr_1" } });
+
+    const retagged = text(await harness.behavior.callAgentTool(UPDATE_TOOL, { id, tags: ["hss"], kind: "reference" }));
+    expect(retagged).toContain("(Reference) with tags: hss, Attach, S6a, ULR/ULA, CLR/CLA.");
+    expect(harness.inspection.realtimeSignals).toHaveLength(3);
+  });
+
+  it("rejects updates with nothing to change or an unknown id", async () => {
+    const { harness, text } = await setup();
+    const empty = await harness.behavior.callAgentTool(UPDATE_TOOL, { id: "lib_00000000" });
+    expect(empty).toMatchObject({ isError: true });
+    expect(text(empty)).toContain("Nothing to change");
+
+    const missing = await harness.behavior.callAgentTool(UPDATE_TOOL, { id: "lib_00000000", title: "x" });
+    expect(missing).toMatchObject({ isError: true });
+    expect(text(missing)).toBe("No Library entry lib_00000000.");
+  });
 });
 
 describe("cli", () => {
@@ -91,6 +121,27 @@ describe("cli", () => {
     const missing = await harness.behavior.runCli(["show", id]);
     expect(missing.exitCode).not.toBe(0);
     expect(missing.stderr).toContain(`No Library entry ${id}.`);
+  });
+
+  it("updates an entry in place", async () => {
+    const { harness } = await setup();
+    const saved = await harness.behavior.runCli(["save", "--title", "Gx CCR-I", "--body", "PCEF sends CCR-I over Gx.", "--tag", "pcrf"]);
+    const id = /lib_[a-z0-9]{8}/.exec(saved.stdout ?? "")![0];
+
+    const updated = await harness.behavior.runCli(["update", id, "--body", "PCEF sends CCR-I and CCR-T over Gx.", "--summary", "Gx session"]);
+    expect(updated.stdout).toBe(`Updated ${id} "Gx CCR-I" in the Library (Explanation) with tags: pcrf, Gx, CCR/CCA.\n`);
+
+    const shown = await harness.behavior.runCli(["show", id, "--json"]);
+    expect(JSON.parse(shown.stdout ?? "") as Entry).toMatchObject({ id, title: "Gx CCR-I", summary: "Gx session", body: "PCEF sends CCR-I and CCR-T over Gx." });
+
+    const nothing = await harness.behavior.runCli(["update", id]);
+    expect(nothing.exitCode).not.toBe(0);
+    expect(nothing.stderr).toContain("Nothing to change.");
+
+    const missing = await harness.behavior.runCli(["edit", "lib_00000000", "--title", "x"]);
+    expect(missing.exitCode).not.toBe(0);
+    expect(missing.stderr).toContain("No Library entry lib_00000000.");
+    expect((await harness.behavior.runCli(["update", id, "--body", "  "])).exitCode).not.toBe(0);
   });
 
   it("rejects malformed ids and empty bodies", async () => {

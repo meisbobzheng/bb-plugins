@@ -10,7 +10,8 @@ Keep the explanations your agents write, and find them again in seconds.
 - A **Library** tab in the thread side panel that searches while you chat and
   inserts an entry reference into your message.
 - Agent tools and a `bb library` command, so agents can save a flow when you
-  ask and look up what you saved before.
+  ask, look up what you saved before, and fix it in place without changing
+  its link.
 
 ## Built for mobile core work
 

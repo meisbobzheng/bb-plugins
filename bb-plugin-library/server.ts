@@ -21,6 +21,7 @@ export { rpcContract };
 export const SAVE_TOOL = "library_save";
 export const SEARCH_TOOL = "library_search";
 export const GET_TOOL = "library_get";
+export const UPDATE_TOOL = "library_update";
 const TOOL_RESULTS = 10;
 const CLI_RESULTS = 20;
 
@@ -34,6 +35,22 @@ const saveFields = z.object({
   tags: tagsSchema.default([]).describe("Extra tags beyond the automatically detected ones"),
 });
 type SaveFields = z.output<typeof saveFields>;
+
+const updateFields = z.object({
+  id: idSchema,
+  title: titleSchema.optional().describe("New title; omit to keep the current one"),
+  kind: kindSchema.optional().describe("New kind; omit to keep the current one"),
+  summary: summarySchema.optional().describe("New one-sentence summary; omit to keep the current one"),
+  body: bodySchema.optional().describe(`Full replacement Markdown body, up to ${LIMITS.body} characters; omit to keep the current one`),
+  tags: tagsSchema
+    .optional()
+    .describe("Replaces the entry's tags; detected tags are added back. Omit to keep the current tags"),
+});
+type UpdateFields = z.output<typeof updateFields>;
+
+function hasEdit({ id: _id, ...edit }: UpdateFields): boolean {
+  return Object.values(edit).some((value) => value !== undefined);
+}
 
 function plainSnippet(snippet: string): string {
   return snippet.replaceAll(MARK_START, "**").replaceAll(MARK_END, "**").replace(/\s+/g, " ").trim();
@@ -98,12 +115,25 @@ export default async function plugin(bb: BbPluginApi) {
     return save({ ...fields, kind: fields.kind ?? guessKind(fields.body), tags }, threadId, null);
   }
 
+  function updateWithDetectedTags({ id, ...edit }: UpdateFields): Entry | null {
+    const current = store.get(id);
+    if (current === null) return null;
+    const title = edit.title ?? current.title;
+    const summary = edit.summary ?? current.summary;
+    const body = edit.body ?? current.body;
+    const tags = [...(edit.tags ?? current.tags), ...detectTags(`${title}\n${summary}\n${body}`)];
+    const entry = store.update(id, { title, kind: edit.kind ?? current.kind, summary, body, tags });
+    if (entry !== null) changed();
+    return entry;
+  }
+
   function search(input: Partial<SearchInput> & { query: string; limit: number }) {
     return store.search({ kind: null, tags: [], threadId: null, ...input });
   }
 
-  function savedMessage(entry: Entry): string {
-    return `Saved ${entry.id} "${entry.title}" to the Library (${KIND_LABELS[entry.kind].one}) with tags: ${entry.tags.join(", ") || "none"}.`;
+  function savedMessage(entry: Entry, verb: "Saved" | "Updated" = "Saved"): string {
+    const where = verb === "Saved" ? "to" : "in";
+    return `${verb} ${entry.id} "${entry.title}" ${where} the Library (${KIND_LABELS[entry.kind].one}) with tags: ${entry.tags.join(", ") || "none"}.`;
   }
 
   bb.rpc.register(rpcContract, {
@@ -131,7 +161,7 @@ export default async function plugin(bb: BbPluginApi) {
     name: SAVE_TOOL,
     description:
       "Save a diagram, call or registration flow, explanation, or design doc to the user's Library so they can search and reopen it later. Protocol, interface, procedure, and Diameter command tags are added automatically.",
-    instructions: `When the user asks to save, keep, or bookmark something for later, call ${SAVE_TOOL} with a self-contained Markdown body: include the full diagram or explanation, never a pointer to this chat. Write call flows as a \`\`\`mermaid sequenceDiagram block. When the user refers to something they saved earlier, find it with ${SEARCH_TOOL} and read it with ${GET_TOOL}.`,
+    instructions: `When the user asks to save, keep, or bookmark something for later, call ${SAVE_TOOL} with a self-contained Markdown body: include the full diagram or explanation, never a pointer to this chat. Write call flows as a \`\`\`mermaid sequenceDiagram block. When the user refers to something they saved earlier, find it with ${SEARCH_TOOL} and read it with ${GET_TOOL}. To fix or extend an entry that is already saved, call ${UPDATE_TOOL} with its id; never save a new copy and delete the old one.`,
     presentation: { label: { pending: "Saving to Library", completed: "Saved to Library" } },
     parameters: saveFields,
     async execute(fields, { threadId }) {
@@ -154,6 +184,21 @@ export default async function plugin(bb: BbPluginApi) {
       const result = search({ query, kind: kind ?? null, tags, limit });
       if (result.total === 0) return "No Library entries match.";
       return [`${result.total} match${result.total === 1 ? "" : "es"} (id, kind, title, tags, updated):`, ...hitLines(result.entries, query)].join("\n");
+    },
+  });
+
+  bb.agents.registerTool({
+    name: UPDATE_TOOL,
+    description:
+      "Change a saved Library entry in place, keeping its id so links and references to it keep working. Omitted fields keep their current values; detected tags are refreshed from the new content.",
+    instructions: `When the user asks to fix, extend, or rewrite an entry they already saved, read it with ${GET_TOOL}, then call ${UPDATE_TOOL} with its id and only the fields that change. A new body replaces the whole body, so send the complete Markdown, not a diff. Never save a new copy and delete the old one: that changes the id and breaks links to it.`,
+    presentation: { label: { pending: "Updating Library entry", completed: "Updated Library entry" } },
+    parameters: updateFields,
+    execute(fields) {
+      const fail = (text: string) => ({ content: [{ type: "text" as const, text }], isError: true });
+      if (!hasEdit(fields)) return fail("Nothing to change: pass at least one of title, kind, summary, body, or tags.");
+      const entry = updateWithDetectedTags(fields);
+      return entry === null ? fail(`No Library entry ${fields.id}.`) : savedMessage(entry, "Updated");
     },
   });
 
@@ -232,6 +277,51 @@ export default async function plugin(bb: BbPluginApi) {
             );
             const entry = await saveWithDetectedTags(fields, ctx.threadId ?? null);
             return output(options.json, entry, [savedMessage(entry)]);
+          },
+        }),
+        update: cliCommand({
+          summary: "Change an entry in place, keeping its id; omitted fields keep their current values",
+          aliases: ["edit"],
+          positionals: idPositional,
+          options: {
+            ...json,
+            title: { type: "string", description: `New title (max ${LIMITS.title} characters)` },
+            body: {
+              type: "string",
+              description: `Full replacement Markdown body; pass a file with --body "$(cat flow.md)" (max ${LIMITS.body} characters)`,
+            },
+            kind: { type: "enum", values: KINDS, description: "New entry kind" },
+            tag: {
+              type: "string",
+              repeatable: true,
+              split: ",",
+              aliases: ["tags"],
+              description: "Replace the entry's tags; repeat for more. Detected tags are added back",
+            },
+            summary: { type: "string", description: `New one-sentence summary (max ${LIMITS.summary} characters)` },
+          },
+          run({ positionals, options }) {
+            const fields = parseOrThrow(
+              updateFields,
+              {
+                id: positionals.id,
+                title: options.title,
+                kind: options.kind,
+                summary: options.summary,
+                body: options.body,
+                tags: options.tag.length === 0 ? undefined : options.tag,
+              },
+              "See `bb library update --help`.",
+            );
+            if (!hasEdit(fields)) {
+              throw new PluginCliError("Nothing to change.", {
+                code: "invalid_value",
+                hint: "Pass at least one of --title, --body, --kind, --summary, or --tag.",
+              });
+            }
+            const entry = updateWithDetectedTags(fields);
+            if (entry === null) throw new PluginCliError(`No Library entry ${fields.id}.`, { code: "not_found", hint: idHint });
+            return output(options.json, entry, [savedMessage(entry, "Updated")]);
           },
         }),
         tags: cliCommand({

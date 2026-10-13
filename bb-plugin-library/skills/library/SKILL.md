@@ -1,6 +1,6 @@
 ---
 name: library
-description: Save diagrams, call and registration flows, explanations, and design docs to the user's Library, and find ones saved before, with the library_save, library_search, and library_get tools or the bb library CLI. Use when the user asks to save, keep, bookmark, or look up something they saved earlier.
+description: Save diagrams, call and registration flows, explanations, and design docs to the user's Library, find ones saved before, and fix or extend them in place, with the library_save, library_search, library_get, and library_update tools or the bb library CLI. Use when the user asks to save, keep, bookmark, look up, or change something they saved earlier.
 ---
 
 # Library
@@ -45,8 +45,26 @@ Search matches word prefixes, so "regis" finds "registration". Search before
 you redraw a flow the user says they saved, then read it with `library_get` or
 `bb library show`.
 
+## Updating
+
+To fix, extend, or rewrite a saved entry, update it in place. The id, source
+thread, and creation date stay the same, so the index entries and references
+that point at it keep working. Prefer the `library_update` tool. Without the
+tool:
+
+```
+bb library show <lib_id> --json          # read the current entry
+bb library update <lib_id> --body "$(cat flow.md)" [--title …] [--kind …] [--summary …] [--tag …]
+```
+
+- Pass only the fields that change; the rest keep their current values.
+- A new body replaces the whole body. Send the complete Markdown, not a diff.
+- Detected tags are refreshed from the new content. `--tag` (or `tags`)
+  replaces the extra tags; omit it to keep the current ones.
+
 ## Rules
 
+- Never save a new copy and delete the old one to change an entry; update it.
 - Never delete an entry unless the user asks; then use `bb library delete <lib_id>`.
 - Use only the ids that search prints.
 - Change entries only through these tools and commands, never the plugin's
