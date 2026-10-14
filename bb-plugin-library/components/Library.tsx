@@ -6,14 +6,14 @@ import { Icon } from "./ui/icon";
 import { Input } from "./ui/input";
 import { cn } from "../lib/utils";
 import type { Entry, EntryHit, SearchResult } from "../contract";
-import { KINDS, KIND_LABELS, LIBRARY_PANEL, LIMITS, type Kind, type TagGroup } from "../library";
+import { KINDS, KIND_LABELS, LIBRARY_PANEL, LIMITS, type Kind } from "../library";
 import { normalizeTagNames } from "../glossary";
-import { EmptyState, GroupedTags, Highlighted, KindBadge, TagChip, formatDate } from "./bits";
+import { EmptyState, Highlighted, KindBadge, TagChip, formatDate } from "./bits";
 import { EntryView, entryReference } from "./EntryView";
 import { useLibrarySearch } from "./hooks";
+import { TagMenus } from "./TagMenus";
 
 const RESULT_LIMIT = 100;
-const COLLAPSED_TAGS = 6;
 
 export interface Filters {
   query: string;
@@ -30,7 +30,7 @@ export function idFromSubPath(subPath: string): string | null {
 }
 
 function withTag(filters: Filters, tag: string): Filters {
-  return { ...filters, tags: normalizeTagNames([...filters.tags, tag]) };
+  return { ...filters, tags: normalizeTagNames([...filters.tags, tag]).slice(0, LIMITS.tagFilters) };
 }
 
 function useSlashFocus(target: RefObject<HTMLInputElement | null>, enabled: boolean) {
@@ -178,36 +178,21 @@ function KindFilter({ result, value, onChange }: { result: SearchResult | null; 
 }
 
 function TagFilter({ result, selected, onChange }: { result: SearchResult | null; selected: string[]; onChange: (tags: string[]) => void }) {
-  const [expanded, setExpanded] = useState<ReadonlySet<TagGroup>>(() => new Set());
   const chosen = new Set(selected.map((tag) => tag.toLowerCase()));
-  const facets = (result?.total ?? 0) > 1 ? (result?.tags ?? []).filter(({ tag }) => !chosen.has(tag.toLowerCase())) : [];
+  const facets = (result?.total ?? 0) > 1 || selected.length > 0 ? (result?.tags ?? []) : [];
   if (selected.length === 0 && facets.length === 0) return null;
-  const toggle = (group: TagGroup) =>
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (!next.delete(group)) next.add(group);
-      return next;
-    });
+  const remove = (tag: string) => onChange(selected.filter((candidate) => candidate.toLowerCase() !== tag.toLowerCase()));
+  const toggle = (tag: string) => (chosen.has(tag.toLowerCase()) ? remove(tag) : onChange(normalizeTagNames([...selected, tag]).slice(0, LIMITS.tagFilters)));
   return (
-    <div className="space-y-2" role="group" aria-label="Filter by tag">
+    <div className="space-y-2">
       {selected.length === 0 ? null : (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Selected tags">
           {selected.map((tag) => (
-            <TagChip key={tag} tag={tag} active onRemove={() => onChange(selected.filter((candidate) => candidate !== tag))} />
+            <TagChip key={tag} tag={tag} active onRemove={() => remove(tag)} />
           ))}
         </div>
       )}
-      {facets.length === 0 ? null : (
-        <div className="max-h-64 overflow-y-auto pr-1">
-          <GroupedTags
-            tags={facets}
-            collapse={{ limit: COLLAPSED_TAGS, expanded, onToggle: toggle }}
-            chip={({ tag, group, count }) => (
-              <TagChip key={tag} tag={tag} group={group} count={count} onClick={() => onChange(normalizeTagNames([...selected, tag]))} />
-            )}
-          />
-        </div>
-      )}
+      <TagMenus tags={facets} label="Filter by tag" selected={chosen} onToggle={toggle} />
     </div>
   );
 }

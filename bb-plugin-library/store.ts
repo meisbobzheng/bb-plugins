@@ -4,7 +4,7 @@ import type { CatalogTag, Entry, EntryHit, SearchInput, SearchResult } from "./c
 import { detectTags, normalizeTags, termFor, type TagDraft } from "./glossary.js";
 import { MARK_START, TAG_GROUPS, excerpt, isKind, isTagGroup, sortByGroup, type Kind, type TagGroup, type TagRef } from "./library.js";
 
-const TAG_FACETS = 60;
+const TAG_FACETS = 400;
 
 export type GroupMode = "keep" | "set";
 

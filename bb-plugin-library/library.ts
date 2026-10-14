@@ -22,6 +22,7 @@ export const LIMITS = {
   tag: 40,
   tags: 30,
   query: 500,
+  tagFilters: 10,
   results: 200,
 } as const;
 

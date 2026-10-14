@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, fireEvent } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { Entry, EntryHit, SearchResult } from "./contract";
 
@@ -32,9 +32,15 @@ const RESULT: SearchResult = {
   ],
 };
 
+function settle() {
+  return act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+}
+
 async function load() {
   return loadPluginApp(() => import("./app"));
 }
+
+afterEach(cleanup);
 
 describe("Library app", () => {
   it("registers its page, side panel, overlay, message action, and command", async () => {
@@ -45,15 +51,65 @@ describe("Library app", () => {
     expect(app.messageActions.map((action) => action.title)).toEqual(["Save to Library"]);
   });
 
-  it("lists search results with highlights and grouped tag filters, and opens an entry", async () => {
+  it("lists search results with highlights and opens an entry", async () => {
     const app = await load();
     const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: { search: () => RESULT } });
     const row = await slot.findByText("S6a attach: ULR/ULA");
     expect((await slot.findByText("ULR", { selector: "mark" })).tagName).toBe("MARK");
-    const filters = await slot.findByRole("group", { name: "Filter by tag" });
-    expect([...filters.querySelectorAll("dt")].map((label) => label.textContent)).toEqual(["Interfaces", "Messages", "Topics"]);
     fireEvent.click(row);
     expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: "lib_1a2b3c4d" } }]);
+  });
+
+  it("filters by tags chosen from a group menu", async () => {
+    const app = await load();
+    const searches: Array<{ tags: string[] }> = [];
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, {
+      rpc: {
+        search: (input: unknown) => {
+          searches.push(input as { tags: string[] });
+          return RESULT;
+        },
+      },
+    });
+    const filters = await slot.findByRole("group", { name: "Filter by tag" });
+    const pills = within(filters).getAllByRole("button");
+    expect(pills.map((pill) => pill.getAttribute("aria-label"))).toEqual(["Interfaces, 1 tag", "Messages, 1 tag", "Topics, 1 tag"]);
+
+    fireEvent.keyDown(pills[0]!, { key: "Enter" });
+    const option = await slot.findByRole("menuitemcheckbox", { name: /S6a/ });
+    expect(option.textContent).toContain("MME ↔ HSS");
+    fireEvent.click(option);
+
+    await settle();
+    expect(searches.at(-1)?.tags).toEqual(["S6a"]);
+    expect(option.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.keyDown(option, { key: "Escape" });
+    await settle();
+    expect(within(await slot.findByRole("group", { name: "Selected tags" })).getByText("S6a")).toBeTruthy();
+    expect(await slot.findByRole("button", { name: "Interfaces, 1 tag, 1 selected" })).toBeTruthy();
+  });
+
+  it("filters the Library by a tag picked from an entry's group menu", async () => {
+    const app = await load();
+    const searches: Array<{ tags: string[] }> = [];
+    const slot = renderSlot(app.navPanels[0]!, { subPath: HIT.id }, {
+      rpc: {
+        search: (input: unknown) => {
+          searches.push(input as { tags: string[] });
+          return RESULT;
+        },
+        entry: () => ({ ...HIT, body: "The MME sends ULR to the HSS." }) satisfies Entry,
+      },
+    });
+    const tags = await slot.findByRole("group", { name: "Tags" });
+    const interfaces = within(tags).getByRole("button", { name: "Interfaces: S6a" });
+    expect(interfaces.getAttribute("title")).toBe("S6a");
+
+    fireEvent.keyDown(interfaces, { key: "Enter" });
+    fireEvent.click(await slot.findByRole("menuitem", { name: /S6a/ }));
+    await settle();
+    expect(searches.at(-1)?.tags).toEqual(["S6a"]);
   });
 
   it("saves a chat message through the dialog with detected and hand-grouped tags", async () => {

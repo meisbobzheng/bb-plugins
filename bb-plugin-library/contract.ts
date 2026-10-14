@@ -50,7 +50,7 @@ export const searchInputSchema = z
   .object({
     query: z.string().max(LIMITS.query),
     kind: kindSchema.nullable(),
-    tags: z.array(z.string().max(LIMITS.tag)).max(10),
+    tags: z.array(z.string().max(LIMITS.tag)).max(LIMITS.tagFilters),
     threadId: z.string().min(1).nullable(),
     limit: z.number().int().min(1).max(LIMITS.results),
   })

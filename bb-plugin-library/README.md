@@ -20,7 +20,10 @@ then search them all in one place.
   diagrams, and docs** from the quick palette (⌘⇧L by default). Press `/` to
   focus search, ↑/↓ and Enter to open a result.
 - Filter by kind (Flows, Diagrams, Explanations, Design docs, References,
-  Notes) and by tag. Click a tag on an entry to filter by it.
+  Notes) and by tag. Each tag group is one pill, such as **Interfaces 28**,
+  that opens a menu of its tags with counts; check tags to filter, type to jump
+  to one, and press Escape to close. An entry shows its tags the same way, and
+  picking one filters the Library by it.
 - In a thread, open the side panel's **Library** tab to search beside the chat
   and **Insert in message** to reference an entry in your prompt.
 - Each entry links to the conversation it came from, lists the specs it

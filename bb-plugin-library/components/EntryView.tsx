@@ -6,9 +6,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Icon } from "./ui/icon";
 import type { Entry } from "../contract";
 import { specUrl, specsFor } from "../glossary";
-import { EmptyState, GroupedTags, KindBadge, TagChip, formatDate } from "./bits";
+import { EmptyState, KindBadge, formatDate } from "./bits";
 import { EntryFields, isDraftValid, type Draft } from "./EntryFields";
 import { errorMessage, useEntry, useLibraryRpc } from "./hooks";
+import { TagMenus } from "./TagMenus";
 
 export function entryReference(entry: Pick<Entry, "id" | "title">): string {
   return `Library entry ${entry.id} “${entry.title}” (read it with \`bb library show ${entry.id}\`)`;
@@ -96,14 +97,7 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
           ) : null}
         </div>
         {entry.summary === "" ? null : <p className="text-sm text-muted-foreground">{entry.summary}</p>}
-        {entry.tags.length === 0 ? null : (
-          <GroupedTags
-            tags={entry.tags}
-            chip={({ tag, group }) => (
-              <TagChip key={tag} tag={tag} group={group} onClick={onTagClick === undefined ? undefined : () => onTagClick(tag)} />
-            )}
-          />
-        )}
+        <TagMenus tags={entry.tags} label="Tags" onPick={onTagClick} />
         {specs.length === 0 ? null : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="text-muted-foreground">Specs</span>

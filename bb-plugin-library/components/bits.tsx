@@ -142,37 +142,15 @@ export function KindPicker({ value, onChange }: { value: Kind; onChange: (kind: 
   );
 }
 
-interface Collapse {
-  limit: number;
-  expanded: ReadonlySet<TagGroup>;
-  onToggle: (group: TagGroup) => void;
-}
-
-export function GroupedTags<T extends TagRef>({ tags, chip, collapse }: { tags: readonly T[]; chip: (tag: T) => ReactNode; collapse?: Collapse }) {
+export function GroupedTags<T extends TagRef>({ tags, chip }: { tags: readonly T[]; chip: (tag: T) => ReactNode }) {
   return (
     <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 text-xs">
-      {groupTags(tags).map(({ group, tags: members }) => {
-        const open = collapse === undefined || collapse.expanded.has(group);
-        const hidden = open ? 0 : Math.max(0, members.length - collapse.limit);
-        return (
-          <Fragment key={group}>
-            <dt className="pt-1 text-muted-foreground">{TAG_GROUP_INFO[group].label}</dt>
-            <dd className="flex min-w-0 flex-wrap gap-1.5">
-              {members.slice(0, members.length - hidden).map(chip)}
-              {collapse === undefined || members.length <= collapse.limit ? null : (
-                <button
-                  type="button"
-                  className="h-6 cursor-pointer px-1 text-muted-foreground hover:text-foreground"
-                  aria-expanded={open}
-                  onClick={() => collapse.onToggle(group)}
-                >
-                  {open ? "Fewer" : `+${hidden} more`}
-                </button>
-              )}
-            </dd>
-          </Fragment>
-        );
-      })}
+      {groupTags(tags).map(({ group, tags: members }) => (
+        <Fragment key={group}>
+          <dt className="pt-1 text-muted-foreground">{TAG_GROUP_INFO[group].label}</dt>
+          <dd className="flex min-w-0 flex-wrap gap-1.5">{members.map(chip)}</dd>
+        </Fragment>
+      ))}
     </dl>
   );
 }

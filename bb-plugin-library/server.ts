@@ -287,7 +287,7 @@ export default async function plugin(bb: BbPluginApi) {
     parameters: z.object({
       query: z.string().max(LIMITS.query).describe('Words to match; prefixes match too ("regis" finds "registration"). Empty lists the newest entries'),
       kind: kindSchema.optional(),
-      tags: z.array(z.string().max(LIMITS.tag)).max(10).default([]).describe('Only entries with every one of these tags, e.g. ["S6a"]'),
+      tags: z.array(z.string().max(LIMITS.tag)).max(LIMITS.tagFilters).default([]).describe('Only entries with every one of these tags, e.g. ["S6a"]'),
       limit: z.number().int().min(1).max(50).default(TOOL_RESULTS),
     }),
     execute({ query, kind, tags, limit }) {
@@ -351,7 +351,7 @@ export default async function plugin(bb: BbPluginApi) {
           },
           run({ positionals, options }) {
             const query = positionals.query.join(" ");
-            const result = search({ query, kind: options.kind ?? null, tags: options.tag.slice(0, 10), limit: options.limit });
+            const result = search({ query, kind: options.kind ?? null, tags: options.tag.slice(0, LIMITS.tagFilters), limit: options.limit });
             return output(options.json, result, result.total === 0 ? ["No Library entries match."] : hitLines(result.entries, query));
           },
         }),
