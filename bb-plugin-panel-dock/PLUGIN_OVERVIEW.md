@@ -1,8 +1,9 @@
-Put bb's side panel on the right or at the bottom of a thread, and open a
-terminal in one click.
+Put bb's side panel on the right or at the bottom of a thread, and summon a
+floating terminal with Ctrl+`.
 
 ## What you get
 
+- A floating terminal over the thread, toggled with Ctrl+` (rebindable).
 - A header button that opens the panel on the right or at the bottom.
 - A New terminal item that starts a shell in the thread's workspace.
 - A draggable top edge for the bottom panel, with its height remembered.

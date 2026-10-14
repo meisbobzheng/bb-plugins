@@ -1,5 +1,4 @@
-import { useSyncExternalStore } from "react";
-import { toast } from "sonner";
+import { useEffect, useSyncExternalStore } from "react";
 import {
   definePluginApp,
   useBbNavigate,
@@ -19,6 +18,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
 import {
+  endFloat,
+  floatingThreadId,
   getDock,
   mountDock,
   parseDock,
@@ -26,6 +27,7 @@ import {
   showPanel,
   subscribeDock,
 } from "./dock";
+import { openNewTerminal, surfaces, toggleFloatingTerminal } from "./terminal";
 import "./dock.css";
 
 export function PanelDockMenu({
@@ -35,22 +37,19 @@ export function PanelDockMenu({
   const dock = useSyncExternalStore(subscribeDock, getDock);
   const sdk = useSdk();
   const navigate = useBbNavigate();
-  if (isCompactViewport) return null;
 
-  const openTerminal = async () => {
-    try {
-      const terminal = await sdk.terminals.create({
-        scope: { kind: "thread", threadId },
-        cols: 80,
-        rows: 24,
-      });
-      if (!(await navigate.experimental_openTerminal({ terminalId: terminal.id }))) {
-        toast.error("Could not show the terminal");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    }
-  };
+  useEffect(() => {
+    surfaces.set(threadId, { sdk, navigate });
+  });
+  useEffect(
+    () => () => {
+      surfaces.delete(threadId);
+      if (floatingThreadId() === threadId) endFloat({ hide: false });
+    },
+    [threadId],
+  );
+
+  if (isCompactViewport) return null;
 
   return (
     <DropdownMenu>
@@ -77,9 +76,13 @@ export function PanelDockMenu({
           <DropdownMenuRadioItem value="bottom">At the bottom</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={openTerminal}>
+        <DropdownMenuItem onSelect={() => openNewTerminal({ sdk, navigate }, threadId)}>
           <Icon name="Terminal" />
           New terminal
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => toggleFloatingTerminal(threadId)}>
+          <Icon name="Terminal" />
+          Floating terminal
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -97,5 +100,14 @@ export default definePluginApp((app) => {
     id: "toggle-dock",
     title: "Move panel between right and bottom",
     run: () => setDock(getDock() === "bottom" ? "right" : "bottom"),
+  });
+  app.commands.register({
+    id: "floating-terminal",
+    title: "Toggle floating terminal",
+    defaultShortcut: { key: "`", control: true },
+    isAvailable: ({ threadId }) => threadId !== null && surfaces.has(threadId),
+    run: ({ threadId }) => {
+      if (threadId) return toggleFloatingTerminal(threadId);
+    },
   });
 });
