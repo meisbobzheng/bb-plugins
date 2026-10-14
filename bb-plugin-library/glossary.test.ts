@@ -59,6 +59,12 @@ describe("detectTags", () => {
     expect(detectTags("Attach an SCP to the AWS account.")).toEqual([]);
   });
 
+  it("detects AKA resynchronization but not data resyncs", () => {
+    expect(detectTags("On SQN failure the UE returns AUTS.")).toEqual(["Resync"]);
+    expect(detectTags("The MME sends AIR with Re-Synchronization-Info.")).toContain("Resync");
+    expect(detectTags("Forcing a resync of subscriber state after a dropped write.")).toEqual([]);
+  });
+
   it("never detects status or doc type tags", () => {
     expect(detectTags("Overview of the Index. Not Implemented yet, Planned for later.")).toEqual([]);
   });

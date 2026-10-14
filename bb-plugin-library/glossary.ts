@@ -91,7 +91,7 @@ export const TERMS: readonly Term[] = [
   procedure("5G-AKA", ["TS 33.501"], /\b5G[- ]AKA\b/),
   procedure("EAP-AKA'", ["RFC 9048", "TS 33.501"], /\bEAP-AKA'/),
   procedure("IMS-AKA", ["TS 33.203"], /\bIMS[- ]AKA\b/),
-  procedure("Resync", ["TS 33.102"], /\bre-?synchroni[sz]ation\b|\bresync\b/i),
+  procedure("Resync", ["TS 33.102"], /\bRe-Synchronization-Info\b|\bAUTS\b|\bSQN\s+(?:failure|mismatch)\b|\bsynch(?:ronization)?\s+failure\b/i),
   procedure("CSFB", ["TS 23.272"], /\bCSFB\b|\bCS\s+fallback\b/i),
   procedure("SRVCC", ["TS 23.216"], /\bSRVCC\b/),
 
