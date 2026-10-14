@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Markdown } from "@get-bb/plugin-sdk/app";
 import { Input } from "./ui/input";
 import { cn } from "../lib/utils";
-import { LIMITS, guessKind, guessTitle, type Kind } from "../library";
-import { detectTags } from "../topics";
+import { LIMITS, guessKind, guessTitle, type Kind, type TagRef } from "../library";
+import { detectTags, termFor } from "../glossary";
 import { Field, KindPicker, TagInput, Textarea } from "./bits";
 
 export interface Draft {
@@ -11,11 +11,12 @@ export interface Draft {
   kind: Kind;
   summary: string;
   body: string;
-  tags: string[];
+  tags: TagRef[];
 }
 
 export function draftFromText(text: string): Draft {
-  return { title: guessTitle(text), kind: guessKind(text), summary: "", body: text, tags: detectTags(text) };
+  const tags = detectTags(text).map((tag): TagRef => ({ tag, group: termFor(tag)?.group ?? "other" }));
+  return { title: guessTitle(text), kind: guessKind(text), summary: "", body: text, tags };
 }
 
 export function isDraftValid(draft: Draft): boolean {

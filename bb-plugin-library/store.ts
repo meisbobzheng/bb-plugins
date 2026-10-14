@@ -1,17 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import type { Entry, EntryHit, SearchInput, SearchResult } from "./contract.js";
-import { MARK_START, excerpt, isKind, type Kind } from "./library.js";
-import { normalizeTags } from "./topics.js";
+import type { CatalogTag, Entry, EntryHit, SearchInput, SearchResult } from "./contract.js";
+import { detectTags, normalizeTags, termFor, type TagDraft } from "./glossary.js";
+import { MARK_START, TAG_GROUPS, excerpt, isKind, isTagGroup, sortByGroup, type Kind, type TagGroup, type TagRef } from "./library.js";
 
-const TAG_FACETS = 50;
+const TAG_FACETS = 60;
+
+export type GroupMode = "keep" | "set";
 
 export interface EntryEdit {
   title: string;
   kind: Kind;
   summary: string;
   body: string;
-  tags: readonly string[];
+  tags: readonly TagDraft[];
 }
 
 export interface NewEntry extends EntryEdit {
@@ -19,6 +21,14 @@ export interface NewEntry extends EntryEdit {
   threadTitle: string | null;
   messageId: string | null;
 }
+
+export interface Retagged {
+  id: string;
+  title: string;
+  added: string[];
+}
+
+export type RegroupResult = { ok: true; tag: string; group: TagGroup } | { ok: false; tag: string; group: TagGroup };
 
 interface EntryRow {
   id: string;
@@ -46,26 +56,6 @@ function parseTags(json: string): string[] {
   } catch {
     return [];
   }
-}
-
-function toEntry(row: EntryRow): Entry {
-  return {
-    id: row.id,
-    title: row.title,
-    kind: isKind(row.kind) ? row.kind : "note",
-    summary: row.summary,
-    body: row.body,
-    tags: parseTags(row.tags),
-    source: { threadId: row.thread_id, threadTitle: row.thread_title, messageId: row.message_id },
-    createdAt: new Date(row.created_at).toISOString(),
-    updatedAt: new Date(row.updated_at).toISOString(),
-  };
-}
-
-function toHit(row: EntryRow & { snippet: string | null }): EntryHit {
-  const { body, ...entry } = toEntry(row);
-  const snippet = row.snippet?.includes(MARK_START) ? row.snippet : entry.summary || excerpt(body, 200);
-  return { ...entry, snippet };
 }
 
 export function ftsQuery(input: string): string | null {
@@ -118,6 +108,7 @@ export function createStore(storage: BbPluginApi["storage"]) {
       INSERT INTO entries_fts (entries_fts, rowid, title, summary, tags, body) VALUES ('delete', old.seq, old.title, old.summary, old.tags, old.body);
       INSERT INTO entries_fts (rowid, title, summary, tags, body) VALUES (new.seq, new.title, new.summary, new.tags, new.body);
     END`,
+    `CREATE TABLE tag_groups (key TEXT PRIMARY KEY, tag TEXT NOT NULL, grp TEXT NOT NULL)`,
   ]);
 
   const columns = "e.id, e.title, e.kind, e.summary, e.body, e.tags, e.thread_id, e.thread_title, e.message_id, e.created_at, e.updated_at";
@@ -127,38 +118,110 @@ export function createStore(storage: BbPluginApi["storage"]) {
        VALUES (@id, @title, @kind, @summary, @body, @tags, @threadId, @threadTitle, @messageId, @now, @now)`,
     ),
     get: db.prepare(`SELECT ${columns} FROM entries e WHERE e.id = ?`),
+    all: db.prepare(`SELECT ${columns} FROM entries e ORDER BY e.seq`),
     update: db.prepare(
       "UPDATE entries SET title = @title, kind = @kind, summary = @summary, body = @body, tags = @tags, updated_at = @now WHERE id = @id",
     ),
+    updateTags: db.prepare("UPDATE entries SET tags = ? WHERE id = ?"),
     remove: db.prepare("DELETE FROM entries WHERE id = ?"),
     forgetThread: db.prepare("UPDATE entries SET thread_id = NULL WHERE thread_id = ?"),
+    groups: db.prepare("SELECT tag, grp FROM tag_groups"),
+    setGroup: db.prepare("INSERT INTO tag_groups (key, tag, grp) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET tag = excluded.tag, grp = excluded.grp"),
+    keepGroup: db.prepare("INSERT INTO tag_groups (key, tag, grp) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING"),
+    clearGroup: db.prepare("DELETE FROM tag_groups WHERE key = ?"),
+    tagCounts: db.prepare("SELECT t.value AS tag, COUNT(*) AS count FROM entries e JOIN json_each(e.tags) AS t GROUP BY lower(t.value)"),
+    usedSpelling: db.prepare("SELECT t.value AS tag FROM entries e JOIN json_each(e.tags) AS t WHERE lower(t.value) = lower(?) LIMIT 1"),
   };
+
+  const registry = new Map<string, { tag: string; group: TagGroup }>();
+  for (const row of statements.groups.all() as Array<{ tag: string; grp: string }>) {
+    if (isTagGroup(row.grp)) registry.set(row.tag.toLowerCase(), { tag: row.tag, group: row.grp });
+  }
+
+  function groupOf(tag: string): TagGroup {
+    return termFor(tag)?.group ?? registry.get(tag.toLowerCase())?.group ?? "other";
+  }
+
+  function refs(names: readonly string[]): TagRef[] {
+    return sortByGroup(names.map((tag) => ({ tag, group: groupOf(tag) })));
+  }
+
+  function toEntry(row: EntryRow): Entry {
+    return {
+      id: row.id,
+      title: row.title,
+      kind: isKind(row.kind) ? row.kind : "note",
+      summary: row.summary,
+      body: row.body,
+      tags: refs(parseTags(row.tags)),
+      source: { threadId: row.thread_id, threadTitle: row.thread_title, messageId: row.message_id },
+      createdAt: new Date(row.created_at).toISOString(),
+      updatedAt: new Date(row.updated_at).toISOString(),
+    };
+  }
+
+  function toHit(row: EntryRow & { snippet: string | null }): EntryHit {
+    const { body, ...entry } = toEntry(row);
+    const snippet = row.snippet?.includes(MARK_START) ? row.snippet : entry.summary || excerpt(body, 200);
+    return { ...entry, snippet };
+  }
+
+  function assign(tag: string, group: TagGroup, mode: GroupMode): void {
+    if (termFor(tag) !== undefined) return;
+    const key = tag.toLowerCase();
+    if (group === "other") {
+      if (mode === "set") {
+        statements.clearGroup.run(key);
+        registry.delete(key);
+      }
+      return;
+    }
+    if (mode === "keep" && registry.has(key)) return;
+    (mode === "set" ? statements.setGroup : statements.keepGroup).run(key, tag, group);
+    registry.set(key, { tag, group });
+  }
+
+  function spelling(tag: string): string {
+    const used = statements.usedSpelling.get(tag) as { tag: string } | undefined;
+    return registry.get(tag.toLowerCase())?.tag ?? used?.tag ?? tag;
+  }
+
+  function storedTags(tags: readonly TagDraft[], mode: GroupMode): string {
+    const normalized = normalizeTags(tags).map((draft) => ({ ...draft, tag: spelling(draft.tag) }));
+    for (const { tag, group } of normalized) {
+      if (group !== null) assign(tag, group, mode);
+    }
+    return JSON.stringify(normalized.map(({ tag }) => tag));
+  }
+
+  function editParams(edit: EntryEdit, mode: GroupMode) {
+    return { title: edit.title, kind: edit.kind, summary: edit.summary, body: edit.body, tags: storedTags(edit.tags, mode) };
+  }
 
   function get(id: string): Entry | null {
     const row = statements.get.get(id) as EntryRow | undefined;
     return row === undefined ? null : toEntry(row);
   }
 
-  function editParams(edit: EntryEdit) {
-    return { title: edit.title, kind: edit.kind, summary: edit.summary, body: edit.body, tags: JSON.stringify(normalizeTags(edit.tags)) };
-  }
-
   return {
     get,
-    create(entry: NewEntry): Entry {
+    groupOf,
+    create(entry: NewEntry, mode: GroupMode): Entry {
       const id = `lib_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
-      statements.insert.run({
-        ...editParams(entry),
-        id,
-        threadId: entry.threadId,
-        threadTitle: entry.threadTitle,
-        messageId: entry.messageId,
-        now: Date.now(),
-      });
+      db.transaction(() => {
+        statements.insert.run({
+          ...editParams(entry, mode),
+          id,
+          threadId: entry.threadId,
+          threadTitle: entry.threadTitle,
+          messageId: entry.messageId,
+          now: Date.now(),
+        });
+      })();
       return get(id)!;
     },
-    update(id: string, edit: EntryEdit): Entry | null {
-      const { changes } = statements.update.run({ ...editParams(edit), id, now: Date.now() });
+    update(id: string, edit: EntryEdit, mode: GroupMode): Entry | null {
+      const changes = db.transaction(() => statements.update.run({ ...editParams(edit, mode), id, now: Date.now() }).changes)();
       return changes === 0 ? null : get(id);
     },
     remove(id: string): boolean {
@@ -166,6 +229,36 @@ export function createStore(storage: BbPluginApi["storage"]) {
     },
     forgetThread(threadId: string): number {
       return statements.forgetThread.run(threadId).changes;
+    },
+    regroup(raw: string, group: TagGroup): RegroupResult {
+      const builtIn = termFor(raw);
+      if (builtIn !== undefined) return { ok: false, tag: builtIn.tag, group: builtIn.group };
+      const tag = spelling(raw);
+      assign(tag, group, "set");
+      return { ok: true, tag, group: groupOf(tag) };
+    },
+    retag(dryRun: boolean): Retagged[] {
+      const changed = (statements.all.all() as EntryRow[]).flatMap((row) => {
+        const current = parseTags(row.tags);
+        const known = new Set(current.map((tag) => tag.toLowerCase()));
+        const detected = detectTags(`${row.title}\n${row.summary}\n${row.body}`);
+        const tags = normalizeTags([...current, ...detected].map((tag) => ({ tag, group: null }))).map(({ tag }) => tag);
+        if (JSON.stringify(tags) === row.tags) return [];
+        return [{ id: row.id, title: row.title, added: tags.filter((tag) => !known.has(tag.toLowerCase())), tags }];
+      });
+      if (!dryRun) {
+        db.transaction(() => {
+          for (const { id, tags } of changed) statements.updateTags.run(JSON.stringify(tags), id);
+        })();
+      }
+      return changed.map(({ id, title, added }) => ({ id, title, added }));
+    },
+    catalog(): CatalogTag[] {
+      const used = new Map((statements.tagCounts.all() as Array<{ tag: string; count: number }>).map((row) => [row.tag.toLowerCase(), row]));
+      const unused = [...registry.values()].filter(({ tag }) => !used.has(tag.toLowerCase())).map(({ tag }) => ({ tag, count: 0 }));
+      const rows = [...used.values(), ...unused].map(({ tag, count }) => ({ tag, count, group: groupOf(tag), builtIn: termFor(tag) !== undefined }));
+      rows.sort((a, b) => TAG_GROUPS.indexOf(a.group) - TAG_GROUPS.indexOf(b.group) || b.count - a.count || a.tag.localeCompare(b.tag));
+      return rows;
     },
     search(input: SearchInput): SearchResult {
       const match = ftsQuery(input.query);
@@ -202,7 +295,7 @@ export function createStore(storage: BbPluginApi["storage"]) {
         entries: rows.map(toHit),
         total: total.count,
         kinds: kinds.flatMap(({ kind, count }) => (isKind(kind) ? [{ kind, count }] : [])),
-        tags,
+        tags: tags.map(({ tag, count }) => ({ tag, count, group: groupOf(tag) })),
       };
     },
   };

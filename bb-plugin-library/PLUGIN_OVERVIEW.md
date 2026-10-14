@@ -15,11 +15,15 @@ Keep the explanations your agents write, and find them again in seconds.
 
 ## Built for mobile core work
 
-Entries are tagged automatically with the 4G and 5G interfaces (S6a, Gx, Rx,
-Cx, N8, N11), procedures (Attach, Registration, PDU Session), Diameter command
-pairs (ULR/ULA, CCR/CCA), and protocols they mention. Hover a tag to see its
-endpoints and specification. Each entry lists the 3GPP and IETF specifications
-it references, linked to their pages.
+Tags are sorted into groups: Interfaces, Procedures, Messages, Network
+functions, Protocols, Domains, Components, Tech stack, Topics, Status, and Doc
+type. Entries are tagged automatically with the 4G and 5G interfaces (S6a, S6c,
+Cx, N8), procedures (Attach, IMS Registration, PDU Session), Diameter command
+pairs (ULR/ULA, SRR/SRA), network functions (HSS, MME, S-CSCF), protocols, and
+domains they mention. Agents file every other tag under its group, and filters
+on the Library page follow the same groups. Hover a tag to see its endpoints
+and specification. Each entry lists the 3GPP and IETF specifications it
+references, linked to their pages.
 
 ## How it works
 

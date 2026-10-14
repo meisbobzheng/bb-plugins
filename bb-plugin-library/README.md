@@ -27,25 +27,51 @@ then search them all in one place.
   references (linked to 3GPP and IETF pages), and can be edited, copied, or
   used to start a new thread.
 
-**Telecom tagging**
+**Tag groups**
 
-Saving detects 4G/5G interfaces (S6a, S13, Gx, Rx, Gy/Ro, Cx/Dx, Sh, SWx, S1-MME,
-S11, S5/S8, N1–N40, Nudm/Namf/…), procedures (Attach, TAU, Registration, PDU
-Session, Service Request, IMS Registration, CSFB, SRVCC, …), Diameter command
-pairs (ULR/ULA, AIR/AIA, CCR/CCA, AAR/AAA, UAR/UAA, SAR/SAA, …), and protocols
-(Diameter, GTPv2-C, PFCP, NGAP, S1AP, NAS, SIP, …). The glossary, with each
-term's endpoints and specs, is in [topics.ts](topics.ts).
+Every tag belongs to one group, and the Library shows tags, filters, and the tag
+editor group by group:
+
+| Group | Examples |
+| --- | --- |
+| Interfaces | S6a, S6c, Cx, SGd, Gx, Rx, Sh, N8, Nudm |
+| Procedures | Attach, TAU, IMS Registration, MT Call, PDU Session, EPS-AKA |
+| Messages | ULR/ULA, AIR/AIA, SAR/SAA, SRR/SRA, CCR/CCA, INVITE |
+| Network functions | HSS, MME, UDM, S-CSCF, SMS-GMSC, PCRF |
+| Protocols | Diameter, SIP, GTPv2-C, NAS, PFCP, SBI |
+| Domains | EPC, 5GC, IMS, SMS, VoLTE, BSS |
+| Components | Your own services, repositories, and modules |
+| Tech stack | Go, Postgres, gRPC, AWS CDK, Lambda |
+| Topics | Outbox, Provisioning, Storage, SQN |
+| Status | Implemented, Partial, Not Implemented, Planned |
+| Doc type | Overview, Index, End-to-end, Message Reference |
+| Other | Tags nobody has grouped yet |
+
+The first six groups come from a built-in glossary: saving detects those terms
+in the content and files them in their fixed group, and hovering one shows its
+endpoints and spec. The glossary is in [glossary.ts](glossary.ts). Every other
+tag gets its group the first time someone saves it: agents pass tags by group,
+and the tag editor has a group picker. A tag keeps that group on every entry;
+pick another group in the editor, or run `bb library regroup`, to move it.
 
 ## CLI
 
 ```
 bb library search [words…] [--kind <kind>] [--tag <tag>]… [--limit <n>] [--json]
 bb library show <id> [--json]
-bb library save --title <title> --body "$(cat flow.md)" [--kind <kind>] [--tag <tag>]… [--summary <text>] [--json]
-bb library update <id> [--title <title>] [--body "$(cat flow.md)"] [--kind <kind>] [--tag <tag>]… [--summary <text>] [--json]
+bb library save --title <title> --body "$(cat flow.md)" [--kind <kind>] [--summary <text>] [tag flags] [--json]
+bb library update <id> [--title <title>] [--body "$(cat flow.md)"] [--kind <kind>] [--summary <text>] [tag flags] [--json]
 bb library tags [--json]
+bb library groups [--json]
+bb library regroup <tag> <group> [--json]
+bb library retag [--dry-run] [--json]
 bb library delete <id> [--json]
 ```
+
+Tag flags take a tag per group and repeat: `--interface`, `--procedure`,
+`--message`, `--function`, `--protocol`, `--domain`, `--component`, `--tech`,
+`--topic`, `--status`, and `--doc`. `--tag` adds a tag whose group is already
+known.
 
 `search` with no words lists the newest entries. Words match as prefixes;
 quote a phrase to match it exactly.
@@ -53,11 +79,15 @@ quote a phrase to match it exactly.
 `update` changes an entry in place and keeps its id. Omitted fields keep their
 values, a new body replaces the whole body, and detected tags are refreshed.
 
+`tags` lists every tag by group. `regroup` moves a tag to another group on
+every entry. `retag` adds newly detected glossary tags to every saved entry and
+never removes one.
+
 ## Agent tools
 
 | Tool | Does |
 | --- | --- |
-| `library_save` | Save Markdown with a title, optional kind, summary, and tags. |
+| `library_save` | Save Markdown with a title, optional kind, summary, and tags by group. |
 | `library_search` | Full-text search with kind and tag filters. |
 | `library_get` | Read one entry in full. |
 | `library_update` | Change an entry in place, keeping its id; omitted fields stay as they are. |
@@ -75,5 +105,6 @@ bb plugin dev        # rebuild and reload on save
 ```
 
 Entries live in the plugin's SQLite database (`<dataDir>/plugins/library/data.db`)
-with an FTS5 index kept in sync by triggers. Deleting a thread keeps its
-entries and drops only the link back to it.
+with an FTS5 index kept in sync by triggers. Groups of tags outside the
+glossary live in its `tag_groups` table. Deleting a thread keeps its entries
+and drops only the link back to it.

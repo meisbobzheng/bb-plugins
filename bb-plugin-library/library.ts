@@ -20,13 +20,71 @@ export const LIMITS = {
   summary: 500,
   body: 500_000,
   tag: 40,
-  tags: 20,
+  tags: 30,
   query: 500,
   results: 200,
 } as const;
 
 export function isKind(value: string): value is Kind {
   return (KINDS as readonly string[]).includes(value);
+}
+
+export const TAG_GROUPS = [
+  "interfaces",
+  "procedures",
+  "messages",
+  "functions",
+  "protocols",
+  "domains",
+  "components",
+  "tech",
+  "topics",
+  "status",
+  "docs",
+  "other",
+] as const;
+export type TagGroup = (typeof TAG_GROUPS)[number];
+export const ASSIGNABLE_GROUPS = TAG_GROUPS.filter((group): group is Exclude<TagGroup, "other"> => group !== "other");
+
+export const TAG_GROUP_INFO: Record<TagGroup, { label: string; hint: string }> = {
+  interfaces: { label: "Interfaces", hint: "3GPP reference points and service-based interfaces, e.g. S6a, S6c, Cx, SGd, Gx, N8, Nudm" },
+  procedures: {
+    label: "Procedures",
+    hint: "Attach, registration, mobility, session, call, SMS, and authentication procedures, e.g. Attach, TAU, IMS Registration, MT Call, EPS-AKA",
+  },
+  messages: { label: "Messages", hint: "Diameter command pairs and signalling messages, e.g. ULR/ULA, SAR/SAA, SRR/SRA, INVITE" },
+  functions: { label: "Network functions", hint: "3GPP nodes and network functions, e.g. HSS, MME, UDM, S-CSCF, SMS-GMSC" },
+  protocols: { label: "Protocols", hint: "Signalling and transport protocols, e.g. Diameter, SIP, GTPv2-C, NAS, PFCP, SBI" },
+  domains: { label: "Domains", hint: "Network domains and services, e.g. EPC, 5GC, IMS, SMS, VoLTE, BSS" },
+  components: { label: "Components", hint: "Services, repositories, and modules of the user's own systems, by their project names" },
+  tech: { label: "Tech stack", hint: "Languages, databases, libraries, cloud services, and tools, e.g. Go, Postgres, gRPC, AWS CDK, Lambda" },
+  topics: { label: "Topics", hint: "Concepts and design themes no other group covers, e.g. Outbox, Provisioning, Storage, SQN, Failover" },
+  status: { label: "Status", hint: "Implementation state: Implemented, Partial, Not Implemented, Planned, In Progress, or Deprecated" },
+  docs: { label: "Doc type", hint: "What the write-up is, e.g. Overview, Index, End-to-end, Message Reference, Architecture, Troubleshooting" },
+  other: { label: "Other", hint: "Tags nobody has grouped yet" },
+};
+
+export interface TagRef {
+  tag: string;
+  group: TagGroup;
+}
+
+export function isTagGroup(value: string): value is TagGroup {
+  return (TAG_GROUPS as readonly string[]).includes(value);
+}
+
+export function sortByGroup<T extends { group: TagGroup }>(tags: readonly T[]): T[] {
+  return tags
+    .map((tag, index) => ({ tag, index }))
+    .sort((a, b) => TAG_GROUPS.indexOf(a.tag.group) - TAG_GROUPS.indexOf(b.tag.group) || a.index - b.index)
+    .map(({ tag }) => tag);
+}
+
+export function groupTags<T extends { group: TagGroup }>(tags: readonly T[]): Array<{ group: TagGroup; tags: T[] }> {
+  return TAG_GROUPS.flatMap((group) => {
+    const members = tags.filter((tag) => tag.group === group);
+    return members.length === 0 ? [] : [{ group, tags: members }];
+  });
 }
 
 export function guessKind(body: string): Kind {

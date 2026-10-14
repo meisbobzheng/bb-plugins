@@ -5,8 +5,8 @@ import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Icon } from "./ui/icon";
 import type { Entry } from "../contract";
-import { specUrl, specsFor } from "../topics";
-import { EmptyState, KindBadge, TagChip, formatDate } from "./bits";
+import { specUrl, specsFor } from "../glossary";
+import { EmptyState, GroupedTags, KindBadge, TagChip, formatDate } from "./bits";
 import { EntryFields, isDraftValid, type Draft } from "./EntryFields";
 import { errorMessage, useEntry, useLibraryRpc } from "./hooks";
 
@@ -70,7 +70,7 @@ interface EntryReaderProps {
 function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryReaderProps) {
   const navigate = useBbNavigate();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const specs = specsFor(entry.tags, entry.body);
+  const specs = specsFor(entry.tags.map(({ tag }) => tag), entry.body);
   const { threadId, threadTitle } = entry.source;
 
   const copy = () => {
@@ -97,11 +97,12 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
         </div>
         {entry.summary === "" ? null : <p className="text-sm text-muted-foreground">{entry.summary}</p>}
         {entry.tags.length === 0 ? null : (
-          <div className="flex flex-wrap gap-1.5">
-            {entry.tags.map((tag) => (
-              <TagChip key={tag} tag={tag} onClick={onTagClick === undefined ? undefined : () => onTagClick(tag)} />
-            ))}
-          </div>
+          <GroupedTags
+            tags={entry.tags}
+            chip={({ tag, group }) => (
+              <TagChip key={tag} tag={tag} group={group} onClick={onTagClick === undefined ? undefined : () => onTagClick(tag)} />
+            )}
+          />
         )}
         {specs.length === 0 ? null : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">

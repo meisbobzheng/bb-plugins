@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
-import type { Entry, SearchInput, SearchResult, rpcContract } from "../contract";
+import type { CatalogTag, Entry, SearchInput, SearchResult, rpcContract } from "../contract";
 import { CHANGED_CHANNEL } from "../library";
 
 const SEARCH_DEBOUNCE_MS = 120;
@@ -58,6 +58,27 @@ export function useLibrarySearch(input: SearchInput) {
   }, [rpc, key, isQueryEmpty, version]);
 
   return { result, error };
+}
+
+export function useTagCatalog(): ReadonlyMap<string, CatalogTag> {
+  const rpc = useLibraryRpc();
+  const version = useLibraryVersion();
+  const [catalog, setCatalog] = useState<ReadonlyMap<string, CatalogTag>>(() => new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    rpc.call("catalog", null).then(
+      ({ tags }) => {
+        if (!cancelled) setCatalog(new Map(tags.map((tag) => [tag.tag.toLowerCase(), tag])));
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [rpc, version]);
+
+  return catalog;
 }
 
 export function useEntry(id: string) {

@@ -1,8 +1,31 @@
-import { forwardRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  forwardRef,
+  useId,
+  useRef,
+  useState,
+  type ComponentProps,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Icon } from "./ui/icon";
 import { cn } from "../lib/utils";
-import { KINDS, KIND_LABELS, MARK_END, MARK_START, type Kind } from "../library";
-import { normalizeTags, topicFor } from "../topics";
+import { cleanTag, termFor } from "../glossary";
+import {
+  ASSIGNABLE_GROUPS,
+  KINDS,
+  KIND_LABELS,
+  LIMITS,
+  MARK_END,
+  MARK_START,
+  TAG_GROUP_INFO,
+  groupTags,
+  type Kind,
+  type TagGroup,
+  type TagRef,
+} from "../library";
+import { useTagCatalog } from "./hooks";
 
 export function KindBadge({ kind, className }: { kind: Kind; className?: string }) {
   return (
@@ -12,21 +35,22 @@ export function KindBadge({ kind, className }: { kind: Kind; className?: string 
   );
 }
 
-export function tagTooltip(tag: string): string | undefined {
-  const topic = topicFor(tag);
-  if (topic === undefined) return undefined;
-  return topic.specs.length === 0 ? topic.about : `${topic.about} · ${topic.specs.join(", ")}`;
+export function tagTooltip(tag: string, group?: TagGroup): string | undefined {
+  const term = termFor(tag);
+  if (term === undefined) return group === undefined ? undefined : TAG_GROUP_INFO[group].label;
+  return term.specs.length === 0 ? term.about : `${term.about} · ${term.specs.join(", ")}`;
 }
 
 interface TagChipProps {
   tag: string;
+  group?: TagGroup;
   count?: number;
   active?: boolean;
   onClick?: () => void;
   onRemove?: () => void;
 }
 
-export function TagChip({ tag, count, active = false, onClick, onRemove }: TagChipProps) {
+export function TagChip({ tag, group, count, active = false, onClick, onRemove }: TagChipProps) {
   const chip = cn(
     "inline-flex h-6 max-w-full items-center gap-1 rounded-full border px-2 text-xs transition-colors",
     active ? "border-foreground/40 bg-foreground/10 text-foreground" : "border-border text-muted-foreground",
@@ -39,7 +63,7 @@ export function TagChip({ tag, count, active = false, onClick, onRemove }: TagCh
     </>
   );
   return (
-    <span className={chip} title={tagTooltip(tag)}>
+    <span className={chip} title={tagTooltip(tag, group)}>
       {onClick === undefined ? (
         label
       ) : (
@@ -118,13 +142,75 @@ export function KindPicker({ value, onChange }: { value: Kind; onChange: (kind: 
   );
 }
 
-export function TagInput({ tags, onChange }: { tags: readonly string[]; onChange: (tags: string[]) => void }) {
+interface Collapse {
+  limit: number;
+  expanded: ReadonlySet<TagGroup>;
+  onToggle: (group: TagGroup) => void;
+}
+
+export function GroupedTags<T extends TagRef>({ tags, chip, collapse }: { tags: readonly T[]; chip: (tag: T) => ReactNode; collapse?: Collapse }) {
+  return (
+    <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 text-xs">
+      {groupTags(tags).map(({ group, tags: members }) => {
+        const open = collapse === undefined || collapse.expanded.has(group);
+        const hidden = open ? 0 : Math.max(0, members.length - collapse.limit);
+        return (
+          <Fragment key={group}>
+            <dt className="pt-1 text-muted-foreground">{TAG_GROUP_INFO[group].label}</dt>
+            <dd className="flex min-w-0 flex-wrap gap-1.5">
+              {members.slice(0, members.length - hidden).map(chip)}
+              {collapse === undefined || members.length <= collapse.limit ? null : (
+                <button
+                  type="button"
+                  className="h-6 cursor-pointer px-1 text-muted-foreground hover:text-foreground"
+                  aria-expanded={open}
+                  onClick={() => collapse.onToggle(group)}
+                >
+                  {open ? "Fewer" : `+${hidden} more`}
+                </button>
+              )}
+            </dd>
+          </Fragment>
+        );
+      })}
+    </dl>
+  );
+}
+
+type AssignableGroup = (typeof ASSIGNABLE_GROUPS)[number];
+
+export function TagInput({ tags, onChange }: { tags: readonly TagRef[]; onChange: (tags: TagRef[]) => void }) {
+  const catalog = useTagCatalog();
+  const listId = useId();
+  const container = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState("");
+  const [group, setGroup] = useState<AssignableGroup>("topics");
+  const builtIn = termFor(draft.trim());
+
+  const resolve = (name: string): TagRef => {
+    const term = termFor(name);
+    return term === undefined ? { tag: name, group } : { tag: term.tag, group: term.group };
+  };
+
   const commit = () => {
-    if (draft.trim() === "") return;
-    onChange(normalizeTags([...tags, ...draft.split(",")]));
+    const names = draft.split(",").flatMap((raw) => cleanTag(raw) ?? []);
+    if (names.length === 0) return;
+    const next = [...tags];
+    for (const ref of names.map(resolve)) {
+      const index = next.findIndex(({ tag }) => tag.toLowerCase() === ref.tag.toLowerCase());
+      if (index < 0) next.push(ref);
+      else next[index] = ref;
+    }
+    onChange(next.slice(0, LIMITS.tags));
     setDraft("");
   };
+
+  const onDraftChange = (value: string) => {
+    setDraft(value);
+    const known = catalog.get(value.trim().toLowerCase());
+    if (known !== undefined && known.group !== "other" && !known.builtIn) setGroup(known.group);
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" || event.key === ",") {
       if (draft.trim() === "") return;
@@ -134,20 +220,57 @@ export function TagInput({ tags, onChange }: { tags: readonly string[]; onChange
       onChange(tags.slice(0, -1));
     }
   };
+
+  const onBlur = (event: FocusEvent) => {
+    if (!container.current?.contains(event.relatedTarget as Node | null)) commit();
+  };
+
   return (
-    <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-input px-2 py-1.5 focus-within:ring-1 focus-within:ring-ring">
-      {tags.map((tag) => (
-        <TagChip key={tag} tag={tag} active onRemove={() => onChange(tags.filter((candidate) => candidate !== tag))} />
-      ))}
-      <input
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={onKeyDown}
-        onBlur={commit}
-        placeholder={tags.length === 0 ? "Add tags, e.g. S6a, Attach" : "Add tag"}
-        aria-label="Add tag"
-        className="h-6 min-w-24 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-      />
+    <div ref={container} onBlur={onBlur} className="space-y-2 rounded-md border border-input p-2 focus-within:ring-1 focus-within:ring-ring">
+      {tags.length === 0 ? null : (
+        <GroupedTags
+          tags={tags}
+          chip={(ref) => (
+            <TagChip
+              key={ref.tag}
+              tag={ref.tag}
+              group={ref.group}
+              active
+              onRemove={() => onChange(tags.filter(({ tag }) => tag !== ref.tag))}
+            />
+          )}
+        />
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          value={draft}
+          list={listId}
+          onChange={(event) => onDraftChange(event.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={tags.length === 0 ? "Add tags, e.g. Outbox, Not Implemented" : "Add tag"}
+          aria-label="Add tag"
+          className="h-7 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        />
+        <select
+          aria-label="Group for the new tag"
+          title={builtIn === undefined ? "Group for the new tag. Adding a tag again with another group moves it." : "Built-in telecom tags keep their group."}
+          value={builtIn?.group ?? group}
+          disabled={builtIn !== undefined}
+          onChange={(event) => setGroup(event.target.value as AssignableGroup)}
+          className="h-7 shrink-0 cursor-pointer rounded-md border border-input bg-background px-1.5 text-xs text-foreground disabled:cursor-default disabled:opacity-60"
+        >
+          {(builtIn === undefined ? ASSIGNABLE_GROUPS : [builtIn.group]).map((option) => (
+            <option key={option} value={option}>
+              {TAG_GROUP_INFO[option].label}
+            </option>
+          ))}
+        </select>
+        <datalist id={listId}>
+          {[...catalog.values()].map(({ tag }) => (
+            <option key={tag} value={tag} />
+          ))}
+        </datalist>
+      </div>
     </div>
   );
 }

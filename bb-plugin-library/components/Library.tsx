@@ -6,14 +6,14 @@ import { Icon } from "./ui/icon";
 import { Input } from "./ui/input";
 import { cn } from "../lib/utils";
 import type { Entry, EntryHit, SearchResult } from "../contract";
-import { KINDS, KIND_LABELS, LIBRARY_PANEL, LIMITS, type Kind } from "../library";
-import { normalizeTags } from "../topics";
-import { EmptyState, Highlighted, KindBadge, TagChip, formatDate } from "./bits";
+import { KINDS, KIND_LABELS, LIBRARY_PANEL, LIMITS, type Kind, type TagGroup } from "../library";
+import { normalizeTagNames } from "../glossary";
+import { EmptyState, GroupedTags, Highlighted, KindBadge, TagChip, formatDate } from "./bits";
 import { EntryView, entryReference } from "./EntryView";
 import { useLibrarySearch } from "./hooks";
 
 const RESULT_LIMIT = 100;
-const COLLAPSED_TAGS = 12;
+const COLLAPSED_TAGS = 6;
 
 export interface Filters {
   query: string;
@@ -30,7 +30,7 @@ export function idFromSubPath(subPath: string): string | null {
 }
 
 function withTag(filters: Filters, tag: string): Filters {
-  return { ...filters, tags: normalizeTags([...filters.tags, tag]) };
+  return { ...filters, tags: normalizeTagNames([...filters.tags, tag]) };
 }
 
 function useSlashFocus(target: RefObject<HTMLInputElement | null>, enabled: boolean) {
@@ -178,24 +178,36 @@ function KindFilter({ result, value, onChange }: { result: SearchResult | null; 
 }
 
 function TagFilter({ result, selected, onChange }: { result: SearchResult | null; selected: string[]; onChange: (tags: string[]) => void }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState<ReadonlySet<TagGroup>>(() => new Set());
   const chosen = new Set(selected.map((tag) => tag.toLowerCase()));
-  const facets = (result?.tags ?? []).filter(({ tag }) => !chosen.has(tag.toLowerCase()) && (result?.total ?? 0) > 1);
-  const visible = expanded ? facets : facets.slice(0, COLLAPSED_TAGS);
+  const facets = (result?.total ?? 0) > 1 ? (result?.tags ?? []).filter(({ tag }) => !chosen.has(tag.toLowerCase())) : [];
   if (selected.length === 0 && facets.length === 0) return null;
+  const toggle = (group: TagGroup) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(group)) next.add(group);
+      return next;
+    });
   return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by tag">
-      {selected.map((tag) => (
-        <TagChip key={tag} tag={tag} active onRemove={() => onChange(selected.filter((candidate) => candidate !== tag))} />
-      ))}
-      {visible.map(({ tag, count }) => (
-        <TagChip key={tag} tag={tag} count={count} onClick={() => onChange(normalizeTags([...selected, tag]))} />
-      ))}
-      {facets.length > COLLAPSED_TAGS ? (
-        <button type="button" className="h-6 cursor-pointer px-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => setExpanded(!expanded)}>
-          {expanded ? "Fewer" : `+${facets.length - COLLAPSED_TAGS} more`}
-        </button>
-      ) : null}
+    <div className="space-y-2" role="group" aria-label="Filter by tag">
+      {selected.length === 0 ? null : (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((tag) => (
+            <TagChip key={tag} tag={tag} active onRemove={() => onChange(selected.filter((candidate) => candidate !== tag))} />
+          ))}
+        </div>
+      )}
+      {facets.length === 0 ? null : (
+        <div className="max-h-64 overflow-y-auto pr-1">
+          <GroupedTags
+            tags={facets}
+            collapse={{ limit: COLLAPSED_TAGS, expanded, onToggle: toggle }}
+            chip={({ tag, group, count }) => (
+              <TagChip key={tag} tag={tag} group={group} count={count} onClick={() => onChange(normalizeTagNames([...selected, tag]))} />
+            )}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -205,7 +217,7 @@ function ResultRow({ hit, selected, active, onSelect }: { hit: EntryHit; selecte
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: "nearest" });
   }, [active]);
-  const details = [...hit.tags.slice(0, 4), hit.source.threadTitle, formatDate(hit.updatedAt)].filter((part) => part !== null && part !== "");
+  const details = [...hit.tags.slice(0, 4).map(({ tag }) => tag), hit.source.threadTitle, formatDate(hit.updatedAt)].filter((part) => part !== null && part !== "");
   return (
     <li>
       <button

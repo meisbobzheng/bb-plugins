@@ -1,13 +1,20 @@
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
-import { KINDS, LIMITS } from "./library.js";
+import { KINDS, LIMITS, TAG_GROUPS } from "./library.js";
 
 export const kindSchema = z.enum(KINDS);
+export const tagGroupSchema = z.enum(TAG_GROUPS);
 export const idSchema = z.string().regex(/^lib_[a-z0-9]{8}$/, "expected a Library entry id like lib_1a2b3c4d");
 export const titleSchema = z.string().trim().min(1).max(LIMITS.title);
 export const summarySchema = z.string().trim().max(LIMITS.summary);
 export const bodySchema = z.string().trim().min(1).max(LIMITS.body);
-export const tagsSchema = z.array(z.string().max(200)).max(50);
+export const tagNameSchema = z.string().max(200);
+
+const tagRefSchema = z.object({ tag: z.string(), group: tagGroupSchema });
+const tagCountSchema = tagRefSchema.extend({ count: z.number().int().nonnegative() });
+export type TagCount = z.infer<typeof tagCountSchema>;
+const catalogTagSchema = tagCountSchema.extend({ builtIn: z.boolean() });
+export type CatalogTag = z.infer<typeof catalogTagSchema>;
 
 const sourceSchema = z.object({
   threadId: z.string().nullable(),
@@ -21,7 +28,7 @@ export const entrySchema = z.object({
   kind: kindSchema,
   summary: z.string(),
   body: z.string(),
-  tags: z.array(z.string()),
+  tags: z.array(tagRefSchema),
   source: sourceSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -35,7 +42,7 @@ const searchResultSchema = z.object({
   entries: z.array(hitSchema),
   total: z.number().int().nonnegative(),
   kinds: z.array(z.object({ kind: kindSchema, count: z.number().int().positive() })),
-  tags: z.array(z.object({ tag: z.string(), count: z.number().int().positive() })),
+  tags: z.array(tagCountSchema),
 });
 export type SearchResult = z.infer<typeof searchResultSchema>;
 
@@ -55,7 +62,7 @@ const editableFields = {
   kind: kindSchema,
   summary: summarySchema,
   body: bodySchema,
-  tags: tagsSchema,
+  tags: z.array(z.object({ tag: tagNameSchema, group: tagGroupSchema }).strict()).max(50),
 };
 
 export const rpcContract = defineRpcContract({
@@ -66,6 +73,10 @@ export const rpcContract = defineRpcContract({
   entry: {
     input: z.object({ id: idSchema }).strict(),
     output: entrySchema.nullable(),
+  },
+  catalog: {
+    input: z.null(),
+    output: z.object({ tags: z.array(catalogTagSchema) }),
   },
   save: {
     input: z
