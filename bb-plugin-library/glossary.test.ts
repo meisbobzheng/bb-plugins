@@ -54,9 +54,10 @@ describe("detectTags", () => {
     expect(detectTags("The P-CSCF sends AAR to the PCRF over Rx.")).toEqual(["Rx", "AAR/AAA", "P-CSCF", "PCRF"]);
   });
 
-  it("ignores casual uses of attach and AWS service control policies", () => {
+  it("ignores casual uses of attach and AWS service names", () => {
     expect(detectTags("Attach a debugger to the process.")).toEqual([]);
     expect(detectTags("Attach an SCP to the AWS account.")).toEqual([]);
+    expect(detectTags("Push the image to ECR before deploying.")).toEqual([]);
   });
 
   it("detects AKA resynchronization but not data resyncs", () => {

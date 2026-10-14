@@ -170,4 +170,14 @@ describe("retag", () => {
     expect(after.updatedAt).toBe(before.updatedAt);
     expect(store.retag(false)).toEqual([]);
   });
+
+  it("respells custom tags to their grouped spelling", () => {
+    const { bb, store, add } = setup();
+    add({ title: "A", body: "x", tags: grouped("topics", "Outbox") });
+    const old = add({ title: "B", body: "x" });
+    bb.storage.database().prepare("UPDATE entries SET tags = ? WHERE id = ?").run('["outbox"]', old.id);
+
+    expect(store.retag(false)).toEqual([{ id: old.id, title: "B", added: [] }]);
+    expect(store.get(old.id)?.tags).toEqual([{ tag: "Outbox", group: "topics" }]);
+  });
 });

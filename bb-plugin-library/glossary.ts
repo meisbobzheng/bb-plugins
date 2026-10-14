@@ -174,7 +174,7 @@ export const TERMS: readonly Term[] = [
   command("PUR", "PUA", "Purge-UE", ["TS 29.272"]),
   command("RSR", "RSA", "Reset", ["TS 29.272"]),
   command("NOR", "NOA", "Notify", ["TS 29.272"], true),
-  command("ECR", "ECA", "ME-Identity-Check", ["TS 29.272"]),
+  command("ECR", "ECA", "ME-Identity-Check", ["TS 29.272"], true),
   command("SRR", "SRA", "Send-Routing-Info-for-SM", ["TS 29.338"]),
   command("ALR", "ALA", "Alert-Service-Centre", ["TS 29.338"]),
   command("RDR", "RDA", "Report-SM-Delivery-Status", ["TS 29.338"]),

@@ -242,7 +242,9 @@ export function createStore(storage: BbPluginApi["storage"]) {
         const current = parseTags(row.tags);
         const known = new Set(current.map((tag) => tag.toLowerCase()));
         const detected = detectTags(`${row.title}\n${row.summary}\n${row.body}`);
-        const tags = normalizeTags([...current, ...detected].map((tag) => ({ tag, group: null }))).map(({ tag }) => tag);
+        const tags = normalizeTags([...current, ...detected].map((tag) => ({ tag, group: null }))).map(
+          ({ tag }) => registry.get(tag.toLowerCase())?.tag ?? tag,
+        );
         if (JSON.stringify(tags) === row.tags) return [];
         return [{ id: row.id, title: row.title, added: tags.filter((tag) => !known.has(tag.toLowerCase())), tags }];
       });
