@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useBbNavigate, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { toast } from "sonner";
 import { UPDATES_CHANNEL } from "../channel";
 import type { BoardCard, Checks, Column, ReviewerState, rpcContract } from "../contract";
 import { BOARD_PANEL, workspacePath } from "../routes";
 import { cn } from "../lib/utils";
 import { Avatar, relativeTime } from "./bits";
-import { useCached, useNow } from "./cache";
+import { errorMessage, useCached, useNow } from "./cache";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { Input } from "./ui/input";
@@ -33,7 +34,9 @@ const LAYOUTS: ReadonlyArray<{ id: Layout; label: string; icon: string }> = [
 ];
 const LAYOUT_IDS = LAYOUTS.map((layout) => layout.id);
 
-const REFRESH_MS = 60_000;
+const STALE_CHECK_MS = 60_000;
+const STALE_AFTER_MS = 15 * 60_000;
+const ADD_REPO = "__add__";
 
 const CHECK_STYLES: Record<Checks, { className: string; label: string } | null> = {
   success: { className: "bg-emerald-500", label: "Checks passed" },
@@ -115,7 +118,6 @@ function CardAction({ label, icon, onClick }: { label: string; icon: string; onC
 
 function PullCard({
   card,
-  showRepo,
   compact,
   hidden,
   onOpen,
@@ -123,7 +125,6 @@ function PullCard({
   onToggleHidden,
 }: {
   card: BoardCard;
-  showRepo: boolean;
   compact: boolean;
   hidden: boolean;
   onOpen(card: BoardCard): void;
@@ -131,7 +132,7 @@ function PullCard({
   onToggleHidden(): void;
 }) {
   const navigate = useBbNavigate();
-  const number = `${showRepo ? card.repo.slice(card.repo.indexOf("/") + 1) : ""}#${card.number}`;
+  const number = `#${card.number}`;
   return (
     <li className={cn("group relative", hidden && "opacity-50")}>
       <button
@@ -327,6 +328,84 @@ function UpdatedIndicator({ fetchedAt, refreshing, error, onRetry }: { fetchedAt
   );
 }
 
+function RepoPicker({
+  repo,
+  repos,
+  onSelect,
+  onAdd,
+}: {
+  repo: string | null;
+  repos: readonly string[];
+  onSelect(repo: string): void;
+  onAdd(name: string): Promise<void>;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const owner = (repo ?? repos[0])?.split("/")[0] ?? null;
+  const sameOwner = owner !== null && repos.every((candidate) => candidate.startsWith(`${owner}/`));
+  const close = () => {
+    setAdding(false);
+    setName("");
+  };
+  const submit = () => {
+    if (name.trim().length === 0 || busy) return;
+    setBusy(true);
+    onAdd(name.trim())
+      .then(close)
+      .catch((error: unknown) => toast.error(errorMessage(error)))
+      .finally(() => setBusy(false));
+  };
+  if (adding) {
+    return (
+      <form
+        className="flex items-center gap-1"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        {owner === null ? null : <span className="text-sm text-muted-foreground">{owner}/</span>}
+        <Input
+          autoFocus
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") close();
+          }}
+          placeholder={owner === null ? "owner/repo" : "repository"}
+          aria-label="Repository to add"
+          className="h-8 w-40 text-sm"
+        />
+        <Button type="submit" size="sm" className="h-8" disabled={busy || name.trim().length === 0}>
+          {busy ? "Adding…" : "Add"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={close}>
+          Cancel
+        </Button>
+      </form>
+    );
+  }
+  return (
+    <select
+      value={repo ?? ""}
+      onChange={(event) => {
+        if (event.target.value === ADD_REPO) setAdding(true);
+        else onSelect(event.target.value);
+      }}
+      aria-label="Repository"
+      className="h-8 max-w-56 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      {repos.map((candidate) => (
+        <option key={candidate} value={candidate}>
+          {sameOwner ? candidate.slice(candidate.indexOf("/") + 1) : candidate}
+        </option>
+      ))}
+      <option value={ADD_REPO}>Add repository…</option>
+    </select>
+  );
+}
+
 function useScrollMemory(layout: Layout) {
   const scroller = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -345,14 +424,12 @@ function useScrollMemory(layout: Layout) {
 function CardList({
   cards,
   layout,
-  showRepo,
   compact,
   hidden,
   onOpen,
 }: {
   cards: readonly BoardCard[];
   layout: Layout;
-  showRepo: boolean;
   compact: StoredSet;
   hidden: StoredSet;
   onOpen(card: BoardCard): void;
@@ -368,7 +445,6 @@ function CardList({
         <PullCard
           key={cardKey(card)}
           card={card}
-          showRepo={showRepo}
           compact={compact.has(cardKey(card))}
           hidden={hidden.has(cardKey(card))}
           onOpen={onOpen}
@@ -385,20 +461,28 @@ export function BoardView() {
   const rpc = useRpc<typeof rpcContract>();
   const navigate = useBbNavigate();
   const force = useRef(false);
+  const [selected, setSelected] = usePreference<string>("board-repo", "");
   const board = useCached(
-    "board",
+    `board:${selected}`,
     () => {
       const refresh = force.current;
       force.current = false;
-      return rpc.call("board", { refresh });
+      return rpc.call("board", { repo: selected === "" ? null : selected, refresh });
     },
     { persist: true },
   );
   useRealtime(UPDATES_CHANNEL, board.reload);
+  const fetchedAt = board.value?.fetchedAt;
   useEffect(() => {
-    const timer = setInterval(board.reload, REFRESH_MS);
+    const timer = setInterval(() => {
+      if (fetchedAt !== undefined && Date.now() - Date.parse(fetchedAt) >= STALE_AFTER_MS) board.reload();
+    }, STALE_CHECK_MS);
     return () => clearInterval(timer);
-  }, [board.reload]);
+  }, [board.reload, fetchedAt]);
+  const resolvedRepo = board.value?.repo ?? null;
+  useEffect(() => {
+    if (resolvedRepo !== null && resolvedRepo !== selected) setSelected(resolvedRepo);
+  }, [resolvedRepo, selected, setSelected]);
 
   const [layout, setLayout] = usePreference<Layout>("board-layout", prefersRows() ? "rows" : "columns", LAYOUT_IDS);
   const [scope, setScope] = usePreference<Scope>("board-scope", "all", SCOPE_IDS);
@@ -414,6 +498,11 @@ export function BoardView() {
     board.reload();
   };
   const open = (card: BoardCard) => navigate.toPluginPanel(BOARD_PANEL, { subPath: workspacePath(card) });
+  const addRepo = async (name: string) => {
+    const result = await rpc.call("addRepo", { repo: name });
+    setSelected(result.repo);
+    toast.success(`Added ${result.repo}`);
+  };
 
   const { sections, hiddenCount } = useMemo(() => {
     const visible = (board.value?.cards ?? []).filter((card) => matches(card, query.trim(), scope));
@@ -438,10 +527,11 @@ export function BoardView() {
     );
   }
 
-  const { repos, errors, fetchedAt, viewer } = board.value;
+  const { repo, repos, errors, viewer } = board.value;
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5 md:px-5">
+        <RepoPicker repo={repo} repos={repos} onSelect={setSelected} onAdd={addRepo} />
         <div className="relative w-64 max-w-full">
           <Icon name="Search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -468,10 +558,8 @@ export function BoardView() {
           </Button>
         ) : null}
         <span className="ml-auto flex items-center gap-2">
-          <span className="hidden text-xs text-muted-foreground sm:inline">
-            {repos.join(", ")} as {viewer}
-          </span>
-          <UpdatedIndicator fetchedAt={fetchedAt} refreshing={board.refreshing} error={board.error} onRetry={refresh} />
+          <span className="hidden text-xs text-muted-foreground sm:inline">as {viewer}</span>
+          <UpdatedIndicator fetchedAt={board.value.fetchedAt} refreshing={board.refreshing} error={board.error} onRetry={refresh} />
           <Button size="sm" variant="outline" onClick={refresh} disabled={board.refreshing}>
             <Icon name="ArrowReloadHorizontal" className="size-3.5" />
             Refresh
@@ -498,7 +586,7 @@ export function BoardView() {
             collapsed={collapsedSections.has(section.id)}
             onToggle={() => collapsedSections.toggle(section.id)}
           >
-            <CardList cards={section.cards} layout={layout} showRepo={repos.length > 1} compact={compact} hidden={hidden} onOpen={open} />
+            <CardList cards={section.cards} layout={layout} compact={compact} hidden={hidden} onOpen={open} />
           </Section>
         ))}
       </div>

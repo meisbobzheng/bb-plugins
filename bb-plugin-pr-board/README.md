@@ -15,8 +15,13 @@ optional; with it, ⌘-click on Go code resolves definitions exactly.
 
 ## Board
 
-The **PR Board** sidebar entry lists the open PRs of the configured
-repositories in four columns:
+The **PR Board** sidebar entry lists the open PRs of one repository at a time
+in four columns. The repository menu at the start of the toolbar switches
+between the configured repositories, and only the chosen one is read from
+GitHub. **Add repository…** at the end of the menu takes a repository name in
+the current repository's organization (or a full `owner/repo`), checks it with
+GitHub, adds it to the **Repositories** setting, and switches to it. The board
+remembers the last repository you picked.
 
 | Column | PRs |
 | --- | --- |
@@ -44,9 +49,11 @@ in this client's local storage.
 
 The last board loads at once, including after a restart, and updates in the
 background: the toolbar shows **Updating…** while it fetches and **Updated
-<time>** after, where the time is when the server last read GitHub. The board
-refreshes every minute and when a review thread changes; the server caches
-GitHub for 30 seconds and **Refresh** skips that cache. It returns to where you
+<time>** after, where the time is when the server last read GitHub. The server
+keeps each repository's PRs for 15 minutes and reads GitHub again only after
+that or when you press **Refresh**; an open board checks every minute whether
+its data is 15 minutes old. A change in a review thread updates the board's
+agent state from that cache without reading GitHub. It returns to where you
 scrolled.
 
 ## Review page
@@ -139,7 +146,7 @@ were.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| Repositories | `private-tech-inc/hss` | Comma-separated `owner/repo` list for the board. |
+| Repositories | `private-tech-inc/hss` | Comma-separated `owner/repo` list offered in the board's repository menu. |
 | Review project | none | Project that review threads start in when no project's remote matches. |
 | Review model | `claude-opus-5-5` | Claude Code model of new review threads. Empty uses the project's default. |
 | Review reasoning effort | `high` | `low`, `medium`, `high`, `xhigh`, or `max`. |
@@ -153,7 +160,7 @@ an existing thread from its composer.
 ## CLI
 
 ```
-bb pr-board board [--refresh] [--json]
+bb pr-board board [--repo owner/repo] [--refresh] [--json]
 bb pr-board open <n | owner/repo#n | PR URL> [--json]
 bb pr-board review <n | owner/repo#n | PR URL> [--json]
 bb pr-board findings <n | owner/repo#n | PR URL> [--json]

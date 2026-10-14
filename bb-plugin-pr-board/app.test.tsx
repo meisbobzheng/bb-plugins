@@ -60,7 +60,8 @@ function card(overrides: Partial<BoardCard>): BoardCard {
 
 const BOARD: Board = {
   viewer: "me",
-  repos: ["acme/app"],
+  repo: "acme/app",
+  repos: ["acme/app", "acme/api"],
   fetchedAt: "2026-10-02T00:00:00Z",
   errors: [],
   cards: [
@@ -149,6 +150,34 @@ describe("board", () => {
     fireEvent.click(slot.getByText("Needs eyes"));
     expect(slot.inspection.navigateCalls).toContainEqual(
       expect.objectContaining({ method: "toPluginPanel", path: "board", options: { subPath: "pr/acme/app/2" } }),
+    );
+  });
+
+  it("switches repositories and adds one by name", async () => {
+    const boardFor = (input: unknown) => {
+      const repo = (input as { repo: string | null }).repo ?? "acme/app";
+      return { ...BOARD, repo, repos: ["acme/app", "acme/api", "acme/web"].slice(0, repo === "acme/web" ? 3 : 2), cards: repo === "acme/app" ? BOARD.cards : [] };
+    };
+    const slot = renderSlot(
+      boardPanel(),
+      { subPath: "" },
+      { rpc: { board: boardFor, addRepo: () => ({ repo: "acme/web", repos: ["acme/app", "acme/api", "acme/web"] }) } },
+    );
+    await slot.findByText("Needs eyes");
+    const picker = slot.getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    expect([...picker.options].map((option) => option.textContent)).toEqual(["app", "api", "Add repository…"]);
+
+    fireEvent.change(picker, { target: { value: "acme/api" } });
+    await waitFor(() => expect(slot.queryByText("Needs eyes")).toBeNull());
+    expect(slot.inspection.rpcCalls.filter((call) => call.method === "board").at(-1)?.input).toEqual({ repo: "acme/api", refresh: false });
+
+    fireEvent.change(slot.getByRole("combobox", { name: "Repository" }), { target: { value: "__add__" } });
+    expect(slot.getByText("acme/")).toBeTruthy();
+    fireEvent.change(slot.getByRole("textbox", { name: "Repository to add" }), { target: { value: "web" } });
+    fireEvent.click(slot.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(slot.inspection.rpcCalls.some((call) => call.method === "addRepo")).toBe(true));
+    await waitFor(() =>
+      expect(slot.inspection.rpcCalls.filter((call) => call.method === "board").at(-1)?.input).toEqual({ repo: "acme/web", refresh: false }),
     );
   });
 

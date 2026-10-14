@@ -60,6 +60,7 @@ export type BoardCard = z.infer<typeof boardCardSchema>;
 
 const boardSchema = z.object({
   viewer: z.string(),
+  repo: repoSchema.nullable(),
   repos: z.array(repoSchema),
   fetchedAt: z.string(),
   cards: z.array(boardCardSchema),
@@ -198,8 +199,12 @@ const empty = z.object({}).strict();
 
 export const rpcContract = defineRpcContract({
   board: {
-    input: z.object({ refresh: z.boolean() }).strict(),
+    input: z.object({ repo: repoSchema.nullable(), refresh: z.boolean() }).strict(),
     output: boardSchema,
+  },
+  addRepo: {
+    input: z.object({ repo: z.string().trim().regex(/^([\w.-]+\/)?[\w.-]+$/, "expected a repository name or owner/repo") }).strict(),
+    output: z.object({ repo: repoSchema, repos: z.array(repoSchema) }),
   },
   pull: {
     input: z.object({ ...pullRef, refresh: z.boolean() }).strict(),

@@ -12,13 +12,15 @@ head, summarizes the PR, then runs `/thermo-nuclear-code-quality-review`.
 ## Commands
 
 ```
-bb pr-board board [--refresh] [--json]
+bb pr-board board [--repo owner/repo] [--refresh] [--json]
 bb pr-board open <n | owner/repo#n | PR URL> [--json]
 bb pr-board review <n | owner/repo#n | PR URL> [--json]
 bb pr-board findings <n | owner/repo#n | PR URL> [--json]
 ```
 
-- `board` prints `column  owner/repo#n  author  threadId-or-dash  title`.
+- `board` prints `column  owner/repo#n  author  threadId-or-dash  title` for
+  every configured repository, or only `--repo`. GitHub results are cached for
+  15 minutes; `--refresh` reads GitHub again.
   Columns: `draft`, `open` (no human comments yet), `reviewing` (someone other
   than the author, a bot, or Copilot commented or reviewed), `ready` (approved).
 - `open` finds the PR's review thread or starts one, and prints `started` or

@@ -28,7 +28,7 @@ const PERMISSION_MODES = ["accept-edits", "auto", "full"] as const;
 export const REVIEW_SKILL = "/thermo-nuclear-code-quality-review";
 export const FINDINGS_TOOL = "pr_board_record_findings";
 const SKILL_NAME = "pr-board";
-const BOARD_TTL_MS = 30_000;
+const BOARD_TTL_MS = 15 * 60_000;
 const PULL_TTL_MS = 30_000;
 const VIEWER_TTL_MS = 60 * 60_000;
 const FILE_CACHE_BYTES = 64 * 1024 * 1024;
@@ -266,7 +266,6 @@ export function createPlugin(deps: PluginDeps) {
 
     function invalidatePull(pull: PullKey): void {
       pullCache.delete(pullKey(pull));
-      boardCache.delete(pull.repo);
     }
 
     const fileCache = new Map<string, FileContent>();
@@ -312,8 +311,8 @@ export function createPlugin(deps: PluginDeps) {
       };
     }
 
-    async function board(refresh: boolean): Promise<Board> {
-      const repoList = await repos();
+    async function board(selected: string | null, repoList: readonly string[], refresh: boolean): Promise<Board> {
+      const configured = await repos();
       const me = await viewer();
       const errors: Board["errors"] = [];
       const pulls = (
@@ -354,7 +353,25 @@ export function createPlugin(deps: PluginDeps) {
         ),
       );
       const fetchedAt = Math.min(deps.now(), ...repoList.map((repo) => boardCache.get(repo)?.at ?? deps.now()));
-      return { viewer: me.login, repos: repoList, fetchedAt: new Date(fetchedAt).toISOString(), cards, errors };
+      return { viewer: me.login, repo: selected, repos: configured, fetchedAt: new Date(fetchedAt).toISOString(), cards, errors };
+    }
+
+    async function boardFor(repo: string | null, refresh: boolean): Promise<Board> {
+      const configured = await repos();
+      const selected = repo !== null && configured.includes(repo) ? repo : (configured[0] ?? null);
+      return board(selected, selected === null ? [] : [selected], refresh);
+    }
+
+    async function addRepo(name: string) {
+      const configured = await repos();
+      const owner = configured[0]?.split("/")[0];
+      const requested = name.includes("/") ? name : owner === undefined ? null : `${owner}/${name}`;
+      if (requested === null) throw new Error("Give the repository as owner/repo; no repository is configured yet to take the owner from.");
+      const repo = (await gh(["api", `repos/${requested}`, "--jq", ".full_name"]).catch(() => "")).trim();
+      if (repo.length === 0) throw new Error(`GitHub has no repository ${requested} that gh can read.`);
+      const next = configured.some((existing) => existing.toLowerCase() === repo.toLowerCase()) ? configured : [...configured, repo];
+      if (next !== configured) await settings.experimental_set({ repos: next.join(", ") });
+      return { repo: next.find((existing) => existing.toLowerCase() === repo.toLowerCase()) ?? repo, repos: next };
     }
 
     async function resolveProjectId(repo: string): Promise<string> {
@@ -534,7 +551,8 @@ export function createPlugin(deps: PluginDeps) {
     }
 
     bb.rpc.register(rpcContract, {
-      board: ({ refresh }) => board(refresh),
+      board: ({ repo, refresh }) => boardFor(repo, refresh),
+      addRepo: ({ repo }) => addRepo(repo),
       pull: ({ repo, number, refresh }) => pullDetail({ repo, number }, refresh),
       fileAt: ({ repo, sha, path }) => fileAt(repo, sha, path),
       externalFile: ({ path }) => externalFile(path),
@@ -682,9 +700,21 @@ export function createPlugin(deps: PluginDeps) {
         commands: {
           board: cliCommand({
             summary: "List open PRs by board column (draft, open, reviewing, ready)",
-            options: { ...jsonOption, refresh: { type: "boolean", description: "Bypass the 30 second cache" } },
+            options: {
+              ...jsonOption,
+              repo: { type: "string", description: "Only this owner/repo; defaults to every configured repository" },
+              refresh: { type: "boolean", description: "Bypass the 15 minute cache" },
+            },
             async run(input) {
-              const result = await board(input.options.refresh === true);
+              const configured = await repos();
+              const repo = input.options.repo;
+              if (repo !== undefined && !configured.includes(repo)) {
+                throw new PluginCliError(`${repo} is not a configured repository`, {
+                  code: "unknown_repo",
+                  hint: `Configured: ${configured.join(", ")}. Add it with \`bb plugin config pr-board set repos "${[...configured, repo].join(", ")}"\`.`,
+                });
+              }
+              const result = await board(repo ?? null, repo === undefined ? configured : [repo], input.options.refresh === true);
               return output(input.options.json, result, [
                 ...result.cards.map((card) =>
                   [card.column, pullKey(card), card.author.login, card.agent.threadId ?? "-", card.title].join("\t"),

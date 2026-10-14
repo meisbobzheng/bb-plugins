@@ -87,6 +87,60 @@ function setup() {
   return { harness, runner };
 }
 
+function boardHost(repos: string) {
+  let now = 1_000_000;
+  const queried: string[] = [];
+  const run = vi.fn(async (command: string, args: readonly string[], options: RunOptions) => {
+    if (args[0] === "version") return "ok";
+    if (args[1] === "user") return "me\n";
+    if (args[1] === "user/teams") return "";
+    if (args[1] === "graphql") {
+      const { variables } = JSON.parse(options.input ?? "{}") as { variables: { owner: string; name: string } };
+      queried.push(`${variables.owner}/${variables.name}`);
+      return JSON.stringify({ data: { repository: { pullRequests: { nodes: [] } } } });
+    }
+    if (args[1] === "repos/acme/API") return "acme/api\n";
+    if (String(args[1]).startsWith("repos/")) throw new Error("HTTP 404");
+    throw new Error(`unexpected command ${command} ${args.join(" ")}`);
+  });
+  const { bb, harness } = createFakePluginHost({ pluginId: "pr-board", agentSkillIds: ["pr-board"], settings: { repos } });
+  createPlugin({ run, pollMs: 1, now: () => now })(bb);
+  return { harness, queried, advance: (ms: number) => (now += ms) };
+}
+
+describe("board", () => {
+  it("fetches only the selected repository and falls back to the first configured one", async () => {
+    const { harness, queried } = boardHost("acme/app, acme/web");
+    const web = (await harness.behavior.callRpc("board", { repo: "acme/web", refresh: false })) as { repo: string; repos: string[] };
+    expect(web).toMatchObject({ repo: "acme/web", repos: ["acme/app", "acme/web"] });
+    expect(queried).toEqual(["acme/web"]);
+    const fallback = (await harness.behavior.callRpc("board", { repo: "acme/gone", refresh: false })) as { repo: string };
+    expect(fallback.repo).toBe("acme/app");
+  });
+
+  it("serves GitHub data from cache for 15 minutes unless refreshed", async () => {
+    const { harness, queried, advance } = boardHost("acme/app");
+    await harness.behavior.callRpc("board", { repo: null, refresh: false });
+    advance(14 * 60_000);
+    await harness.behavior.callRpc("board", { repo: null, refresh: false });
+    expect(queried).toHaveLength(1);
+    await harness.behavior.callRpc("board", { repo: null, refresh: true });
+    expect(queried).toHaveLength(2);
+    advance(15 * 60_000);
+    await harness.behavior.callRpc("board", { repo: null, refresh: false });
+    expect(queried).toHaveLength(3);
+  });
+
+  it("adds a repository by name under the configured owner, with GitHub's spelling", async () => {
+    const { harness } = boardHost("acme/app");
+    expect(await harness.behavior.callRpc("addRepo", { repo: "API" })).toEqual({ repo: "acme/api", repos: ["acme/app", "acme/api"] });
+    expect(await harness.behavior.callRpc("addRepo", { repo: "acme/API" })).toEqual({ repo: "acme/api", repos: ["acme/app", "acme/api"] });
+    await expect(harness.behavior.callRpc("addRepo", { repo: "missing" })).rejects.toThrow(/no repository acme\/missing/);
+    const board = (await harness.behavior.callRpc("board", { repo: "acme/api", refresh: false })) as { repo: string };
+    expect(board.repo).toBe("acme/api");
+  });
+});
+
 describe("prompts", () => {
   it("asks for a simple summary first and names the diff command", () => {
     const prompt = summaryPrompt({
