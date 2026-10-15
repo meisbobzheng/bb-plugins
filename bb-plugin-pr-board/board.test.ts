@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { columnFor, humanFeedbackCount, isAutomated, isRequestedFrom, reviewersOf, type Actor, type PullSnapshot } from "./board";
+import {
+  columnFor,
+  humanFeedbackCount,
+  isAutomated,
+  isRequestedFrom,
+  reviewersOf,
+  unansweredCount,
+  type Actor,
+  type ConversationEntry,
+  type PullSnapshot,
+} from "./board";
 
 const human = (login: string): Actor => ({ login, avatarUrl: null, isBot: false });
 const bot = (login: string): Actor => ({ login, avatarUrl: null, isBot: true });
+const comment = (author: Actor, at: string): ConversationEntry => ({ author, at, hasBody: true, reviewState: null });
+const review = (author: Actor, at: string, reviewState: ConversationEntry["reviewState"], hasBody: boolean): ConversationEntry => ({
+  author,
+  at,
+  hasBody,
+  reviewState,
+});
 
 function pull(overrides: Partial<PullSnapshot> = {}): PullSnapshot {
   return {
@@ -26,7 +43,9 @@ function pull(overrides: Partial<PullSnapshot> = {}): PullSnapshot {
     latestReviews: [],
     reviews: [],
     commentAuthors: [],
+    conversation: [],
     unresolvedThreads: 0,
+    unresolvedThreadAuthors: [],
     ...overrides,
   };
 }
@@ -134,5 +153,55 @@ describe("isRequestedFrom", () => {
 
   it("never counts the author, whom CODEOWNERS teams often include", () => {
     expect(isRequestedFrom(pull({ author: human("me"), requestedTeams: ["acme/core"] }), me)).toBe(false);
+  });
+});
+
+describe("unansweredCount", () => {
+  it("counts unresolved code comments on my PR where someone else replied last", () => {
+    const mine = pull({
+      author: human("me"),
+      unresolvedThreadAuthors: [[human("alice")], [human("alice"), human("me")], [human("me"), human("bob"), bot("github-actions")], [bot("Copilot")]],
+    });
+    expect(unansweredCount(mine, "me")).toBe(2);
+  });
+
+  it("only counts code comments I replied in on someone else's PR", () => {
+    const theirs = pull({ unresolvedThreadAuthors: [[human("bob")], [human("me"), human("author")], [human("author"), human("me")]] });
+    expect(unansweredCount(theirs, "me")).toBe(1);
+  });
+
+  it("counts conversation comments and reviews with text after my latest reply", () => {
+    const mine = pull({
+      author: human("me"),
+      conversation: [
+        comment(human("alice"), "2026-10-01T00:00:00Z"),
+        comment(human("me"), "2026-10-02T00:00:00Z"),
+        comment(human("alice"), "2026-10-03T00:00:00Z"),
+        review(human("bob"), "2026-10-04T00:00:00Z", "CHANGES_REQUESTED", true),
+        review(human("bob"), "2026-10-05T00:00:00Z", "COMMENTED", false),
+        review(human("carol"), "2026-10-06T00:00:00Z", "APPROVED", true),
+        comment(bot("vercel"), "2026-10-07T00:00:00Z"),
+      ],
+    });
+    expect(unansweredCount(mine, "me")).toBe(2);
+  });
+
+  it("counts every conversation comment on my PR before I first reply", () => {
+    expect(unansweredCount(pull({ author: human("me"), conversation: [comment(human("alice"), "2026-10-01T00:00:00Z")] }), "me")).toBe(1);
+  });
+
+  it("treats my approval as a reply but not a review that only holds code-comment replies", () => {
+    const approved = pull({
+      conversation: [comment(human("me"), "2026-10-01T00:00:00Z"), comment(human("author"), "2026-10-02T00:00:00Z"), review(human("me"), "2026-10-03T00:00:00Z", "APPROVED", false)],
+    });
+    expect(unansweredCount(approved, "me")).toBe(0);
+    const repliedInline = pull({
+      conversation: [comment(human("me"), "2026-10-01T00:00:00Z"), comment(human("author"), "2026-10-02T00:00:00Z"), review(human("me"), "2026-10-03T00:00:00Z", "COMMENTED", false)],
+    });
+    expect(unansweredCount(repliedInline, "me")).toBe(1);
+  });
+
+  it("ignores the conversation on someone else's PR until I post in it", () => {
+    expect(unansweredCount(pull({ conversation: [comment(human("author"), "2026-10-01T00:00:00Z")] }), "me")).toBe(0);
   });
 });

@@ -10,20 +10,36 @@ function Hint({ children }: { children: string }) {
   return <p className="p-4 text-sm text-muted-foreground">{children}</p>;
 }
 
-function PullThread({ pull }: { pull: PullRoute }) {
+const THREAD_KINDS = {
+  review: { name: "review thread", missing: "Starting the review thread…" },
+  address: { name: "address thread", missing: "No address thread yet. Click Address comments on the PR page to start one." },
+} as const;
+
+type ThreadKind = keyof typeof THREAD_KINDS;
+
+function PullThread({ pull, kind }: { pull: PullRoute; kind: ThreadKind }) {
   const rpc = useRpc<typeof rpcContract>();
   const state = useCached(`state:${pull.repo}#${pull.number}`, () => rpc.call("reviewState", pull));
   useRealtime(UPDATES_CHANNEL, state.reload);
-  const threadId = state.value?.agent.threadId ?? null;
-  if (state.value === null) return <Hint>{state.error ?? "Loading the review thread…"}</Hint>;
-  if (threadId === null) return <Hint>Starting the review thread…</Hint>;
+  const { name, missing } = THREAD_KINDS[kind];
+  const threadId = (kind === "review" ? state.value?.agent.threadId : state.value?.addressAgent.threadId) ?? null;
+  if (state.value === null) return <Hint>{state.error ?? `Loading the ${name}…`}</Hint>;
+  if (threadId === null) return <Hint>{missing}</Hint>;
   return <ThreadChat key={threadId} threadId={threadId} variant="compact" />;
 }
 
-export function ReviewThreadTab({ subPath }: PluginNavPanelProps) {
+function PullThreadTab({ subPath, kind }: PluginNavPanelProps & { kind: ThreadKind }) {
   const pull = parseWorkspacePath(subPath);
-  if (pull === null) return <Hint>Open a pull request from the board to see its review thread here.</Hint>;
-  return <PullThread key={`${pull.repo}#${pull.number}`} pull={pull} />;
+  if (pull === null) return <Hint>{`Open a pull request from the board to see its ${THREAD_KINDS[kind].name} here.`}</Hint>;
+  return <PullThread key={`${pull.repo}#${pull.number}`} pull={pull} kind={kind} />;
+}
+
+export function ReviewThreadTab(props: PluginNavPanelProps) {
+  return <PullThreadTab {...props} kind="review" />;
+}
+
+export function AddressThreadTab(props: PluginNavPanelProps) {
+  return <PullThreadTab {...props} kind="address" />;
 }
 
 export function ThreadDiffButton({ threadId, isCompactViewport }: PluginThreadHeaderActionProps) {
