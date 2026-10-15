@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
-import { useBbNavigate, useComposer, type PluginNavPanelProps, type PluginThreadPanelProps } from "@get-bb/plugin-sdk/app";
+import {
+  experimental_usePluginId,
+  useBbNavigate,
+  useComposer,
+  type PluginNavPanelProps,
+  type PluginThreadPanelProps,
+} from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { useIsCompactViewport } from "./ui/hooks/use-compact-viewport";
 import { Icon } from "./ui/icon";
@@ -11,18 +17,19 @@ import { normalizeTagNames } from "../glossary";
 import { EmptyState, Highlighted, KindBadge, TagChip, formatDate } from "./bits";
 import { EntryView, entryReference } from "./EntryView";
 import { useLibrarySearch } from "./hooks";
+import {
+  EMPTY_FILTERS,
+  lastEntry,
+  lastFilters,
+  markLibraryVisible,
+  rememberEntry,
+  rememberFilters,
+  useScrollMemory,
+  type Filters,
+} from "./session";
 import { TagMenus } from "./TagMenus";
 
 const RESULT_LIMIT = 100;
-
-export interface Filters {
-  query: string;
-  kind: Kind | null;
-  tags: string[];
-  thisThread: boolean;
-}
-
-export const EMPTY_FILTERS: Filters = { query: "", kind: null, tags: [], thisThread: false };
 
 export function idFromSubPath(subPath: string): string | null {
   const first = subPath.split("/")[0] ?? "";
@@ -253,21 +260,40 @@ function Placeholder() {
 
 export function LibraryPage({ subPath }: PluginNavPanelProps) {
   const navigate = useBbNavigate();
+  const pluginId = experimental_usePluginId();
   const compact = useIsCompactViewport();
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const selectedId = idFromSubPath(subPath);
-  const select = (id: string | null) => navigate.toPluginPanel(LIBRARY_PANEL, { subPath: id ?? "" });
+  const scroller = useRef<HTMLElement>(null);
+  const [filters, setFilters] = useState(() => lastFilters(pluginId));
+  const [readyId, setReadyId] = useState<string | null>(null);
+  const routedId = idFromSubPath(subPath);
+  const restoredId = routedId === null && subPath === "" ? lastEntry(pluginId) : null;
+  const shownId = routedId ?? restoredId;
+
+  const select = (id: string | null) => {
+    rememberEntry(pluginId, id);
+    navigate.toPluginPanel(LIBRARY_PANEL, { subPath: id ?? "", replace: true });
+  };
+
+  useEffect(() => markLibraryVisible(), []);
+  useEffect(() => rememberFilters(pluginId, filters), [pluginId, filters]);
+  useEffect(() => {
+    if (routedId !== null) rememberEntry(pluginId, routedId);
+    else if (restoredId !== null) navigate.toPluginPanel(LIBRARY_PANEL, { subPath: restoredId, replace: true });
+  }, [pluginId, routedId, restoredId, navigate]);
+  useScrollMemory(scroller, shownId, readyId === shownId);
 
   const browser = (
-    <LibraryBrowser filters={filters} onFiltersChange={setFilters} selectedId={selectedId} onSelect={select} threadId={null} focusShortcut />
+    <LibraryBrowser filters={filters} onFiltersChange={setFilters} selectedId={shownId} onSelect={select} threadId={null} focusShortcut />
   );
   const entry =
-    selectedId === null ? null : (
+    shownId === null ? null : (
       <EntryView
-        key={selectedId}
-        id={selectedId}
+        key={shownId}
+        id={shownId}
         onBack={compact ? () => select(null) : undefined}
         onDeleted={() => select(null)}
+        onMissing={() => select(null)}
+        onReady={() => setReadyId(shownId)}
         onTagClick={(tag) => {
           setFilters(withTag(filters, tag));
           if (compact) select(null);
@@ -275,11 +301,19 @@ export function LibraryPage({ subPath }: PluginNavPanelProps) {
       />
     );
 
-  if (compact) return <div className="h-full min-h-0 overflow-y-auto">{entry ?? browser}</div>;
+  if (compact) {
+    return (
+      <main ref={scroller} className="h-full min-h-0 overflow-y-auto">
+        {entry ?? browser}
+      </main>
+    );
+  }
   return (
     <div className="flex h-full min-h-0">
       <aside className="flex w-80 shrink-0 flex-col border-r border-border xl:w-96">{browser}</aside>
-      <main className="min-h-0 flex-1 overflow-y-auto">{entry ?? <Placeholder />}</main>
+      <main ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
+        {entry ?? <Placeholder />}
+      </main>
     </div>
   );
 }

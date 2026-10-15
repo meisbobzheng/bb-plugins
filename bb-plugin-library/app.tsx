@@ -2,7 +2,7 @@ import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { LibraryPage, ThreadLibraryPanel } from "./components/Library";
 import { LibraryOverlay } from "./components/LibraryOverlay";
-import { openRequests, saveRequests } from "./components/requests";
+import { saveRequests, toggleRequests } from "./components/requests";
 import { LIBRARY_PANEL } from "./library";
 
 export default definePluginApp((app) => {
@@ -35,11 +35,11 @@ export default definePluginApp((app) => {
     },
   });
   app.commands.register({
-    id: "open",
-    title: "Library: search saved flows, diagrams, and docs",
+    id: "toggle",
+    title: "Library: open your last entry, or go back",
     defaultShortcut: { key: "l", mod: true, shift: true },
     run: () => {
-      openRequests.emit(null);
+      toggleRequests.emit(null);
     },
   });
 });

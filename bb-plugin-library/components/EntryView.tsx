@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Markdown, UrlLink, useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
@@ -21,11 +21,18 @@ interface EntryViewProps {
   onDeleted: () => void;
   onTagClick?: (tag: string) => void;
   onInsert?: (entry: Entry) => void;
+  onReady?: () => void;
+  onMissing?: () => void;
 }
 
-export function EntryView({ id, onBack, onDeleted, onTagClick, onInsert }: EntryViewProps) {
+export function EntryView({ id, onBack, onDeleted, onTagClick, onInsert, onReady, onMissing }: EntryViewProps) {
   const { entry, error } = useEntry(id);
   const [editing, setEditing] = useState(false);
+  const status = entry === undefined ? "loading" : entry === null ? "missing" : "ready";
+  useEffect(() => {
+    if (status === "ready") onReady?.();
+    if (status === "missing") onMissing?.();
+  }, [status]);
   const back =
     onBack === undefined ? null : (
       <Button variant="ghost" size="sm" className="-ml-2 mb-2 text-muted-foreground" onClick={onBack}>

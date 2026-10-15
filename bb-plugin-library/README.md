@@ -16,9 +16,13 @@ then search them all in one place.
 
 **Find**
 
-- Open **Library** in the sidebar, or run **Library: search saved flows,
-  diagrams, and docs** from the quick palette (⌘⇧L by default). Press `/` to
-  focus search, ↑/↓ and Enter to open a result.
+- Open **Library** in the sidebar, or press ⌘⇧L (**Library: open your last
+  entry, or go back** in the quick palette; rebind it in Settings → Keyboard).
+  Pressing ⌘⇧L again returns to the page you came from. Press `/` to focus
+  search, ↑/↓ and Enter to open a result.
+- The Library reopens on the entry you last read, at the same scroll position,
+  with your search and filters as you left them. Opening entries inside the
+  Library does not add to back/forward history, so Back leaves the Library.
 - Filter by kind (Flows, Diagrams, Explanations, Design docs, References,
   Notes) and by tag. Each tag group is one pill, such as **Interfaces 28**,
   that opens a menu of its tags with counts; check tags to filter, type to jump
