@@ -6,6 +6,7 @@ const bot = (login: string): Actor => ({ login, avatarUrl: null, isBot: true });
 
 function pull(overrides: Partial<PullSnapshot> = {}): PullSnapshot {
   return {
+    id: "PR_1",
     repo: "acme/app",
     number: 1,
     title: "Change",

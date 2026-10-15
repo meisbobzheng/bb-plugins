@@ -9,6 +9,7 @@ export interface Actor {
 export type GitHubReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED" | "PENDING";
 
 export interface PullSnapshot {
+  id: string;
   repo: string;
   number: number;
   title: string;

@@ -104,7 +104,7 @@ export const reviewThreadSchema = z.object({
 });
 export type ReviewThread = z.infer<typeof reviewThreadSchema>;
 
-const pullDetailSchema = z.object({
+export const pullDetailSchema = z.object({
   repo: repoSchema,
   number: prNumberSchema,
   nodeId: z.string(),
@@ -118,6 +118,7 @@ const pullDetailSchema = z.object({
   headRefName: z.string(),
   baseRefName: z.string(),
   headSha: shaSchema,
+  updatedAt: z.string(),
   mergeBaseSha: shaSchema,
   additions: z.number().int(),
   deletions: z.number().int(),
