@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Markdown, UrlLink, useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
@@ -8,6 +8,7 @@ import type { Entry } from "../contract";
 import { specUrl, specsFor } from "../glossary";
 import { EmptyState, KindBadge, formatDate } from "./bits";
 import { EntryFields, isDraftValid, type Draft } from "./EntryFields";
+import { ExportMenu } from "./ExportMenu";
 import { errorMessage, useEntry, useLibraryRpc } from "./hooks";
 import { TagMenus } from "./TagMenus";
 
@@ -78,6 +79,8 @@ interface EntryReaderProps {
 function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryReaderProps) {
   const navigate = useBbNavigate();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const article = useRef<HTMLElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const specs = specsFor(entry.tags.map(({ tag }) => tag), entry.body);
   const { threadId, threadTitle } = entry.source;
 
@@ -89,7 +92,7 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
   };
 
   return (
-    <article>
+    <article ref={article}>
       <header className="space-y-3">
         <h1 className="text-xl font-semibold leading-tight text-foreground">{entry.title}</h1>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -141,6 +144,7 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
             <Icon name="MessageSquarePlus" />
             Ask in new thread
           </Button>
+          <ExportMenu entry={entry} article={article} body={body} />
           <Button size="sm" variant="ghost" onClick={copy}>
             <Icon name="Copy" />
             Copy
@@ -155,7 +159,7 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
           </Button>
         </div>
       </header>
-      <div className="mt-4 border-t border-border pt-4">
+      <div ref={body} className="mt-4 border-t border-border pt-4">
         <Markdown content={entry.body} />
       </div>
       {confirmingDelete ? <DeleteDialog entry={entry} onClose={() => setConfirmingDelete(false)} onDeleted={onDeleted} /> : null}

@@ -6,7 +6,8 @@ Keep the explanations your agents write, and find them again in seconds.
   save only that part. The save dialog suggests a title, a kind, and tags.
 - A **Library** page with instant full-text search, kind and tag filters, and
   rendered Markdown, including mermaid sequence diagrams.
-- Every entry links back to the conversation it came from.
+- Every entry links back to the conversation it came from, and exports to PDF,
+  Markdown, or HTML wherever you choose to save it.
 - A **Library** tab in the thread side panel that searches while you chat and
   inserts an entry reference into your message.
 - Agent tools and a `bb library` command, so agents can save a flow when you

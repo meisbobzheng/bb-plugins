@@ -33,6 +33,18 @@ then search them all in one place.
 - Each entry links to the conversation it came from, lists the specs it
   references (linked to 3GPP and IETF pages), and can be edited, copied, or
   used to start a new thread.
+- **Export** at the top of an entry saves it as:
+  - **PDF**: opens the print dialog with just the entry; choose Save as PDF and
+    a location. The file name defaults to the entry title.
+  - **Markdown (.md)**: the entry with its title, kind, tags by group, source
+    thread, and dates as YAML front matter. Mermaid blocks stay as code.
+  - **HTML (.html)**: a standalone page with the header, tags, spec links, and
+    the diagrams as they render in bb.
+
+  Markdown and HTML open a save dialog where you pick the name and folder, or
+  download when the dialog is unavailable. PDF and HTML use bb's current
+  colors so the diagrams stay legible; switch bb to a light theme for a white
+  page.
 
 **Tag groups**
 
