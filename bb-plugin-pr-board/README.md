@@ -21,7 +21,8 @@ between the configured repositories, and only the chosen one is read from
 GitHub. **Add repository…** at the end of the menu takes a repository name in
 the current repository's organization (or a full `owner/repo`), checks it with
 GitHub, adds it to the **Repositories** setting, and switches to it. The board
-remembers the last repository you picked.
+remembers the last repository you picked. It starts with no repository, so the
+first one has to be a full `owner/repo`.
 
 | Column | PRs |
 | --- | --- |
@@ -146,7 +147,7 @@ were.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| Repositories | `private-tech-inc/hss` | Comma-separated `owner/repo` list offered in the board's repository menu. |
+| Repositories | none | Comma-separated `owner/repo` list offered in the board's repository menu. Fill it from the menu's **Add repository…**. |
 | Review project | none | Project that review threads start in when no project's remote matches. |
 | Review model | `claude-opus-5-5` | Claude Code model of new review threads. Empty uses the project's default. |
 | Review reasoning effort | `high` | `low`, `medium`, `high`, `xhigh`, or `max`. |
