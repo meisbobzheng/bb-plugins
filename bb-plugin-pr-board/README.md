@@ -49,12 +49,22 @@ in this client's local storage.
 
 The last board loads at once, including after a restart, and updates in the
 background: the toolbar shows **Updating…** while it fetches and **Updated
-<time>** after, where the time is when the server last read GitHub. The server
-keeps each repository's PRs for 15 minutes and reads GitHub again only after
-that or when you press **Refresh**; an open board checks every minute whether
-its data is 15 minutes old. A change in a review thread updates the board's
-agent state from that cache without reading GitHub. It returns to where you
-scrolled.
+<time>** after, where the time is when the server last read GitHub. It returns to
+where you scrolled.
+
+To stay within GitHub's API limit (5,000 GraphQL points an hour, shared with
+everything else that uses your `gh` login), the board refreshes cheaply:
+
+- While the board is on screen it checks every minute, and once when it
+  becomes visible again; it does not check while hidden. The server reuses a
+  check for 50 seconds, so going in and out of the board costs nothing, and
+  live updates from review threads also wait until the board is visible.
+- A check lists only the repository's open PRs with each one's id, last update
+  time, and CI status (about 1 point). CI status updates the cards directly.
+- Full details (reviewers, reviews, comments, and review threads) are fetched
+  only for PRs that are new, changed since the last check, or that you acted
+  on from PR Board, and for every PR at least every 15 minutes.
+- **Refresh** checks right away and fetches every PR's details again.
 
 ## Review page
 
@@ -76,7 +86,20 @@ The review thread's chat is the page's **Review thread** panel tab. The
 thread.
 
 A PR's page also opens from the cache when you come back to it, on the file
-you last viewed, and refreshes in the background.
+you last viewed, and refreshes in the background. The server keeps each PR it
+has loaded in the plugin database, so this survives restarts, and only fetches
+it again when it changed:
+
+- Within 50 seconds of the last look it reuses the saved PR with no GitHub
+  call.
+- After that it runs one tiny query (last update time, head commit, and which
+  review threads are resolved) and reuses the saved PR when nothing changed. If
+  the board checked the PR in the last 50 seconds and it has not been updated,
+  it skips even that.
+- Only a change, a PR Board action on the PR, or the page's refresh fetches the
+  PR, its files, viewed states, and merge base again. Marking a file viewed in
+  PR Board updates the saved PR; marking it on GitHub's website is not noticed
+  until the PR changes.
 
 The page has:
 
@@ -170,8 +193,8 @@ See `skills/pr-board/SKILL.md` for the output formats.
 
 ## Storage
 
-The plugin database keeps the PR of each review thread, the findings, and
-pending comments. Nothing reaches GitHub until you post a comment, reply,
+The plugin database keeps the PR of each review thread, the findings, pending
+comments, and the last loaded copy of each opened PR. Nothing reaches GitHub until you post a comment, reply,
 resolve a thread, mark a file viewed, or submit a review.
 
 ## Limits

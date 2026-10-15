@@ -16,7 +16,7 @@ import {
   type PullDetail,
 } from "./contract.js";
 import { findDefinitions } from "./definitions.js";
-import { createGitHub, runCommand, type Gh, type Runner } from "./github.js";
+import { createGitHub, detailVersion, runCommand, type Gh, type ListedPull, type Runner } from "./github.js";
 import { createStore, type PullKey } from "./store.js";
 
 export { rpcContract };
@@ -28,8 +28,9 @@ const PERMISSION_MODES = ["accept-edits", "auto", "full"] as const;
 export const REVIEW_SKILL = "/thermo-nuclear-code-quality-review";
 export const FINDINGS_TOOL = "pr_board_record_findings";
 const SKILL_NAME = "pr-board";
-const BOARD_TTL_MS = 15 * 60_000;
-const PULL_TTL_MS = 30_000;
+const LIST_TTL_MS = 50_000;
+const DETAIL_REFRESH_MS = 15 * 60_000;
+const PULL_TTL_MS = 50_000;
 const VIEWER_TTL_MS = 60 * 60_000;
 const FILE_CACHE_BYTES = 64 * 1024 * 1024;
 const ENVIRONMENT_TIMEOUT_MS = 5 * 60_000;
@@ -242,30 +243,128 @@ export function createPlugin(deps: PluginDeps) {
       return value;
     }
 
-    const boardCache = new Map<string, Cached<PullSnapshot[]>>();
-    async function boardPulls(repo: string, refresh: boolean): Promise<PullSnapshot[]> {
-      const cached = boardCache.get(repo);
-      if (!refresh && fresh(cached, BOARD_TTL_MS, deps.now())) return cached.value;
-      const pulls = await github.boardPulls(repo);
-      boardCache.set(repo, { value: pulls, at: deps.now() });
-      return pulls;
+    interface Listing {
+      pulls: ListedPull[];
+      error: string | null;
+    }
+    const listings = new Map<string, Cached<Listing>>();
+    const snapshots = new Map<string, Cached<PullSnapshot>>();
+    const stalePulls = new Map<string, number>();
+    let invalidations = 0;
+
+    async function listRepo(repo: string, refresh: boolean): Promise<Cached<Listing>> {
+      const previous = listings.get(repo);
+      if (!refresh && fresh(previous, LIST_TTL_MS, deps.now())) return previous;
+      const startedAt = deps.now();
+      const generation = invalidations;
+      const value = await github.listPulls(repo).then(
+        (pulls): Listing => ({ pulls, error: null }),
+        (error: unknown): Listing => ({ pulls: previous?.value.pulls ?? [], error: errorMessage(error) }),
+      );
+      const result = { value, at: startedAt };
+      listings.set(repo, generation === invalidations ? result : { ...result, at: Number.NEGATIVE_INFINITY });
+      return result;
     }
 
-    const pullCache = new Map<string, Cached<Promise<PullDetail>>>();
+    async function boardSnapshots(repo: string, listed: readonly ListedPull[], refresh: boolean): Promise<{ pulls: PullSnapshot[]; errors: Board["errors"] }> {
+      const now = deps.now();
+      const seen = invalidations;
+      const errors: Board["errors"] = [];
+      const clearStale = (key: string) => {
+        if ((stalePulls.get(key) ?? Number.POSITIVE_INFINITY) <= seen) stalePulls.delete(key);
+      };
+      const needed = listed
+        .filter((entry) => {
+          const known = snapshots.get(entry.id);
+          return (
+            refresh ||
+            known === undefined ||
+            entry.updatedAt > known.value.updatedAt ||
+            now - known.at >= DETAIL_REFRESH_MS ||
+            stalePulls.has(pullKey(known.value))
+          );
+        })
+        .map((entry) => entry.id);
+      if (needed.length > 0) {
+        const fetched = await github.pullSnapshots(repo, needed);
+        for (const pull of fetched.pulls) {
+          snapshots.set(pull.id, { value: pull, at: now });
+          clearStale(pullKey(pull));
+        }
+        for (const message of fetched.errors) errors.push({ repo, message });
+      }
+      const ids = new Set(listed.map((entry) => entry.id));
+      for (const [id, known] of snapshots) if (known.value.repo === repo && !ids.has(id)) snapshots.delete(id);
+      const pulls = listed.flatMap((entry) => {
+        const known = snapshots.get(entry.id);
+        return known === undefined ? [] : [{ ...known.value, checks: entry.checks }];
+      });
+      const shown = new Set(pulls.map(pullKey));
+      for (const key of [...stalePulls.keys()]) if (key.startsWith(`${repo}#`) && !shown.has(key)) clearStale(key);
+      return { pulls, errors };
+    }
+
+    interface KnownPull {
+      detail: PullDetail;
+      version: string;
+      checkedAt: number;
+    }
+    const knownPulls = new Map<string, KnownPull>();
+    const pullRuns = new Map<string, Promise<PullDetail>>();
+
+    function knownPull(pull: PullKey): KnownPull | undefined {
+      const key = pullKey(pull);
+      const known = knownPulls.get(key);
+      if (known !== undefined) return known;
+      const saved = store.pullDetail(pull);
+      if (saved === null) return undefined;
+      const loaded = { ...saved, checkedAt: Number.NEGATIVE_INFINITY };
+      knownPulls.set(key, loaded);
+      return loaded;
+    }
+
+    function boardSaysUnchanged(detail: PullDetail): boolean {
+      const listed = listings.get(detail.repo);
+      if (!fresh(listed, LIST_TTL_MS, deps.now()) || listed.value.error !== null) return false;
+      return listed.value.pulls.some((entry) => entry.id === detail.nodeId && entry.updatedAt === detail.updatedAt);
+    }
+
+    async function loadPull(pull: PullKey, refresh: boolean): Promise<PullDetail> {
+      const generation = invalidations;
+      const known = refresh ? undefined : knownPull(pull);
+      if (known !== undefined) {
+        if (deps.now() - known.checkedAt < PULL_TTL_MS) return known.detail;
+        if (boardSaysUnchanged(known.detail) || (await github.pullVersion(pull.repo, pull.number)) === known.version) {
+          if (generation === invalidations) known.checkedAt = deps.now();
+          return known.detail;
+        }
+      }
+      const detail = await github.pullDetail(pull.repo, pull.number);
+      const version = detailVersion(detail);
+      knownPulls.set(pullKey(pull), { detail, version, checkedAt: generation === invalidations ? deps.now() : Number.NEGATIVE_INFINITY });
+      store.savePullDetail(pull, version, detail);
+      return detail;
+    }
+
     function pullDetail(pull: PullKey, refresh: boolean): Promise<PullDetail> {
       const key = pullKey(pull);
-      const cached = pullCache.get(key);
-      if (!refresh && fresh(cached, PULL_TTL_MS, deps.now())) return cached.value;
-      const pending = github.pullDetail(pull.repo, pull.number);
-      pullCache.set(key, { value: pending, at: deps.now() });
-      pending.catch(() => {
-        if (pullCache.get(key)?.value === pending) pullCache.delete(key);
+      const running = pullRuns.get(key);
+      if (running !== undefined && !refresh) return running;
+      const run = loadPull(pull, refresh).finally(() => {
+        if (pullRuns.get(key) === run) pullRuns.delete(key);
       });
-      return pending;
+      pullRuns.set(key, run);
+      return run;
     }
 
     function invalidatePull(pull: PullKey): void {
-      pullCache.delete(pullKey(pull));
+      const known = knownPulls.get(pullKey(pull));
+      if (known !== undefined) known.checkedAt = Number.NEGATIVE_INFINITY;
+      pullRuns.delete(pullKey(pull));
+      invalidations += 1;
+      stalePulls.set(pullKey(pull), invalidations);
+      const listed = listings.get(pull.repo);
+      if (listed !== undefined) listings.set(pull.repo, { ...listed, at: Number.NEGATIVE_INFINITY });
     }
 
     const fileCache = new Map<string, FileContent>();
@@ -311,20 +410,35 @@ export function createPlugin(deps: PluginDeps) {
       };
     }
 
-    async function board(selected: string | null, repoList: readonly string[], refresh: boolean): Promise<Board> {
+    const boardRuns = new Map<string, { promise: Promise<Board>; generation: number; refresh: boolean }>();
+    function board(selected: string | null, repoList: readonly string[], refresh: boolean): Promise<Board> {
+      const key = JSON.stringify([selected, repoList]);
+      const running = boardRuns.get(key);
+      if (running !== undefined && running.generation === invalidations && (running.refresh || !refresh)) return running.promise;
+      const run = { promise: buildBoard(selected, repoList, refresh), generation: invalidations, refresh };
+      boardRuns.set(key, run);
+      run.promise
+        .finally(() => {
+          if (boardRuns.get(key) === run) boardRuns.delete(key);
+        })
+        .catch(() => undefined);
+      return run.promise;
+    }
+
+    async function buildBoard(selected: string | null, repoList: readonly string[], refresh: boolean): Promise<Board> {
       const configured = await repos();
       const me = await viewer();
       const errors: Board["errors"] = [];
-      const pulls = (
-        await Promise.all(
-          repoList.map((repo) =>
-            boardPulls(repo, refresh).catch((error: unknown) => {
-              errors.push({ repo, message: errorMessage(error) });
-              return [];
-            }),
-          ),
-        )
-      ).flat();
+      const listed = await Promise.all(
+        repoList.map(async (repo) => {
+          const listing = await listRepo(repo, refresh);
+          if (listing.value.error !== null) errors.push({ repo, message: listing.value.error });
+          const details = await boardSnapshots(repo, listing.value.pulls, refresh);
+          errors.push(...details.errors);
+          return { pulls: details.pulls, at: listing.at };
+        }),
+      );
+      const pulls = listed.flatMap((entry) => entry.pulls);
       const findingCounts = store.findingCounts();
       const cards = await Promise.all(
         pulls.map(
@@ -352,7 +466,7 @@ export function createPlugin(deps: PluginDeps) {
           }),
         ),
       );
-      const fetchedAt = Math.min(deps.now(), ...repoList.map((repo) => boardCache.get(repo)?.at ?? deps.now()));
+      const fetchedAt = Math.min(deps.now(), ...listed.map((entry) => entry.at));
       return { viewer: me.login, repo: selected, repos: configured, fetchedAt: new Date(fetchedAt).toISOString(), cards, errors };
     }
 
@@ -600,7 +714,11 @@ export function createPlugin(deps: PluginDeps) {
       },
       setViewed: async ({ repo, number, pullNodeId, path, viewed }) => {
         await github.setViewed(pullNodeId, path, viewed);
-        pullCache.delete(pullKey({ repo, number }));
+        const known = knownPulls.get(pullKey({ repo, number }));
+        if (known !== undefined) {
+          known.detail = { ...known.detail, files: known.detail.files.map((file) => (file.path === path ? { ...file, viewed } : file)) };
+          store.savePullDetail({ repo, number }, known.version, known.detail);
+        }
         return {};
       },
       askAgent: async ({ repo, number, question, ...target }) => {
@@ -703,7 +821,10 @@ export function createPlugin(deps: PluginDeps) {
             options: {
               ...jsonOption,
               repo: { type: "string", description: "Only this owner/repo; defaults to every configured repository" },
-              refresh: { type: "boolean", description: "Bypass the 15 minute cache" },
+              refresh: {
+                type: "boolean",
+                description: "Check GitHub now and fetch every PR's details again, instead of reusing the last minute's check and only changed PRs",
+              },
             },
             async run(input) {
               const configured = await repos();
