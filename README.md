@@ -1,7 +1,8 @@
 # bb-plugins
 
-Plugins for [bb](https://getbb.app). Each directory is one plugin with its own
-`package.json`, README, and tests.
+Plugins and themes for [bb](https://getbb.app). Each `bb-plugin-*` directory is
+one plugin with its own `package.json`, README, and tests. Themes live in
+[themes](themes).
 
 | Plugin | What it does |
 | --- | --- |
@@ -26,6 +27,31 @@ cd bb-plugin-library
 npm install
 bb plugin install .
 ```
+
+## Themes
+
+| Theme | Look |
+| --- | --- |
+| [Cape](themes/cape/theme.css) | Near-black with bat-signal yellow and moonlight blue accents, IBM Plex Sans, and JetBrains Mono. |
+
+Copy a theme into bb's theme directory, then select it:
+
+```
+mkdir -p "$(bb theme dir)/cape"
+curl -fsSL https://raw.githubusercontent.com/meisbobzheng/bb-plugins/main/themes/cape/theme.css \
+  -o "$(bb theme dir)/cape/theme.css"
+bb theme set cape
+```
+
+From a local checkout:
+
+```
+cp -R themes/cape "$(bb theme dir)/"
+bb theme set cape
+```
+
+You can also pick it under Settings → Appearance. Code and terminal text use
+JetBrains Mono when it's installed and fall back to Menlo otherwise.
 
 ## Develop
 
