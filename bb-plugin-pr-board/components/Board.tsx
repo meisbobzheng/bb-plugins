@@ -396,6 +396,11 @@ function RepoPicker({
       aria-label="Repository"
       className="h-8 max-w-56 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
+      {repo === null ? (
+        <option value="" disabled>
+          Choose a repository
+        </option>
+      ) : null}
       {repos.map((candidate) => (
         <option key={candidate} value={candidate}>
           {sameOwner ? candidate.slice(candidate.indexOf("/") + 1) : candidate}
@@ -571,25 +576,29 @@ export function BoardView() {
           {error.repo}: {error.message}
         </p>
       ))}
-      <div
-        ref={scroller}
-        onScroll={onScroll}
-        className={cn("min-h-0 flex-1 p-4 md:p-5", layout === "columns" ? "flex gap-3 overflow-x-auto" : "space-y-3 overflow-y-auto")}
-      >
-        {sections.map((section) => (
-          <Section
-            key={section.id}
-            title={section.title}
-            hint={section.hint}
-            count={section.cards.length}
-            layout={layout}
-            collapsed={collapsedSections.has(section.id)}
-            onToggle={() => collapsedSections.toggle(section.id)}
-          >
-            <CardList cards={section.cards} layout={layout} compact={compact} hidden={hidden} onOpen={open} />
-          </Section>
-        ))}
-      </div>
+      {repo === null ? (
+        <p className="p-5 text-sm text-muted-foreground">No repository yet. Choose Add repository… in the menu and enter an owner/repo.</p>
+      ) : (
+        <div
+          ref={scroller}
+          onScroll={onScroll}
+          className={cn("min-h-0 flex-1 p-4 md:p-5", layout === "columns" ? "flex gap-3 overflow-x-auto" : "space-y-3 overflow-y-auto")}
+        >
+          {sections.map((section) => (
+            <Section
+              key={section.id}
+              title={section.title}
+              hint={section.hint}
+              count={section.cards.length}
+              layout={layout}
+              collapsed={collapsedSections.has(section.id)}
+              onToggle={() => collapsedSections.toggle(section.id)}
+            >
+              <CardList cards={section.cards} layout={layout} compact={compact} hidden={hidden} onOpen={open} />
+            </Section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

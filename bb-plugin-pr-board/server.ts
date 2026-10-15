@@ -160,7 +160,7 @@ export function createPlugin(deps: PluginDeps) {
         type: "string",
         label: "Repositories",
         description: 'Comma-separated "owner/repo" list whose open PRs fill the board.',
-        default: "private-tech-inc/hss",
+        default: "",
       },
       reviewProject: {
         type: "project",
@@ -684,7 +684,7 @@ export function createPlugin(deps: PluginDeps) {
       if (pull !== null) return pull;
       throw new PluginCliError(`"${value}" is not a PR number, owner/repo#n, or PR URL`, {
         code: "invalid_pull",
-        hint: "For example `bb pr-board open 596` or `bb pr-board open private-tech-inc/hss#596`.",
+        hint: "For example `bb pr-board open owner/repo#596`, or `bb pr-board open 596` once a repository is configured.",
       });
     }
 
@@ -711,7 +711,7 @@ export function createPlugin(deps: PluginDeps) {
               if (repo !== undefined && !configured.includes(repo)) {
                 throw new PluginCliError(`${repo} is not a configured repository`, {
                   code: "unknown_repo",
-                  hint: `Configured: ${configured.join(", ")}. Add it with \`bb plugin config pr-board set repos "${[...configured, repo].join(", ")}"\`.`,
+                  hint: `${configured.length === 0 ? "No repository is configured yet" : `Configured: ${configured.join(", ")}`}. Add it with \`bb plugin config pr-board set repos "${[...configured, repo].join(", ")}"\`.`,
                 });
               }
               const result = await board(repo ?? null, repo === undefined ? configured : [repo], input.options.refresh === true);
