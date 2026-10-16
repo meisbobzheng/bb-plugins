@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "noEmit": true,
+    "skipLibCheck": false
+  },
+  "include": [
+    "server.ts",
+    "constants.ts",
+    "model.ts",
+    "summary.ts",
+    "app.tsx",
+    "scratchpad",
+    "components",
+    "lib",
+    "server.test.ts",
+    "summary.test.ts"
+  ]
+}

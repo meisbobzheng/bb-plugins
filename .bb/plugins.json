@@ -6,6 +6,7 @@
     { "name": "library", "source": "./bb-plugin-library" },
     { "name": "panel-dock", "source": "./bb-plugin-panel-dock" },
     { "name": "pr-board", "source": "./bb-plugin-pr-board" },
+    { "name": "scratchpad", "source": "./bb-plugin-scratchpad" },
     { "name": "thread-meter", "source": "./bb-plugin-thread-meter" },
     { "name": "thread-router", "source": "./bb-plugin-thread-router" }
   ]
