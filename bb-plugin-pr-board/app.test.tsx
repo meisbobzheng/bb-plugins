@@ -181,6 +181,16 @@ describe("board", () => {
     );
   });
 
+  it("asks for a repository when none is configured", async () => {
+    const slot = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => ({ ...BOARD, repo: null, repos: [], cards: [] }) } });
+    expect(await slot.findByText(/No repository yet/)).toBeTruthy();
+    expect(slot.queryByRole("region", { name: "Draft" })).toBeNull();
+    const picker = slot.getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    expect([...picker.options].map((option) => option.textContent)).toEqual(["Choose a repository", "Add repository…"]);
+    fireEvent.change(picker, { target: { value: "__add__" } });
+    expect(slot.getByRole("textbox", { name: "Repository to add" }).getAttribute("placeholder")).toBe("owner/repo");
+  });
+
   it("shows the last board at once on return and updates it in the background", async () => {
     const first = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => BOARD } });
     await first.findByText("Needs eyes");

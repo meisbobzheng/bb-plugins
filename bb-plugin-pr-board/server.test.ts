@@ -128,7 +128,7 @@ function setup(github?: FakeGitHub, status: "idle" | "active" = "idle") {
   return { harness, runner, advance: (ms: number) => (now += ms) };
 }
 
-function boardHost(repos: string) {
+function boardHost(repos?: string) {
   let now = 1_000_000;
   const queried: string[] = [];
   const run = vi.fn(async (command: string, args: readonly string[], options: RunOptions) => {
@@ -144,12 +144,20 @@ function boardHost(repos: string) {
     if (String(args[1]).startsWith("repos/")) throw new Error("HTTP 404");
     throw new Error(`unexpected command ${command} ${args.join(" ")}`);
   });
-  const { bb, harness } = createFakePluginHost({ pluginId: "pr-board", agentSkillIds: ["pr-board"], settings: { repos } });
+  const { bb, harness } = createFakePluginHost({ pluginId: "pr-board", agentSkillIds: ["pr-board"], settings: repos === undefined ? {} : { repos } });
   createPlugin({ run, pollMs: 1, now: () => now })(bb);
   return { harness, queried, advance: (ms: number) => (now += ms) };
 }
 
 describe("board", () => {
+  it("starts with no repository and takes the first one as owner/repo", async () => {
+    const { harness, queried } = boardHost();
+    expect(await harness.behavior.callRpc("board", { repo: null, refresh: false })).toMatchObject({ repo: null, repos: [], cards: [] });
+    expect(queried).toEqual([]);
+    await expect(harness.behavior.callRpc("addRepo", { repo: "API" })).rejects.toThrow(/owner\/repo/);
+    expect(await harness.behavior.callRpc("addRepo", { repo: "acme/API" })).toEqual({ repo: "acme/api", repos: ["acme/api"] });
+  });
+
   it("fetches only the selected repository and falls back to the first configured one", async () => {
     const { harness, queried } = boardHost("acme/app, acme/web");
     const web = (await harness.behavior.callRpc("board", { repo: "acme/web", refresh: false })) as { repo: string; repos: string[] };
