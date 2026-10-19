@@ -83,6 +83,12 @@ address thread's chat is the **Address thread** tab beside it. The
 **Review diff** button in a review thread's header opens the page from the
 thread.
 
+Every 15 minutes the server checks each PR that has a review thread. When the
+PR has left the open list and GitHub reports it merged or closed, its review
+thread is archived and the plugin forgets the thread and its findings; a thread
+whose agent is still running is archived on a later check. Unarchiving the
+thread afterwards keeps it, and reopening the PR starts a new review thread.
+
 A PR's page also opens from the cache when you come back to it, on the file
 you last viewed, and refreshes in the background.
 
@@ -250,7 +256,8 @@ See `skills/pr-board/SKILL.md` for the output formats.
 
 The plugin database keeps the PR of each review and address thread, the
 findings, the comment suggestions, and pending comments. Accepted changes go
-only to the address thread's worktree. Nothing reaches GitHub until you post a comment, reply,
+only to the address thread's worktree. The review thread and findings of a PR
+are removed once its review thread is archived after a merge or close. Nothing reaches GitHub until you post a comment, reply,
 resolve a thread, mark a file viewed, or submit a review.
 
 ## Limits

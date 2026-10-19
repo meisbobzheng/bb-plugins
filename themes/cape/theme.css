@@ -1,0 +1,117 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
+:root,
+.light {
+  --font-sans: "IBM Plex Sans", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrainsMono Nerd Font", "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --font-terminal: "JetBrainsMono Nerd Font Mono", "JetBrains Mono", Menlo, monospace;
+  --radius: 0.25rem;
+
+  --canvas: #e6e7ea;
+  --ink: #121418;
+  --primary: #7f5900;
+  --primary-foreground: #fffaf0;
+  --file-accent: #2f5f98;
+
+  --muted-foreground: color-mix(in oklch, var(--ink) 72%, var(--canvas));
+  --subtle-foreground: color-mix(in oklch, var(--ink) 60%, var(--canvas));
+  --readback-foreground: color-mix(in oklch, var(--ink) 66%, var(--canvas));
+
+  --destructive: #c62828;
+  --destructive-foreground: #ffffff;
+  --destructive-text: #a51d24;
+  --warning: #b45309;
+  --warning-text: #92400e;
+  --attention: #d4a000;
+  --success: #1f7a35;
+  --diff-added: #1f883d;
+  --diff-removed: #cf222e;
+  --pr-merged: #8250df;
+
+  --ansi-0: #24292f;
+  --ansi-1: #c62828;
+  --ansi-2: #1f7a35;
+  --ansi-3: #8a6200;
+  --ansi-4: #2f5f98;
+  --ansi-5: #7a3fc4;
+  --ansi-6: #0e7490;
+  --ansi-7: #6e7781;
+  --ansi-8: #57606a;
+  --ansi-9: #a51d24;
+  --ansi-10: #17652b;
+  --ansi-11: #7f5900;
+  --ansi-12: #234a7a;
+  --ansi-13: #5f2fa0;
+  --ansi-14: #0b5c72;
+  --ansi-15: #8c959f;
+
+  --ansi-bg-fg-0: #ffffff;
+  --ansi-bg-fg-1: #ffffff;
+  --ansi-bg-fg-2: #ffffff;
+  --ansi-bg-fg-3: #ffffff;
+  --ansi-bg-fg-4: #ffffff;
+  --ansi-bg-fg-5: #ffffff;
+  --ansi-bg-fg-6: #ffffff;
+  --ansi-bg-fg-7: #ffffff;
+  --ansi-bg-fg-8: #ffffff;
+  --ansi-bg-fg-9: #ffffff;
+  --ansi-bg-fg-10: #ffffff;
+  --ansi-bg-fg-11: #ffffff;
+  --ansi-bg-fg-12: #ffffff;
+  --ansi-bg-fg-13: #ffffff;
+  --ansi-bg-fg-14: #ffffff;
+  --ansi-bg-fg-15: #0b0d10;
+}
+
+.dark {
+  --canvas: #0b0d10;
+  --ink: #e7e9ec;
+  --primary: #ffc72c;
+  --primary-foreground: #0b0d10;
+  --file-accent: #7fa7d6;
+
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --destructive-text: #ff7b7f;
+  --warning: #f59e0b;
+  --warning-text: #ffb547;
+  --attention: #ffc72c;
+  --success: #3fb950;
+  --diff-added: #3fb950;
+  --diff-removed: #f85149;
+  --pr-merged: #a371f7;
+
+  --ansi-0: #15181d;
+  --ansi-1: #e5484d;
+  --ansi-2: #3fb950;
+  --ansi-3: #ffc72c;
+  --ansi-4: #5b8fd6;
+  --ansi-5: #a371f7;
+  --ansi-6: #4fb8c9;
+  --ansi-7: #c9ccd1;
+  --ansi-8: #4a4f58;
+  --ansi-9: #ff7b7f;
+  --ansi-10: #6fdd8b;
+  --ansi-11: #ffe07a;
+  --ansi-12: #8db4ea;
+  --ansi-13: #c4a2ff;
+  --ansi-14: #7fd6e3;
+  --ansi-15: #f5f6f8;
+
+  --ansi-bg-fg-0: #ffffff;
+  --ansi-bg-fg-1: #0b0d10;
+  --ansi-bg-fg-2: #0b0d10;
+  --ansi-bg-fg-3: #0b0d10;
+  --ansi-bg-fg-4: #0b0d10;
+  --ansi-bg-fg-5: #0b0d10;
+  --ansi-bg-fg-6: #0b0d10;
+  --ansi-bg-fg-7: #0b0d10;
+  --ansi-bg-fg-8: #ffffff;
+  --ansi-bg-fg-9: #0b0d10;
+  --ansi-bg-fg-10: #0b0d10;
+  --ansi-bg-fg-11: #0b0d10;
+  --ansi-bg-fg-12: #0b0d10;
+  --ansi-bg-fg-13: #0b0d10;
+  --ansi-bg-fg-14: #0b0d10;
+  --ansi-bg-fg-15: #0b0d10;
+}

@@ -93,7 +93,13 @@ function boardNode(number: number, overrides: { author?: string; comments?: stri
   };
 }
 
-function fakeRunner(pullResponse: unknown = PULL_RESPONSE) {
+interface FakeGitHub {
+  open: number[];
+  states: Record<number, string>;
+  stateQueries: number[][];
+}
+
+function fakeRunner(pullResponse: unknown = PULL_RESPONSE, github: FakeGitHub = { open: [7], states: {}, stateQueries: [] }) {
   const calls: Array<{ command: string; args: readonly string[]; options: RunOptions }> = [];
   const run = vi.fn(async (command: string, args: readonly string[], options: RunOptions) => {
     calls.push({ command, args, options });
@@ -106,6 +112,15 @@ function fakeRunner(pullResponse: unknown = PULL_RESPONSE) {
       if (query.includes("OpenPullBranches")) {
         const pr = (number: number, headRefName: string, baseRefName: string) => ({ number, title: `PR ${number}`, url: "u", headRefName, baseRefName, isCrossRepository: false });
         return JSON.stringify({ data: { repository: { pullRequests: { nodes: [pr(7, "thing", "main"), pr(8, "thing-2", "thing")] } } } });
+      }
+      if (query.includes("pullRequests(states: OPEN")) {
+        return JSON.stringify({ data: { repository: { pullRequests: { nodes: github.open.map((number) => boardNode(number)) } } } });
+      }
+      const asked = [...query.matchAll(/pr(\d+): pullRequest/g)].map((match) => Number(match[1]));
+      if (asked.length > 0) {
+        github.stateQueries.push(asked);
+        const pulls = Object.fromEntries(asked.map((number) => [`pr${number}`, { state: github.states[number] ?? "OPEN" }]));
+        return JSON.stringify({ data: { repository: pulls } });
       }
       return JSON.stringify(query.includes("viewerViewedState") ? VIEWED_RESPONSE : pullResponse);
     }
@@ -120,9 +135,10 @@ function fakeRunner(pullResponse: unknown = PULL_RESPONSE) {
   return { run, calls };
 }
 
-function setup() {
-  const runner = fakeRunner();
-  const thread = makeThreadResponse({ id: "thr_review", environmentId: "env_1", status: "idle", deletedAt: null, archivedAt: null });
+function setup(github?: FakeGitHub, status: "idle" | "active" = "idle") {
+  const runner = fakeRunner(PULL_RESPONSE, github);
+  const thread = makeThreadResponse({ id: "thr_review", environmentId: "env_1", status, deletedAt: null, archivedAt: null });
+  let now = Date.now();
   const { bb, harness } = createFakePluginHost({
     pluginId: "pr-board",
     agentSkillIds: ["pr-board"],
@@ -134,12 +150,13 @@ function setup() {
         spawn: async () => thread as never,
         get: async () => thread as never,
         send: async () => ({ delivery: "queued" }) as never,
+        archive: async () => ({ ok: true, archivedThreadIds: ["thr_review"] }) as never,
       },
       environments: { get: async () => ({ id: "env_1", status: "ready", path: "/tmp/worktree", hostId: "host_1" }) as never },
     },
   });
-  createPlugin({ run: runner.run, pollMs: 1, now: Date.now })(bb);
-  return { harness, runner };
+  createPlugin({ run: runner.run, pollMs: 1, now: () => now })(bb);
+  return { harness, runner, advance: (ms: number) => (now += ms) };
 }
 
 function boardHost(repos: string, nodes: unknown[] = []) {
@@ -312,6 +329,52 @@ describe("review threads", () => {
     const second = await harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
     expect(second).toEqual({ threadId: "thr_review", created: false });
     expect(harness.inspection.sdk.callsTo("threads.spawn")).toHaveLength(1);
+  });
+});
+
+describe("archiving finished reviews", () => {
+  async function reviewed(github: FakeGitHub, status: "idle" | "active" = "idle") {
+    const host = setup(github, status);
+    await host.harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
+    await host.harness.behavior.callAgentTool(
+      FINDINGS_TOOL,
+      { findings: [{ path: "a.go", severity: "nit", title: "x", body: "" }] },
+      { threadId: "thr_review" },
+    );
+    return host;
+  }
+
+  it("archives the review thread once its PR leaves the open list as merged, then forgets it", async () => {
+    const github: FakeGitHub = { open: [7], states: { 7: "MERGED" }, stateQueries: [] };
+    const { harness, advance } = await reviewed(github);
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(github.stateQueries).toEqual([]);
+
+    github.open = [];
+    advance(15 * 60_000);
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(github.stateQueries).toEqual([[7]]);
+    expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([[{ threadId: "thr_review" }]]);
+    expect(await harness.behavior.callRpc("pullForThread", { threadId: "thr_review" })).toBeNull();
+    const state = (await harness.behavior.callRpc("reviewState", { repo: "acme/app", number: 7 })) as { findings: unknown[] };
+    expect(state.findings).toEqual([]);
+
+    advance(15 * 60_000);
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(harness.inspection.sdk.callsTo("threads.archive")).toHaveLength(1);
+    expect(github.stateQueries).toHaveLength(1);
+  });
+
+  it("keeps the review thread of a PR that is still open or whose agent is still running", async () => {
+    const open: FakeGitHub = { open: [], states: { 7: "OPEN" }, stateQueries: [] };
+    const running: FakeGitHub = { open: [], states: { 7: "CLOSED" }, stateQueries: [] };
+    for (const [github, status] of [[open, "idle"], [running, "active"]] as const) {
+      const { harness } = await reviewed(github, status);
+      await harness.behavior.runSchedule("archive-finished-reviews");
+      expect(github.stateQueries).toEqual([[7]]);
+      expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([]);
+      expect(await harness.behavior.callRpc("pullForThread", { threadId: "thr_review" })).toEqual({ repo: "acme/app", number: 7 });
+    }
   });
 });
 

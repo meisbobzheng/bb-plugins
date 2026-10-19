@@ -380,6 +380,14 @@ const openBranchesSchema = z.object({
 
 export type OpenPullBranch = z.infer<typeof openBranchesSchema>["data"]["repository"]["pullRequests"]["nodes"][number];
 
+const pullStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
+
+export type PullState = z.infer<typeof pullStateSchema>;
+
+const pullStatesSchema = z.object({
+  data: z.object({ repository: z.record(z.string(), z.object({ state: pullStateSchema })) }),
+});
+
 const VIEWED_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -482,6 +490,13 @@ export function createGitHub(gh: Gh) {
 
     async openPullBranches(repo: string): Promise<OpenPullBranch[]> {
       return openBranchesSchema.parse(JSON.parse(await graphql(OPEN_BRANCHES_QUERY, split(repo)))).data.repository.pullRequests.nodes;
+    },
+
+    async pullStates(repo: string, numbers: readonly number[]): Promise<Map<number, PullState>> {
+      const fields = numbers.map((number) => `pr${number}: pullRequest(number: ${number}) { state }`).join(" ");
+      const raw = await graphql(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`, split(repo));
+      const pulls = pullStatesSchema.parse(JSON.parse(raw)).data.repository;
+      return new Map(Object.entries(pulls).map(([alias, pull]) => [Number(alias.slice(2)), pull.state]));
     },
 
     async pullDetail(repo: string, number: number): Promise<PullDetail> {
