@@ -54,22 +54,22 @@ describe("parseBoardPulls", () => {
 });
 
 describe("parseListedPulls", () => {
-  it("keeps only each PR's id, last update, and CI state", () => {
+  it("keeps only each PR's id, number, last update, and CI state", () => {
     const raw = JSON.stringify({
       data: {
         repository: {
           pullRequests: {
             nodes: [
-              { id: "PR_1", updatedAt: "2026-10-02T00:00:00Z", commits: { nodes: [{ commit: { statusCheckRollup: { state: "PENDING" } } }] } },
-              { id: "PR_2", updatedAt: "2026-10-01T00:00:00Z", commits: { nodes: [] } },
+              { id: "PR_1", number: 1, updatedAt: "2026-10-02T00:00:00Z", commits: { nodes: [{ commit: { statusCheckRollup: { state: "PENDING" } } }] } },
+              { id: "PR_2", number: 2, updatedAt: "2026-10-01T00:00:00Z", commits: { nodes: [] } },
             ],
           },
         },
       },
     });
     expect(parseListedPulls(raw)).toEqual([
-      { id: "PR_1", updatedAt: "2026-10-02T00:00:00Z", checks: "pending" },
-      { id: "PR_2", updatedAt: "2026-10-01T00:00:00Z", checks: "none" },
+      { id: "PR_1", number: 1, updatedAt: "2026-10-02T00:00:00Z", checks: "pending" },
+      { id: "PR_2", number: 2, updatedAt: "2026-10-01T00:00:00Z", checks: "none" },
     ]);
   });
 });

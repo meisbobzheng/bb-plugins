@@ -16,9 +16,13 @@ then search them all in one place.
 
 **Find**
 
-- Open **Library** in the sidebar, or run **Library: search saved flows,
-  diagrams, and docs** from the quick palette (⌘⇧L by default). Press `/` to
-  focus search, ↑/↓ and Enter to open a result.
+- Open **Library** in the sidebar, or press ⌘⇧L (**Library: open your last
+  entry, or go back** in the quick palette; rebind it in Settings → Keyboard).
+  Pressing ⌘⇧L again returns to the page you came from. Press `/` to focus
+  search, ↑/↓ and Enter to open a result.
+- The Library reopens on the entry you last read, at the same scroll position,
+  with your search and filters as you left them. Opening entries inside the
+  Library does not add to back/forward history, so Back leaves the Library.
 - Filter by kind (Flows, Diagrams, Explanations, Design docs, References,
   Notes) and by tag. Each tag group is one pill, such as **Interfaces 28**,
   that opens a menu of its tags with counts; check tags to filter, type to jump
@@ -29,6 +33,18 @@ then search them all in one place.
 - Each entry links to the conversation it came from, lists the specs it
   references (linked to 3GPP and IETF pages), and can be edited, copied, or
   used to start a new thread.
+- **Export** at the top of an entry saves it as:
+  - **PDF**: opens the print dialog with just the entry; choose Save as PDF and
+    a location. The file name defaults to the entry title.
+  - **Markdown (.md)**: the entry with its title, kind, tags by group, source
+    thread, and dates as YAML front matter. Mermaid blocks stay as code.
+  - **HTML (.html)**: a standalone page with the header, tags, spec links, and
+    the diagrams as they render in bb.
+
+  Markdown and HTML open a save dialog where you pick the name and folder, or
+  download when the dialog is unavailable. PDF and HTML use bb's current
+  colors so the diagrams stay legible; switch bb to a light theme for a white
+  page.
 
 **Tag groups**
 

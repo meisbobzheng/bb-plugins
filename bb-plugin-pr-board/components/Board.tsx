@@ -136,6 +136,7 @@ function PullCard({
     <li className={cn("group relative", hidden && "opacity-50")}>
       <button
         type="button"
+        data-vim-item=""
         onClick={() => onOpen(card)}
         className={cn(
           "block w-full rounded-lg border border-border bg-card text-left text-sm shadow-xs outline-none transition-colors hover:border-foreground/20 hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring",
@@ -276,6 +277,7 @@ function Section({
   return (
     <section
       aria-label={title}
+      data-vim-pane=""
       className={cn(
         "rounded-xl bg-muted/40 p-2",
         layout === "columns" && "flex min-h-0 flex-col",

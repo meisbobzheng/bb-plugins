@@ -412,7 +412,7 @@ function Workspace({
   );
 
   return (
-    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
+    <div ref={rootRef} data-vim-defer="j k" className="flex h-full min-h-0 flex-col">
       <WorkspaceHeader
         detail={detail}
         review={review}

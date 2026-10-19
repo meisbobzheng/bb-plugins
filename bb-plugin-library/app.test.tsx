@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { toggleRequests } from "./components/requests";
+import { markLibraryVisible } from "./components/session";
 import type { Entry, EntryHit, SearchResult } from "./contract";
 
 const HIT: EntryHit = {
@@ -40,6 +42,28 @@ async function load() {
   return loadPluginApp(() => import("./app"));
 }
 
+function memoryStorage(): Storage {
+  const items = new Map<string, string>();
+  return {
+    get length() {
+      return items.size;
+    },
+    clear: () => items.clear(),
+    getItem: (key) => items.get(key) ?? null,
+    key: (index) => [...items.keys()][index] ?? null,
+    removeItem: (key) => {
+      items.delete(key);
+    },
+    setItem: (key, value) => {
+      items.set(key, String(value));
+    },
+  };
+}
+
+beforeEach(() => {
+  Object.defineProperty(window, "localStorage", { value: memoryStorage(), configurable: true });
+  Object.defineProperty(window, "sessionStorage", { value: memoryStorage(), configurable: true });
+});
 afterEach(cleanup);
 
 describe("Library app", () => {
@@ -57,7 +81,7 @@ describe("Library app", () => {
     const row = await slot.findByText("S6a attach: ULR/ULA");
     expect((await slot.findByText("ULR", { selector: "mark" })).tagName).toBe("MARK");
     fireEvent.click(row);
-    expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: "lib_1a2b3c4d" } }]);
+    expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: "lib_1a2b3c4d", replace: true } }]);
   });
 
   it("filters by tags chosen from a group menu", async () => {
@@ -163,5 +187,122 @@ describe("Library app", () => {
         messageId: "msg_1",
       },
     ]);
+  });
+
+  it("reopens the last entry and keeps the search when you come back", async () => {
+    const app = await load();
+    const rpc = { search: () => RESULT, entry: () => ({ ...HIT, body: "The MME sends ULR to the HSS." }) satisfies Entry };
+    const first = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc });
+    fireEvent.change(await first.findByLabelText("Search the Library"), { target: { value: "regis" } });
+    fireEvent.click(await first.findByText("S6a attach: ULR/ULA"));
+    first.lifecycle.unmount();
+
+    const back = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc });
+    expect(await back.findByRole("heading", { name: "S6a attach: ULR/ULA" })).toBeTruthy();
+    expect((back.getByLabelText("Search the Library") as HTMLInputElement).value).toBe("regis");
+    expect(back.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: HIT.id, replace: true } }]);
+  });
+
+  it("forgets a remembered entry that was deleted", async () => {
+    window.localStorage.setItem("test-plugin:last-entry", JSON.stringify("lib_deadbeef"));
+    const app = await load();
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "lib_deadbeef" }, { rpc: { search: () => RESULT, entry: () => null } });
+    await settle();
+    expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: "", replace: true } }]);
+    expect(window.localStorage.getItem("test-plugin:last-entry")).toBe("null");
+  });
+
+  it("toggles to the last entry, and back when the Library is showing", async () => {
+    window.localStorage.setItem("test-plugin:last-entry", JSON.stringify(HIT.id));
+    const app = await load();
+    const overlay = renderSlot(app.appOverlays[0]!, {}, {});
+    act(() => {
+      toggleRequests.emit(null);
+    });
+    expect(overlay.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: HIT.id } }]);
+
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    window.history.pushState({}, "", "/plugins/test-plugin/library");
+    const release = markLibraryVisible();
+    act(() => {
+      toggleRequests.emit(null);
+    });
+    release();
+    expect(back).toHaveBeenCalledOnce();
+    expect(overlay.inspection.navigateCalls).toHaveLength(1);
+    back.mockRestore();
+  });
+
+  describe("export", () => {
+    const ENTRY: Entry = { ...HIT, body: "The MME sends ULR to the HSS." };
+
+    async function openExport() {
+      const app = await load();
+      const slot = renderSlot(app.navPanels[0]!, { subPath: HIT.id }, { rpc: { search: () => RESULT, entry: () => ENTRY } });
+      fireEvent.keyDown(await slot.findByRole("button", { name: /Export/ }), { key: "Enter" });
+      return slot;
+    }
+
+    afterEach(() => {
+      Reflect.deleteProperty(window, "showSaveFilePicker");
+      vi.restoreAllMocks();
+    });
+
+    it("saves Markdown where you choose", async () => {
+      const written: Blob[] = [];
+      const picker = vi.fn(async () => ({
+        name: "attach.md",
+        createWritable: async () => ({ write: async (blob: Blob) => void written.push(blob), close: async () => {} }),
+      }));
+      Object.defineProperty(window, "showSaveFilePicker", { value: picker, configurable: true });
+
+      const slot = await openExport();
+      fireEvent.click(await slot.findByRole("menuitem", { name: /Markdown/ }));
+      await settle();
+
+      expect(picker).toHaveBeenCalledWith({
+        suggestedName: "S6a attach - ULR-ULA.md",
+        types: [{ description: "Markdown", accept: { "text/markdown": [".md"] } }],
+      });
+      expect(await written[0]!.text()).toMatch(/^---\ntitle: "S6a attach: ULR\/ULA"\n[\s\S]*The MME sends ULR to the HSS\.\n$/);
+    });
+
+    it("downloads HTML when the save dialog is unavailable", async () => {
+      const blobs: Blob[] = [];
+      Object.defineProperty(URL, "createObjectURL", { value: (blob: Blob) => (blobs.push(blob), "blob:export"), configurable: true });
+      Object.defineProperty(URL, "revokeObjectURL", { value: () => {}, configurable: true });
+      const names: string[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+        names.push(this.download);
+      });
+
+      const slot = await openExport();
+      fireEvent.click(await slot.findByRole("menuitem", { name: /HTML/ }));
+      await settle();
+
+      expect(names).toEqual(["S6a attach - ULR-ULA.html"]);
+      const page = await blobs[0]!.text();
+      expect(page).toContain("<title>S6a attach: ULR/ULA</title>");
+      expect(page).toContain("<p>The MME sends ULR to the HSS.</p>");
+    });
+
+    it("prints a PDF of just the entry and cleans up afterwards", async () => {
+      const seen: Array<{ title: string; text: string | null }> = [];
+      window.print = vi.fn(() => {
+        seen.push({ title: document.title, text: document.getElementById("library-print")?.textContent ?? null });
+        window.dispatchEvent(new Event("afterprint"));
+      });
+      document.title = "bb";
+
+      const slot = await openExport();
+      fireEvent.click(await slot.findByRole("menuitem", { name: /PDF/ }));
+      await settle();
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.title).toBe("S6a attach: ULR/ULA");
+      expect(seen[0]!.text).toContain("The MME sends ULR to the HSS.");
+      expect(document.getElementById("library-print")).toBeNull();
+      expect(document.title).toBe("bb");
+    });
   });
 });

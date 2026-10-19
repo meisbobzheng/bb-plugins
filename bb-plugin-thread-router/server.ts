@@ -1,7 +1,9 @@
 import type { BbPluginApi, PluginThreadEventPayloads } from "@get-bb/plugin-sdk";
+import { funkyName, toTopic } from "./names";
 
 type Thread = PluginThreadEventPayloads["thread.created"]["thread"];
 type Section = Awaited<ReturnType<BbPluginApi["sdk"]["threadSections"]["list"]>>[number];
+type Pending = { untitled: boolean };
 
 const FALLBACK_SECTION = "other";
 const PROMPT_CHAR_LIMIT = 4000;
@@ -34,6 +36,12 @@ export default async function plugin(bb: BbPluginApi) {
       experimental_multiline: true,
       default: "",
     },
+    naming: {
+      type: "boolean",
+      label: "Funky thread names",
+      description: "Rename untitled new threads to a topic and a name, e.g. 'hss-warrior'.",
+      default: true,
+    },
   });
 
   const inFlight = new Set<string>();
@@ -46,15 +54,17 @@ export default async function plugin(bb: BbPluginApi) {
     thread.originPluginId !== bb.pluginId;
 
   bb.events.on("thread.created", async ({ thread }) => {
-    if (isRoutable(thread)) await bb.storage.kv.set(pendingKey(thread.id), true);
+    if (!isRoutable(thread)) return;
+    await bb.storage.kv.set(pendingKey(thread.id), { untitled: thread.title === null } satisfies Pending);
   });
 
   bb.events.on("thread.active", async ({ thread }) => {
     if (inFlight.has(thread.id)) return;
-    if (!(await bb.storage.kv.get<boolean>(pendingKey(thread.id)))) return;
+    const pending = await bb.storage.kv.get<Pending>(pendingKey(thread.id));
+    if (!pending) return;
     inFlight.add(thread.id);
     try {
-      await route(thread.id);
+      await route(thread.id, pending.untitled);
     } catch (error) {
       bb.log.error(`failed to route ${thread.id}: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -67,28 +77,40 @@ export default async function plugin(bb: BbPluginApi) {
     bb.events.on(event, ({ thread }) => bb.storage.kv.delete(pendingKey(thread.id)));
   }
 
-  async function route(threadId: string) {
-    if (!isRoutable(await bb.sdk.threads.get({ threadId }))) return;
+  async function route(threadId: string, untitled: boolean) {
+    const thread = await bb.sdk.threads.get({ threadId });
+    if (!isRoutable(thread)) return;
 
+    const config = await settings.get();
+    const rename = untitled && config.naming;
     const sections = await bb.sdk.threadSections.list();
     const fallback =
       sections.find((section) => normalize(section.name) === FALLBACK_SECTION) ??
       (await bb.sdk.threadSections.create({ name: FALLBACK_SECTION }));
     const candidates = sections.filter((section) => section.id !== fallback.id);
-    const target = (candidates.length > 0 && (await classify(threadId, candidates))) || fallback;
+    const verdict = candidates.length > 0 || rename ? await classify(thread, candidates, config) : null;
+    const target = verdict?.section ?? fallback;
 
-    if ((await bb.sdk.threads.get({ threadId })).sectionId !== null) return;
-    await bb.sdk.threads.update({ threadId, sectionId: target.id });
-    bb.log.info(`routed ${threadId} to ${target.name}`);
+    const current = await bb.sdk.threads.get({ threadId });
+    const sectionId = current.sectionId === null ? target.id : undefined;
+    const untouched = current.title === null || current.title === thread.title;
+    const title = rename && verdict && untouched ? funkyName(verdict.topic) : undefined;
+    if (sectionId === undefined && title === undefined) return;
+
+    await bb.sdk.threads.update({ threadId, sectionId, title });
+    if (sectionId) bb.log.info(`routed ${threadId} to ${target.name}`);
+    if (title) bb.log.info(`named ${threadId} ${title}`);
   }
 
-  async function classify(threadId: string, sections: Section[]): Promise<Section | null> {
-    const thread = await bb.sdk.threads.get({ threadId });
-    const [firstPrompt, project, examples, { providerId, model, hints }] = await Promise.all([
-      readFirstPrompt(threadId),
+  async function classify(
+    thread: Thread,
+    sections: Section[],
+    { providerId, model, hints }: Awaited<ReturnType<typeof settings.get>>,
+  ) {
+    const [firstPrompt, project, examples] = await Promise.all([
+      readFirstPrompt(thread.id),
       bb.sdk.projects.get({ projectId: thread.projectId }),
       Promise.all(sections.map((section) => recentTitles(section.id))),
-      settings.get(),
     ]);
 
     const sectionLines = sections.map((section, index) => {
@@ -113,8 +135,10 @@ export default async function plugin(bb: BbPluginApi) {
       firstPrompt.slice(0, PROMPT_CHAR_LIMIT),
       '"""',
       "",
-      `Reply with exactly one section name from the list, or "${FALLBACK_SECTION}" if none is a clear fit.`,
-      "Do not use any tools. Reply with the section name only.",
+      "Reply with exactly two lines and nothing else:",
+      `Line 1: one section name from the list, or "${FALLBACK_SECTION}" if none is a clear fit.`,
+      "Line 2: one lowercase word for the thread's project or topic, such as hss, review, or rfc.",
+      "Do not use any tools. Do not label the lines.",
     ].join("\n");
 
     const worker = await bb.sdk.threads.spawn({
@@ -124,7 +148,7 @@ export default async function plugin(bb: BbPluginApi) {
         : { type: "project-default" },
       providerId,
       model,
-      title: `Route thread ${threadId}`,
+      title: `Route thread ${thread.id}`,
       visibility: "hidden",
       prompt,
     });
@@ -132,8 +156,11 @@ export default async function plugin(bb: BbPluginApi) {
     try {
       await bb.sdk.threads.wait({ threadId: worker.id, status: "idle", timeoutMs: CLASSIFY_TIMEOUT_MS });
       const { output } = await bb.sdk.threads.output({ threadId: worker.id });
-      const answer = normalize(output?.trim().split("\n").at(-1) ?? "");
-      return sections.find((section) => normalize(section.name) === answer) ?? null;
+      const [answer = "", topic] = (output ?? "").split("\n").filter((line) => line.trim()).slice(-2);
+      return {
+        section: sections.find((section) => normalize(section.name) === normalize(answer)) ?? null,
+        topic: toTopic(topic, project.name),
+      };
     } finally {
       await bb.sdk.threads.archive({ threadId: worker.id });
       await bb.sdk.threads.stop({ threadId: worker.id });

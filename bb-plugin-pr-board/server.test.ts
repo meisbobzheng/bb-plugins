@@ -78,6 +78,8 @@ interface GraphqlVariables {
 
 function fakeRunner(pullResponse: unknown = PULL_RESPONSE, onGraphql?: (variables: GraphqlVariables) => Promise<void> | void) {
   const board = [boardNode(1), boardNode(2), boardNode(3)];
+  const states: Record<number, string> = {};
+  const stateQueries: number[][] = [];
   const calls: Array<{ command: string; args: readonly string[]; options: RunOptions }> = [];
   const run = vi.fn(async (command: string, args: readonly string[], options: RunOptions) => {
     calls.push({ command, args, options });
@@ -90,12 +92,18 @@ function fakeRunner(pullResponse: unknown = PULL_RESPONSE, onGraphql?: (variable
     if (args[0] === "api" && args[1] === "graphql") {
       const { query, variables } = JSON.parse(options.input ?? "{}") as { query: string; variables: GraphqlVariables };
       await onGraphql?.(variables);
+      const asked = [...query.matchAll(/pr(\d+): pullRequest/g)].map((match) => Number(match[1]));
+      if (asked.length > 0) {
+        stateQueries.push(asked);
+        const pulls = Object.fromEntries(asked.map((number) => [`pr${number}`, { state: states[number] ?? "OPEN" }]));
+        return JSON.stringify({ data: { repository: pulls } });
+      }
       if (variables.ids !== undefined) {
         return JSON.stringify({ data: { nodes: variables.ids.map((id) => board.find((node) => node.id === id) ?? null) } });
       }
       if (variables.owner !== undefined && variables.number === undefined) {
         const listed = `${variables.owner}/${variables.name}` === "acme/app" ? board : [];
-        const nodes = listed.map((node) => ({ id: node.id, updatedAt: node.updatedAt, commits: node.commits }));
+        const nodes = listed.map((node) => ({ id: node.id, number: node.number, updatedAt: node.updatedAt, commits: node.commits }));
         return JSON.stringify({ data: { repository: { pullRequests: { nodes } } } });
       }
       return JSON.stringify(query.includes("viewerViewedState") ? VIEWED_RESPONSE : pullResponse);
@@ -112,7 +120,7 @@ function fakeRunner(pullResponse: unknown = PULL_RESPONSE, onGraphql?: (variable
   });
   const graphqlVariables = () =>
     calls.flatMap((call) => (call.args[1] === "graphql" ? [(JSON.parse(call.options.input ?? "{}") as { variables: GraphqlVariables }).variables] : []));
-  return { run, calls, board, graphqlVariables };
+  return { run, calls, board, states, stateQueries, graphqlVariables };
 }
 
 function setup({
@@ -120,9 +128,10 @@ function setup({
   onGraphql,
   pullResponse = PULL_RESPONSE,
   repos = "acme/app",
-}: { now?: () => number; onGraphql?: Parameters<typeof fakeRunner>[1]; pullResponse?: unknown; repos?: string } = {}) {
+  status = "idle",
+}: { now?: () => number; onGraphql?: Parameters<typeof fakeRunner>[1]; pullResponse?: unknown; repos?: string; status?: "idle" | "active" } = {}) {
   const runner = fakeRunner(pullResponse, onGraphql);
-  const thread = makeThreadResponse({ id: "thr_review", environmentId: "env_1", status: "idle", deletedAt: null, archivedAt: null });
+  const thread = makeThreadResponse({ id: "thr_review", environmentId: "env_1", status, deletedAt: null, archivedAt: null });
   const { bb, harness } = createFakePluginHost({
     pluginId: "pr-board",
     agentSkillIds: ["pr-board"],
@@ -134,6 +143,7 @@ function setup({
         spawn: async () => thread as never,
         get: async () => thread as never,
         send: async () => ({ delivery: "queued" }) as never,
+        archive: async () => ({ ok: true, archivedThreadIds: ["thr_review"] }) as never,
       },
       environments: { get: async () => ({ id: "env_1", status: "ready", path: "/tmp/worktree", hostId: "host_1" }) as never },
     },
@@ -477,6 +487,64 @@ describe("review threads", () => {
     const second = await harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
     expect(second).toEqual({ threadId: "thr_review", created: false });
     expect(harness.inspection.sdk.callsTo("threads.spawn")).toHaveLength(1);
+  });
+});
+
+describe("archiving finished reviews", () => {
+  async function reviewed(status: "idle" | "active" = "idle") {
+    let clock = Date.parse("2026-10-14T12:00:00Z");
+    const host = setup({ now: () => clock, status });
+    host.runner.board.push(boardNode(7));
+    await host.harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
+    await host.harness.behavior.callAgentTool(
+      FINDINGS_TOOL,
+      { findings: [{ path: "a.go", severity: "nit", title: "x", body: "" }] },
+      { threadId: "thr_review" },
+    );
+    return { ...host, advance: (ms: number) => (clock += ms) };
+  }
+
+  it("archives the review thread once its PR leaves the open list as merged, then forgets it", async () => {
+    const { harness, runner, advance } = await reviewed();
+    runner.states[7] = "MERGED";
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(runner.stateQueries).toEqual([]);
+
+    runner.board.pop();
+    advance(15 * 60_000);
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(runner.stateQueries).toEqual([[7]]);
+    expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([[{ threadId: "thr_review" }]]);
+    expect(await harness.behavior.callRpc("pullForThread", { threadId: "thr_review" })).toBeNull();
+    const state = (await harness.behavior.callRpc("reviewState", { repo: "acme/app", number: 7 })) as { findings: unknown[] };
+    expect(state.findings).toEqual([]);
+
+    advance(15 * 60_000);
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(harness.inspection.sdk.callsTo("threads.archive")).toHaveLength(1);
+    expect(runner.stateQueries).toHaveLength(1);
+  });
+
+  it("keeps the review thread of a PR that is still open or whose agent is still running", async () => {
+    for (const [state, status] of [["OPEN", "idle"], ["CLOSED", "active"]] as const) {
+      const { harness, runner } = await reviewed(status);
+      runner.board.pop();
+      runner.states[7] = state;
+      await harness.behavior.runSchedule("archive-finished-reviews");
+      expect(runner.stateQueries).toEqual([[7]]);
+      expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([]);
+      expect(await harness.behavior.callRpc("pullForThread", { threadId: "thr_review" })).toEqual({ repo: "acme/app", number: 7 });
+    }
+  });
+
+  it("skips a repository whose open list could not be read", async () => {
+    const { harness, runner, advance } = await reviewed();
+    runner.run.mockImplementation(async () => {
+      throw new Error("HTTP 502");
+    });
+    advance(60_000);
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([]);
   });
 });
 

@@ -21,4 +21,4 @@ function channel<T>() {
 }
 
 export const saveRequests = channel<SaveRequest>();
-export const openRequests = channel<null>();
+export const toggleRequests = channel<null>();

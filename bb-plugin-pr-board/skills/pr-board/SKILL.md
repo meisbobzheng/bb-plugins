@@ -8,6 +8,8 @@ description: List open PRs by board column, open or re-run a PR's review thread,
 PR Board shows the open PRs of its configured repositories in four columns and
 opens one review thread per PR. A review thread works in a worktree on the PR's
 head, summarizes the PR, then runs `/thermo-nuclear-code-quality-review`.
+A check every 15 minutes archives the idle review thread of a PR that merged or
+closed and drops its findings.
 
 ## Commands
 

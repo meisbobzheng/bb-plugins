@@ -68,7 +68,7 @@ const checksField = "commits(last: 1) { nodes { commit { statusCheckRollup { sta
 export const LIST_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     pullRequests(states: OPEN, first: ${BOARD_PAGE_SIZE}, orderBy: {field: UPDATED_AT, direction: DESC}) {
-      nodes { id updatedAt ${checksField} }
+      nodes { id number updatedAt ${checksField} }
     }
   }
 }`;
@@ -100,7 +100,7 @@ const listSchema = z.object({
   data: z.object({
     repository: z.object({
       pullRequests: z.object({
-        nodes: z.array(z.object({ id: z.string(), updatedAt: z.string(), commits: commitsSchema })),
+        nodes: z.array(z.object({ id: z.string(), number: z.number(), updatedAt: z.string(), commits: commitsSchema })),
       }),
     }),
   }),
@@ -170,6 +170,7 @@ type BoardNode = NonNullable<z.infer<typeof detailSchema>["data"]["nodes"][numbe
 
 export interface ListedPull {
   id: string;
+  number: number;
   updatedAt: string;
   checks: Checks;
 }
@@ -181,7 +182,7 @@ function checksOf(commits: z.infer<typeof commitsSchema>): Checks {
 export function parseListedPulls(raw: string): ListedPull[] {
   return listSchema
     .parse(JSON.parse(raw))
-    .data.repository.pullRequests.nodes.map((node) => ({ id: node.id, updatedAt: node.updatedAt, checks: checksOf(node.commits) }));
+    .data.repository.pullRequests.nodes.map((node) => ({ id: node.id, number: node.number, updatedAt: node.updatedAt, checks: checksOf(node.commits) }));
 }
 
 export function parseBoardPulls(repo: string, raw: string): PullSnapshot[] {
@@ -314,6 +315,14 @@ export function detailVersion(detail: Pick<PullDetail, "updatedAt" | "headSha" |
   return versionOf(detail.updatedAt, detail.headSha, detail.threads.map((thread) => thread.isResolved));
 }
 
+const pullStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
+
+export type PullState = z.infer<typeof pullStateSchema>;
+
+const pullStatesSchema = z.object({
+  data: z.object({ repository: z.record(z.string(), z.object({ state: pullStateSchema })) }),
+});
+
 const VIEWED_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -427,6 +436,13 @@ export function createGitHub(gh: Gh) {
     async pullVersion(repo: string, number: number): Promise<string> {
       const pull = versionSchema.parse(JSON.parse(await graphql(VERSION_QUERY, { ...split(repo), number }))).data.repository.pullRequest;
       return versionOf(pull.updatedAt, pull.headRefOid, pull.reviewThreads.nodes.map((thread) => thread.isResolved));
+    },
+
+    async pullStates(repo: string, numbers: readonly number[]): Promise<Map<number, PullState>> {
+      const fields = numbers.map((number) => `pr${number}: pullRequest(number: ${number}) { state }`).join(" ");
+      const raw = await graphql(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`, split(repo));
+      const pulls = pullStatesSchema.parse(JSON.parse(raw)).data.repository;
+      return new Map(Object.entries(pulls).map(([alias, pull]) => [Number(alias.slice(2)), pull.state]));
     },
 
     async pullDetail(repo: string, number: number): Promise<PullDetail> {

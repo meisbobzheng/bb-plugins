@@ -59,7 +59,7 @@ everything else that uses your `gh` login), the board refreshes cheaply:
   becomes visible again; it does not check while hidden. The server reuses a
   check for 50 seconds, so going in and out of the board costs nothing, and
   live updates from review threads also wait until the board is visible.
-- A check lists only the repository's open PRs with each one's id, last update
+- A check lists only the repository's open PRs with each one's id, number, last update
   time, and CI status (about 1 point). CI status updates the cards directly.
 - Full details (reviewers, reviews, comments, and review threads) are fetched
   only for PRs that are new, changed since the last check, or that you acted
@@ -84,6 +84,12 @@ PR has no live review thread, one is started:
 The review thread's chat is the page's **Review thread** panel tab. The
 **Review diff** button in a review thread's header opens the page from the
 thread.
+
+Every 15 minutes the server checks each PR that has a review thread. When the
+PR has left the open list and GitHub reports it merged or closed, its review
+thread is archived and the plugin forgets the thread and its findings; a thread
+whose agent is still running is archived on a later check. Unarchiving the
+thread afterwards keeps it, and reopening the PR starts a new review thread.
 
 A PR's page also opens from the cache when you come back to it, on the file
 you last viewed, and refreshes in the background. The server keeps each PR it
@@ -194,7 +200,9 @@ See `skills/pr-board/SKILL.md` for the output formats.
 ## Storage
 
 The plugin database keeps the PR of each review thread, the findings, pending
-comments, and the last loaded copy of each opened PR. Nothing reaches GitHub until you post a comment, reply,
+comments, and the last loaded copy of each opened PR. The thread and findings of
+a PR are removed once its review thread is archived after a merge or close.
+Nothing reaches GitHub until you post a comment, reply,
 resolve a thread, mark a file viewed, or submit a review.
 
 ## Limits
