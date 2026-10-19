@@ -81,13 +81,14 @@ export default async function plugin(bb: BbPluginApi) {
     const thread = await bb.sdk.threads.get({ threadId });
     if (!isRoutable(thread)) return;
 
-    const rename = untitled && (await settings.get()).naming;
+    const config = await settings.get();
+    const rename = untitled && config.naming;
     const sections = await bb.sdk.threadSections.list();
     const fallback =
       sections.find((section) => normalize(section.name) === FALLBACK_SECTION) ??
       (await bb.sdk.threadSections.create({ name: FALLBACK_SECTION }));
     const candidates = sections.filter((section) => section.id !== fallback.id);
-    const verdict = candidates.length > 0 || rename ? await classify(thread, candidates) : null;
+    const verdict = candidates.length > 0 || rename ? await classify(thread, candidates, config) : null;
     const target = verdict?.section ?? fallback;
 
     const current = await bb.sdk.threads.get({ threadId });
@@ -101,12 +102,15 @@ export default async function plugin(bb: BbPluginApi) {
     if (title) bb.log.info(`named ${threadId} ${title}`);
   }
 
-  async function classify(thread: Thread, sections: Section[]) {
-    const [firstPrompt, project, examples, { providerId, model, hints }] = await Promise.all([
+  async function classify(
+    thread: Thread,
+    sections: Section[],
+    { providerId, model, hints }: Awaited<ReturnType<typeof settings.get>>,
+  ) {
+    const [firstPrompt, project, examples] = await Promise.all([
       readFirstPrompt(thread.id),
       bb.sdk.projects.get({ projectId: thread.projectId }),
       Promise.all(sections.map((section) => recentTitles(section.id))),
-      settings.get(),
     ]);
 
     const sectionLines = sections.map((section, index) => {
