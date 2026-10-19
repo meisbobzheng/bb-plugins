@@ -8,7 +8,7 @@ side-by-side diff.
   comments, pending review comments, and the agent's findings highlighted in
   amber.
 - A review thread per PR that summarizes the change and runs
-  `/thermo-nuclear-code-quality-review`.
+  `/thermo-nuclear-code-quality-review`, archived once the PR merges or closes.
 - ⌘-click go to definition, using gopls for Go and a definition search for
   other languages.
 

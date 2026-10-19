@@ -16,7 +16,7 @@ import {
   type PullDetail,
 } from "./contract.js";
 import { findDefinitions } from "./definitions.js";
-import { createGitHub, runCommand, type Gh, type Runner } from "./github.js";
+import { createGitHub, runCommand, type Gh, type PullState, type Runner } from "./github.js";
 import { createStore, type PullKey } from "./store.js";
 
 export { rpcContract };
@@ -29,6 +29,7 @@ export const REVIEW_SKILL = "/thermo-nuclear-code-quality-review";
 export const FINDINGS_TOOL = "pr_board_record_findings";
 const SKILL_NAME = "pr-board";
 const BOARD_TTL_MS = 15 * 60_000;
+const ARCHIVE_SCHEDULE = "*/15 * * * *";
 const PULL_TTL_MS = 30_000;
 const VIEWER_TTL_MS = 60 * 60_000;
 const FILE_CACHE_BYTES = 64 * 1024 * 1024;
@@ -49,6 +50,10 @@ interface Cached<T> {
 
 function fresh<T>(entry: Cached<T> | undefined, ttlMs: number, now: number): entry is Cached<T> {
   return entry !== undefined && now - entry.at < ttlMs;
+}
+
+function isRunning(thread: { status: string } | null): boolean {
+  return thread !== null && (thread.status === "active" || thread.status === "starting");
 }
 
 function errorMessage(error: unknown): string {
@@ -306,10 +311,45 @@ export function createPlugin(deps: PluginDeps) {
       const thread = await reviewThreadFor(pull);
       return {
         threadId: thread?.id ?? null,
-        running: thread !== null && (thread.status === "active" || thread.status === "starting"),
+        running: isRunning(thread),
         findings,
       };
     }
+
+    async function archiveReview(pull: PullKey, state: PullState): Promise<void> {
+      const threads = (await Promise.all(store.threadsForPull(pull).map(liveThread))).filter((thread) => thread !== null);
+      if (threads.some(isRunning)) return;
+      for (const thread of threads) await bb.sdk.threads.archive({ threadId: thread.id });
+      store.forgetPull(pull);
+      publish(pull);
+      bb.log.info(`${pullKey(pull)} is ${state.toLowerCase()}; archived ${threads.length} review thread(s)`);
+    }
+
+    async function archiveFinishedReviewsIn(repo: string, pulls: readonly PullKey[]): Promise<void> {
+      const open = new Set((await boardPulls(repo, false)).map((pull) => pull.number));
+      const missing = pulls.filter((pull) => !open.has(pull.number));
+      if (missing.length === 0) return;
+      const states = await github.pullStates(repo, missing.map((pull) => pull.number));
+      for (const pull of missing) {
+        const state = states.get(pull.number);
+        if (state === undefined || state === "OPEN") continue;
+        await archiveReview(pull, state).catch((error: unknown) =>
+          bb.log.warn(`could not archive the review thread of ${pullKey(pull)}: ${errorMessage(error)}`),
+        );
+      }
+    }
+
+    async function archiveFinishedReviews(): Promise<void> {
+      const tracked = store.trackedPulls();
+      for (const repo of new Set(tracked.map((pull) => pull.repo))) {
+        const pulls = tracked.filter((pull) => pull.repo === repo);
+        await archiveFinishedReviewsIn(repo, pulls).catch((error: unknown) =>
+          bb.log.warn(`could not check ${repo} for merged or closed PRs: ${errorMessage(error)}`),
+        );
+      }
+    }
+
+    bb.background.schedule("archive-finished-reviews", ARCHIVE_SCHEDULE, archiveFinishedReviews);
 
     async function board(selected: string | null, repoList: readonly string[], refresh: boolean): Promise<Board> {
       const configured = await repos();
