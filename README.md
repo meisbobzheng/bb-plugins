@@ -13,6 +13,7 @@ one plugin with its own `package.json`, README, and tests. Themes live in
 | [Scratchpad](bb-plugin-scratchpad) | A floating whiteboard for notes and sketches, toggled with ⌘⇧J, that you can @-mention in any thread. |
 | [Thread Meter](bb-plugin-thread-meter) | Context, token cost, and plan usage beside the composer's model picker. |
 | [Thread Router](bb-plugin-thread-router) | Files new threads into the best-matching sidebar section, or `other` when none fits, and names them like `hss-warrior`. |
+| [Vim](bb-plugin-vim) | Vim keys everywhere: `hjkl` through lists and panes, and `f` to click anything by its letter hint. |
 
 ## Install
 

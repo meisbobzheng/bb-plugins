@@ -215,6 +215,7 @@ function ResultRow({ hit, selected, active, onSelect }: { hit: EntryHit; selecte
       <button
         ref={ref}
         type="button"
+        data-vim-item=""
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
         className={cn(
