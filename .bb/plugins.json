@@ -3,6 +3,7 @@
   "schemaVersion": 1,
   "name": "meisbobzheng-bb-plugins",
   "plugins": [
+    { "name": "launcher", "source": "./bb-plugin-launcher" },
     { "name": "library", "source": "./bb-plugin-library" },
     { "name": "panel-dock", "source": "./bb-plugin-panel-dock" },
     { "name": "pr-board", "source": "./bb-plugin-pr-board" },
