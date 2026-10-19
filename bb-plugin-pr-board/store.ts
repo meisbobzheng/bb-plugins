@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import type { Draft, Finding, Severity, Side } from "./contract.js";
+import { pullDetailSchema, type Draft, type Finding, type PullDetail, type Severity, type Side } from "./contract.js";
 
 export interface PullKey {
   repo: string;
@@ -99,6 +99,13 @@ export function createStore(storage: BbPluginApi["storage"]) {
       created_at INTEGER NOT NULL
     )`,
     `CREATE INDEX drafts_pull ON drafts (repo, number, created_at)`,
+    `CREATE TABLE pull_details (
+      repo TEXT NOT NULL,
+      number INTEGER NOT NULL,
+      version TEXT NOT NULL,
+      detail TEXT NOT NULL,
+      PRIMARY KEY (repo, number)
+    )`,
   ]);
 
   const statements = {
@@ -137,6 +144,9 @@ export function createStore(storage: BbPluginApi["storage"]) {
     pullForDraft: db.prepare("SELECT repo, number FROM drafts WHERE id = ?"),
     deleteDraft: db.prepare("DELETE FROM drafts WHERE id = ?"),
     clearDrafts: db.prepare("DELETE FROM drafts WHERE repo = ? AND number = ?"),
+    pullDetail: db.prepare("SELECT version, detail FROM pull_details WHERE repo = ? AND number = ?"),
+    savePullDetail: db.prepare("INSERT OR REPLACE INTO pull_details (repo, number, version, detail) VALUES (?, ?, ?, ?)"),
+    forgetPullDetail: db.prepare("DELETE FROM pull_details WHERE repo = ? AND number = ?"),
   };
 
   return {
@@ -156,6 +166,7 @@ export function createStore(storage: BbPluginApi["storage"]) {
       db.transaction(() => {
         statements.forgetThreads.run(pull.repo, pull.number);
         statements.clearFindings.run(pull.repo, pull.number);
+        statements.forgetPullDetail.run(pull.repo, pull.number);
       })();
     },
     findings(pull: PullKey): Finding[] {
@@ -213,6 +224,15 @@ export function createStore(storage: BbPluginApi["storage"]) {
     },
     clearDrafts(pull: PullKey): void {
       statements.clearDrafts.run(pull.repo, pull.number);
+    },
+    pullDetail(pull: PullKey): { version: string; detail: PullDetail } | null {
+      const row = statements.pullDetail.get(pull.repo, pull.number) as { version: string; detail: string } | undefined;
+      if (row === undefined) return null;
+      const parsed = pullDetailSchema.safeParse(JSON.parse(row.detail));
+      return parsed.success ? { version: row.version, detail: parsed.data } : null;
+    },
+    savePullDetail(pull: PullKey, version: string, detail: PullDetail): void {
+      statements.savePullDetail.run(pull.repo, pull.number, version, JSON.stringify(detail));
     },
   };
 }

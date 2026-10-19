@@ -88,6 +88,7 @@ const DETAIL: PullDetail = {
   headRefName: "thing",
   baseRefName: "main",
   headSha: HEAD,
+  updatedAt: "2026-10-02T00:00:00Z",
   mergeBaseSha: MERGE_BASE,
   additions: 2,
   deletions: 1,
@@ -189,6 +190,26 @@ describe("board", () => {
     expect([...picker.options].map((option) => option.textContent)).toEqual(["Choose a repository", "Add repository…"]);
     fireEvent.change(picker, { target: { value: "__add__" } });
     expect(slot.getByRole("textbox", { name: "Repository to add" }).getAttribute("placeholder")).toBe("owner/repo");
+  });
+
+  it("refreshes every minute only while visible, and once when it becomes visible again", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      const slot = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => BOARD } });
+      expect(await slot.findByText("Needs eyes")).toBeTruthy();
+      const boardCalls = () => slot.inspection.rpcCalls.filter((call) => call.method === "board").length;
+      const initial = boardCalls();
+      vi.advanceTimersByTime(60_000);
+      expect(boardCalls()).toBe(initial);
+      visibility.mockReturnValue("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      await waitFor(() => expect(boardCalls()).toBe(initial + 1));
+      vi.advanceTimersByTime(60_000);
+      await waitFor(() => expect(boardCalls()).toBe(initial + 2));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the last board at once on return and updates it in the background", async () => {

@@ -21,8 +21,10 @@ bb pr-board findings <n | owner/repo#n | PR URL> [--json]
 ```
 
 - `board` prints `column  owner/repo#n  author  threadId-or-dash  title` for
-  every configured repository, or only `--repo`. GitHub results are cached for
-  15 minutes; `--refresh` reads GitHub again.
+  every configured repository, or only `--repo`. Without `--refresh` it reuses
+  the last minute's GitHub check and refetches only changed PRs. `--refresh`
+  fetches every PR again and costs more of the user's GitHub API limit, so use
+  it only when fresh data matters.
   Columns: `draft`, `open` (no human comments yet), `reviewing` (someone other
   than the author, a bot, or Copilot commented or reviewed), `ready` (approved).
 - `open` finds the PR's review thread or starts one, and prints `started` or

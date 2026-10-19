@@ -60,75 +60,97 @@ function toActor(actor: z.infer<typeof actorSchema>): Actor {
 
 const reviewStateSchema = z.enum(["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"]);
 
-export const BOARD_QUERY = `query($owner: String!, $name: String!) {
+export const BOARD_PAGE_SIZE = 100;
+export const DETAIL_PAGE_SIZE = 50;
+
+const checksField = "commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }";
+
+export const LIST_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) {
-      nodes {
-        number title url isDraft createdAt updatedAt headRefName baseRefName additions deletions changedFiles reviewDecision
-        author { __typename login avatarUrl(size: 40) }
-        reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login avatarUrl(size: 40) } ... on Team { combinedSlug } } } }
-        latestReviews(first: 20) { nodes { state author { __typename login avatarUrl(size: 40) } } }
-        reviews(last: 50) { nodes { state author { __typename login } } }
-        comments(last: 50) { nodes { author { __typename login } } }
-        reviewThreads(first: 100) { nodes { isResolved } }
-        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
-      }
+    pullRequests(states: OPEN, first: ${BOARD_PAGE_SIZE}, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { id number updatedAt ${checksField} }
     }
   }
 }`;
 
-const boardSchema = z.object({
+export const DETAIL_QUERY = `query($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      id number title url isDraft createdAt updatedAt headRefName baseRefName additions deletions changedFiles reviewDecision
+      author { __typename login avatarUrl(size: 40) }
+      reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login avatarUrl(size: 40) } ... on Team { combinedSlug } } } }
+      latestReviews(first: 20) { nodes { state author { __typename login avatarUrl(size: 40) } } }
+      reviews(last: 50) { nodes { state author { __typename login } } }
+      comments(last: 50) { nodes { author { __typename login } } }
+      reviewThreads(first: 100) { nodes { isResolved } }
+      ${checksField}
+    }
+  }
+}`;
+
+const commitsSchema = z.object({
+  nodes: z.array(
+    z.object({
+      commit: z.object({ statusCheckRollup: z.object({ state: z.string() }).nullable() }),
+    }),
+  ),
+});
+
+const listSchema = z.object({
   data: z.object({
     repository: z.object({
       pullRequests: z.object({
-        nodes: z.array(
-          z.object({
-            number: z.number(),
-            title: z.string(),
-            url: z.string(),
-            isDraft: z.boolean(),
-            createdAt: z.string(),
-            updatedAt: z.string(),
-            headRefName: z.string(),
-            baseRefName: z.string(),
-            additions: z.number(),
-            deletions: z.number(),
-            changedFiles: z.number(),
-            reviewDecision: z.enum(["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"]).nullable(),
-            author: actorSchema.nullable(),
-            reviewRequests: z.object({
-              nodes: z.array(
-                z.object({
-                  requestedReviewer: z
-                    .object({
-                      __typename: z.string(),
-                      login: z.string().optional(),
-                      avatarUrl: z.string().optional(),
-                      combinedSlug: z.string().optional(),
-                    })
-                    .nullable(),
-                }),
-              ),
-            }),
-            latestReviews: z.object({
-              nodes: z.array(z.object({ state: reviewStateSchema, author: actorSchema.nullable() })),
-            }),
-            reviews: z.object({
-              nodes: z.array(z.object({ state: reviewStateSchema, author: actorSchema.nullable() })),
-            }),
-            comments: z.object({ nodes: z.array(z.object({ author: actorSchema.nullable() })) }),
-            reviewThreads: z.object({ nodes: z.array(z.object({ isResolved: z.boolean() })) }),
-            commits: z.object({
-              nodes: z.array(
-                z.object({
-                  commit: z.object({ statusCheckRollup: z.object({ state: z.string() }).nullable() }),
-                }),
-              ),
-            }),
-          }),
-        ),
+        nodes: z.array(z.object({ id: z.string(), number: z.number(), updatedAt: z.string(), commits: commitsSchema })),
       }),
     }),
+  }),
+});
+
+const detailSchema = z.object({
+  data: z.object({
+    nodes: z.array(
+      z
+        .object({
+          id: z.string(),
+          number: z.number(),
+          title: z.string(),
+          url: z.string(),
+          isDraft: z.boolean(),
+          createdAt: z.string(),
+          updatedAt: z.string(),
+          headRefName: z.string(),
+          baseRefName: z.string(),
+          additions: z.number(),
+          deletions: z.number(),
+          changedFiles: z.number(),
+          reviewDecision: z.enum(["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"]).nullable(),
+          author: actorSchema.nullable(),
+          reviewRequests: z.object({
+            nodes: z.array(
+              z.object({
+                requestedReviewer: z
+                  .object({
+                    __typename: z.string(),
+                    login: z.string().optional(),
+                    avatarUrl: z.string().optional(),
+                    combinedSlug: z.string().optional(),
+                  })
+                  .nullable(),
+              }),
+            ),
+          }),
+          latestReviews: z.object({
+            nodes: z.array(z.object({ state: reviewStateSchema, author: actorSchema.nullable() })),
+          }),
+          reviews: z.object({
+            nodes: z.array(z.object({ state: reviewStateSchema, author: actorSchema.nullable() })),
+          }),
+          comments: z.object({ nodes: z.array(z.object({ author: actorSchema.nullable() })) }),
+          reviewThreads: z.object({ nodes: z.array(z.object({ isResolved: z.boolean() })) }),
+          commits: commitsSchema,
+        })
+        .nullable(),
+    ),
   }),
 });
 
@@ -144,8 +166,32 @@ function withAuthor<T extends { author: z.infer<typeof actorSchema> | null }>(no
   return nodes.flatMap((node) => (node.author === null ? [] : [{ ...node, author: toActor(node.author) }]));
 }
 
+type BoardNode = NonNullable<z.infer<typeof detailSchema>["data"]["nodes"][number]>;
+
+export interface ListedPull {
+  id: string;
+  number: number;
+  updatedAt: string;
+  checks: Checks;
+}
+
+function checksOf(commits: z.infer<typeof commitsSchema>): Checks {
+  return CHECK_STATES[commits.nodes[0]?.commit.statusCheckRollup?.state ?? ""] ?? "none";
+}
+
+export function parseListedPulls(raw: string): ListedPull[] {
+  return listSchema
+    .parse(JSON.parse(raw))
+    .data.repository.pullRequests.nodes.map((node) => ({ id: node.id, number: node.number, updatedAt: node.updatedAt, checks: checksOf(node.commits) }));
+}
+
 export function parseBoardPulls(repo: string, raw: string): PullSnapshot[] {
-  return boardSchema.parse(JSON.parse(raw)).data.repository.pullRequests.nodes.map((node) => ({
+  return detailSchema.parse(JSON.parse(raw)).data.nodes.flatMap((node) => (node === null ? [] : [toSnapshot(repo, node)]));
+}
+
+function toSnapshot(repo: string, node: BoardNode): PullSnapshot {
+  return {
+    id: node.id,
     repo,
     number: node.number,
     title: node.title,
@@ -160,7 +206,7 @@ export function parseBoardPulls(repo: string, raw: string): PullSnapshot[] {
     changedFiles: node.changedFiles,
     author: node.author === null ? null : toActor(node.author),
     reviewDecision: node.reviewDecision,
-    checks: CHECK_STATES[node.commits.nodes[0]?.commit.statusCheckRollup?.state ?? ""] ?? "none",
+    checks: checksOf(node.commits),
     requestedReviewers: node.reviewRequests.nodes.flatMap(({ requestedReviewer: reviewer }) =>
       reviewer?.__typename === "User" && reviewer.login !== undefined
         ? [{ login: reviewer.login, avatarUrl: reviewer.avatarUrl ?? null }]
@@ -173,14 +219,14 @@ export function parseBoardPulls(repo: string, raw: string): PullSnapshot[] {
     reviews: withAuthor(node.reviews.nodes),
     commentAuthors: withAuthor(node.comments.nodes).map((comment) => comment.author),
     unresolvedThreads: node.reviewThreads.nodes.filter((thread) => !thread.isResolved).length,
-  }));
+  };
 }
 
 const PULL_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   viewer { login }
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      id number title body url state isDraft isCrossRepository additions deletions headRefName baseRefName headRefOid baseRefOid
+      id number title body url state isDraft updatedAt isCrossRepository additions deletions headRefName baseRefName headRefOid baseRefOid
       author { login avatarUrl(size: 64) }
       reviewThreads(first: 100) {
         nodes {
@@ -210,6 +256,7 @@ const pullSchema = z.object({
         headRefName: z.string(),
         baseRefName: z.string(),
         headRefOid: z.string(),
+        updatedAt: z.string(),
         baseRefOid: z.string(),
         author: actorSchema.nullable(),
         reviewThreads: z.object({
@@ -241,6 +288,32 @@ const pullSchema = z.object({
     }),
   }),
 });
+
+const VERSION_QUERY = `query PullVersion($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) { updatedAt headRefOid reviewThreads(first: 100) { nodes { isResolved } } }
+  }
+}`;
+
+const versionSchema = z.object({
+  data: z.object({
+    repository: z.object({
+      pullRequest: z.object({
+        updatedAt: z.string(),
+        headRefOid: z.string(),
+        reviewThreads: z.object({ nodes: z.array(z.object({ isResolved: z.boolean() })) }),
+      }),
+    }),
+  }),
+});
+
+function versionOf(updatedAt: string, headSha: string, resolved: readonly boolean[]): string {
+  return `${updatedAt}|${headSha}|${resolved.map((value) => (value ? "1" : "0")).join("")}`;
+}
+
+export function detailVersion(detail: Pick<PullDetail, "updatedAt" | "headSha" | "threads">): string {
+  return versionOf(detail.updatedAt, detail.headSha, detail.threads.map((thread) => thread.isResolved));
+}
 
 const pullStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
 
@@ -346,8 +419,23 @@ export function createGitHub(gh: Gh) {
   }
 
   return {
-    async boardPulls(repo: string): Promise<PullSnapshot[]> {
-      return parseBoardPulls(repo, await graphql(BOARD_QUERY, split(repo)));
+    async listPulls(repo: string): Promise<ListedPull[]> {
+      return parseListedPulls(await graphql(LIST_QUERY, split(repo)));
+    },
+
+    async pullSnapshots(repo: string, ids: readonly string[]): Promise<{ pulls: PullSnapshot[]; errors: string[] }> {
+      const pages: Array<readonly string[]> = [];
+      for (let start = 0; start < ids.length; start += DETAIL_PAGE_SIZE) pages.push(ids.slice(start, start + DETAIL_PAGE_SIZE));
+      const results = await Promise.allSettled(pages.map(async (page) => parseBoardPulls(repo, await graphql(DETAIL_QUERY, { ids: page }))));
+      return {
+        pulls: results.flatMap((result) => (result.status === "fulfilled" ? result.value : [])),
+        errors: results.flatMap((result) => (result.status === "rejected" ? [result.reason instanceof Error ? result.reason.message : String(result.reason)] : [])),
+      };
+    },
+
+    async pullVersion(repo: string, number: number): Promise<string> {
+      const pull = versionSchema.parse(JSON.parse(await graphql(VERSION_QUERY, { ...split(repo), number }))).data.repository.pullRequest;
+      return versionOf(pull.updatedAt, pull.headRefOid, pull.reviewThreads.nodes.map((thread) => thread.isResolved));
     },
 
     async pullStates(repo: string, numbers: readonly number[]): Promise<Map<number, PullState>> {
@@ -401,6 +489,7 @@ export function createGitHub(gh: Gh) {
         headRefName: pull.headRefName,
         baseRefName: pull.baseRefName,
         headSha: pull.headRefOid,
+        updatedAt: pull.updatedAt,
         mergeBaseSha,
         additions: pull.additions,
         deletions: pull.deletions,

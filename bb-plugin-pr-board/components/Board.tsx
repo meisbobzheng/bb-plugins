@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useBbNavigate, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { UPDATES_CHANNEL } from "../channel";
@@ -34,8 +34,7 @@ const LAYOUTS: ReadonlyArray<{ id: Layout; label: string; icon: string }> = [
 ];
 const LAYOUT_IDS = LAYOUTS.map((layout) => layout.id);
 
-const STALE_CHECK_MS = 60_000;
-const STALE_AFTER_MS = 15 * 60_000;
+const REFRESH_MS = 60_000;
 const ADD_REPO = "__add__";
 
 const CHECK_STYLES: Record<Checks, { className: string; label: string } | null> = {
@@ -478,14 +477,18 @@ export function BoardView() {
     },
     { persist: true },
   );
-  useRealtime(UPDATES_CHANNEL, board.reload);
-  const fetchedAt = board.value?.fetchedAt;
+  const reloadIfVisible = useCallback(() => {
+    if (document.visibilityState === "visible") board.reload();
+  }, [board.reload]);
+  useRealtime(UPDATES_CHANNEL, reloadIfVisible);
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (fetchedAt !== undefined && Date.now() - Date.parse(fetchedAt) >= STALE_AFTER_MS) board.reload();
-    }, STALE_CHECK_MS);
-    return () => clearInterval(timer);
-  }, [board.reload, fetchedAt]);
+    const timer = setInterval(reloadIfVisible, REFRESH_MS);
+    document.addEventListener("visibilitychange", reloadIfVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", reloadIfVisible);
+    };
+  }, [reloadIfVisible]);
   const resolvedRepo = board.value?.repo ?? null;
   useEffect(() => {
     if (resolvedRepo !== null && resolvedRepo !== selected) setSelected(resolvedRepo);
