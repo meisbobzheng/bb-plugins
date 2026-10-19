@@ -17,11 +17,13 @@ import { isCommentable } from "../patch";
 import { REVIEW_THREAD_TAB, type PullRoute } from "../routes";
 import { cn } from "../lib/utils";
 import type { Composer, ReviewActions } from "./Annotations";
+import { CommentsView, type CommentActions } from "./Comments";
 import { ToolbarToggle } from "./bits";
 import { errorMessage, useCached } from "./cache";
 import { DiffPane, type DefinitionRequest, type DiffFocus } from "./DiffPane";
 import { DefinitionPicker, PeekPane, type PeekTarget } from "./PeekPane";
 import { Sidebar, type SidebarTab } from "./Sidebar";
+import { SubmitAddressDialog } from "./SubmitAddress";
 import { SubmitReviewDialog } from "./SubmitReview";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
@@ -29,7 +31,10 @@ import { usePreference } from "./use-preference";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { useWidth } from "./use-width";
 
-type Location = { kind: "diff"; path: string; focus: DiffFocus | null } | { kind: "peek"; target: PeekTarget };
+type Location =
+  | { kind: "diff"; path: string; focus: DiffFocus | null }
+  | { kind: "peek"; target: PeekTarget }
+  | { kind: "comments"; commentId: string | null; seq: number };
 
 type DiffStylePreference = DiffStyle | "auto";
 
@@ -119,7 +124,14 @@ export function ReviewWorkspace({ pull }: { pull: PullRoute }) {
   );
 }
 
-const EMPTY_STATE: ReviewState = { agent: { threadId: null, running: false, findings: 0 }, findings: [], drafts: [] };
+const EMPTY_STATE: ReviewState = {
+  agent: { threadId: null, running: false, findings: 0 },
+  findings: [],
+  drafts: [],
+  addressAgent: { threadId: null, running: false },
+  suggestions: [],
+};
+const ADDRESS_POLL_MS = 10_000;
 
 function Workspace({
   detail,
@@ -162,7 +174,9 @@ function Workspace({
   const [picker, setPicker] = useState<{ result: DefinitionResult; sha: string } | null>(null);
   const [viewed, setViewed] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [submitAddressOpen, setSubmitAddressOpen] = useState(false);
   const [running, setRunning] = useState(false);
+  const [addressing, setAddressing] = useState(false);
   const seq = useRef(0);
   const nextSeq = () => ++seq.current;
 
@@ -177,6 +191,10 @@ function Workspace({
   );
   const currentFile = current?.kind === "diff" ? (files.find((file) => file.path === current.path) ?? null) : null;
   const currentIndex = currentFile === null ? -1 : files.indexOf(currentFile);
+  const [commentsVisited, setCommentsVisited] = useState(false);
+  useEffect(() => {
+    if (current?.kind === "comments") setCommentsVisited(true);
+  }, [current?.kind]);
   useEffect(() => {
     if (currentFile !== null) lastPaths.set(pullKey, currentFile.path);
   }, [currentFile?.path, pullKey]);
@@ -194,10 +212,27 @@ function Workspace({
     if (last === undefined) return;
     setHistory(history.slice(0, -1));
     setLocation(last.kind === "diff" && last.focus !== null ? { ...last, focus: { ...last.focus, seq: ++seq.current } } : last);
+    if (last.kind === "comments") setTab("comments");
+    else if (current?.kind === "comments") setTab("files");
     setPicker(null);
-  }, [history]);
+  }, [current?.kind, history]);
 
   const selectFile = useCallback((path: string) => goTo({ kind: "diff", path, focus: null }, false), [goTo]);
+  const changeTab = (next: SidebarTab) => {
+    setTab(next);
+    if (next === "comments") {
+      if (current?.kind !== "comments") goTo({ kind: "comments", commentId: null, seq: nextSeq() }, true);
+    } else if (current?.kind === "comments") {
+      const last = lastPaths.get(pullKey);
+      const path = last !== undefined && files.some((file) => file.path === last) ? last : firstPath;
+      if (path !== undefined) goTo({ kind: "diff", path, focus: null }, false);
+    }
+  };
+  const showComments = () => {
+    setTab("comments");
+    setLocation((previous) => (previous?.kind === "comments" ? previous : { kind: "comments", commentId: null, seq: nextSeq() }));
+  };
+  const selectComment = (commentId: string) => goTo({ kind: "comments", commentId, seq: nextSeq() }, current?.kind !== "comments");
   const stepFile = useCallback(
     (delta: number) => {
       const index = files.findIndex((file) => file.path === currentFile?.path);
@@ -357,6 +392,68 @@ function Workspace({
       .finally(() => setRunning(false));
   };
 
+  const addressComments = () => {
+    const starting = review.addressAgent.threadId === null;
+    setAddressing(true);
+    rpc
+      .call("addressComments", pull)
+      .then(() => {
+        toast.success(
+          starting
+            ? "Started a thread that suggests changes and replies for the comments. Nothing changes until you accept a suggestion."
+            : "Asked the address thread to suggest changes and replies again",
+        );
+        showComments();
+        reloadState();
+        refreshDetail();
+      })
+      .catch((error: unknown) => toast.error(errorMessage(error)))
+      .finally(() => setAddressing(false));
+  };
+
+  const commentActions: CommentActions = {
+    reply: actions.reply,
+    resolveThread: actions.resolveThread,
+    async postConversation(body) {
+      await rpc.call("postConversationComment", { ...pull, body });
+      toast.success("Comment posted");
+      refreshDetail();
+    },
+    async applySuggestion(id) {
+      await rpc.call("applySuggestion", { id });
+      toast.success("Applied the change to the address thread's worktree. It is not committed.");
+      reloadState();
+    },
+    async setReplyState(id, state) {
+      await rpc.call("setSuggestionState", { id, part: "reply", state });
+      reloadState();
+    },
+    async setChangeState(id, state) {
+      await rpc.call("setSuggestionState", { id, part: "change", state });
+      reloadState();
+    },
+    viewInDiff(thread) {
+      const file = files.find((candidate) => candidate.path === thread.path || candidate.previousPath === thread.path);
+      if (file === undefined) {
+        toast.error("This comment's file is not part of the diff anymore.");
+        return;
+      }
+      const focus =
+        thread.line === null ? null : { side: thread.side, line: thread.startLine ?? thread.line, endLine: thread.line, seq: nextSeq() };
+      setTab("files");
+      goTo({ kind: "diff", path: file.path, focus }, true);
+    },
+    openThread(threadId) {
+      navigate.toThread(threadId);
+    },
+  };
+
+  const submitAddress = async () => {
+    await rpc.call("submitAddress", pull);
+    toast.success(`Sent to the address thread: it runs the checks, then commits and pushes to ${detail.headRefName} if they pass.`);
+    reloadState();
+  };
+
   const submitReview = async (event: ReviewEvent, body: string) => {
     const result = await rpc.call("submitReview", { ...pull, headSha: detail.headSha, event, body });
     toast.success(`Review submitted${result.comments > 0 ? ` with ${result.comments} comment${result.comments === 1 ? "" : "s"}` : ""}`);
@@ -367,6 +464,7 @@ function Workspace({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (isTyping(event.target) || event.metaKey) return;
+      if (current?.kind === "comments" && (event.key === "j" || event.key === "k")) return;
       if ((event.altKey && event.key === "ArrowLeft") || (event.ctrlKey && event.key === "-")) {
         event.preventDefault();
         back();
@@ -376,7 +474,13 @@ function Workspace({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [back, stepFile]);
+  }, [back, current?.kind, stepFile]);
+
+  useEffect(() => {
+    if (!review.addressAgent.running) return;
+    const timer = setInterval(reloadState, ADDRESS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [reloadState, review.addressAgent.running]);
 
   const scoped = useMemo(() => {
     const path = currentFile?.path;
@@ -403,11 +507,17 @@ function Workspace({
       findings={review.findings}
       drafts={review.drafts}
       threads={detail.threads}
+      conversation={detail.conversation}
+      viewer={detail.viewer}
+      awaitingReply={detail.awaitingReply}
+      suggestions={review.suggestions}
+      selectedCommentId={current?.kind === "comments" ? current.commentId : null}
       tab={tab}
-      onTab={setTab}
+      onTab={changeTab}
       onSelectFile={selectFile}
       onToggleViewed={toggleViewed}
       onSelectFinding={selectFinding}
+      onSelectComment={selectComment}
     />
   );
 
@@ -419,11 +529,15 @@ function Workspace({
         narrow={narrow}
         refreshing={refreshing}
         running={running}
+        addressing={addressing}
         onShowFindings={() => {
-          setTab("findings");
+          changeTab("findings");
           setFilesOpen(true);
         }}
         onRunReview={runReview}
+        onAddressComments={addressComments}
+        submittingAddress={submitAddressOpen}
+        onSubmitAddress={() => setSubmitAddressOpen(true)}
         onSubmit={() => setSubmitOpen(true)}
       />
       <div className={cn("flex min-h-0 flex-1", narrow && "flex-col")}>
@@ -467,7 +581,13 @@ function Workspace({
               <Icon name="ArrowDown" className="size-3.5" />
             </Button>
             <span className="min-w-0 flex-1 basis-40 truncate px-1 font-mono text-xs" title={currentFile?.path}>
-              {currentFile === null ? (current?.kind === "peek" ? "Definition" : "") : `${currentIndex + 1}/${files.length}  ${currentFile.path}`}
+              {currentFile === null
+                ? current?.kind === "peek"
+                  ? "Definition"
+                  : current?.kind === "comments"
+                    ? "Comments"
+                    : ""
+                : `${currentIndex + 1}/${files.length}  ${currentFile.path}`}
             </span>
             {narrow ? null : <span className="hidden text-[11px] text-muted-foreground 2xl:inline">⌘-click a symbol to go to its definition · j/k files</span>}
             <div className="flex rounded-md border border-border p-0.5" role="group" aria-label="Diff layout">
@@ -543,6 +663,16 @@ function Workspace({
                 onShowFullFile={showFullFile}
               />
             ) : null}
+            {commentsVisited ? (
+              <div className={current?.kind === "comments" ? undefined : "hidden"}>
+                <CommentsView
+                  detail={detail}
+                  review={review}
+                  focus={current?.kind === "comments" && current.commentId !== null ? { commentId: current.commentId, seq: current.seq } : null}
+                  actions={commentActions}
+                />
+              </div>
+            ) : null}
             {current?.kind === "peek" ? (
               <PeekPane
                 key={`${current.target.kind}:${current.target.path}`}
@@ -565,6 +695,13 @@ function Workspace({
         pendingComments={review.drafts.length}
         isAuthor={detail.author.login === detail.viewer}
         onSubmit={submitReview}
+      />
+      <SubmitAddressDialog
+        open={submitAddressOpen}
+        onOpenChange={setSubmitAddressOpen}
+        branch={detail.headRefName}
+        acceptedChanges={review.suggestions.filter((suggestion) => suggestion.changeState === "applied").length}
+        onSubmit={submitAddress}
       />
     </div>
   );

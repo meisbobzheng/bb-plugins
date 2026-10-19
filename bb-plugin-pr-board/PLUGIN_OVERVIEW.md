@@ -9,6 +9,9 @@ side-by-side diff.
   amber.
 - A review thread per PR that summarizes the change and runs
   `/thermo-nuclear-code-quality-review`, archived once the PR merges or closes.
+- A Comments tab, and an **Address comments** thread that suggests code changes
+  and replies for each comment. You accept a change into the thread's worktree,
+  or use a reply as the start of your own.
 - ⌘-click go to definition, using gopls for Go and a definition search for
   other languages.
 

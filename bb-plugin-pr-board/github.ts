@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { z } from "zod";
-import type { Actor, PullSnapshot } from "./board.js";
-import type { Checks, FileContent, PullDetail, PullFile, ReviewEvent, ReviewThread, Side } from "./contract.js";
+import { awaitingReplyFrom, isAutomated, type Actor, type ConversationEntry, type PullSnapshot } from "./board.js";
+import type { Checks, ConversationComment, FileContent, PullDetail, PullFile, ReviewEvent, ReviewThread, Side } from "./contract.js";
 
 export interface RunOptions {
   cwd?: string;
@@ -80,9 +80,9 @@ export const DETAIL_QUERY = `query($ids: [ID!]!) {
       author { __typename login avatarUrl(size: 40) }
       reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login avatarUrl(size: 40) } ... on Team { combinedSlug } } } }
       latestReviews(first: 20) { nodes { state author { __typename login avatarUrl(size: 40) } } }
-      reviews(last: 50) { nodes { state author { __typename login } } }
-      comments(last: 50) { nodes { author { __typename login } } }
-      reviewThreads(first: 100) { nodes { isResolved } }
+      reviews(last: 50) { pageInfo { hasPreviousPage } nodes { state body submittedAt author { __typename login } } }
+      comments(last: 50) { pageInfo { hasPreviousPage } nodes { createdAt author { __typename login } } }
+      reviewThreads(first: 100) { nodes { isResolved comments(last: 20) { nodes { author { __typename login } } } } }
       ${checksField}
     }
   }
@@ -143,10 +143,23 @@ const detailSchema = z.object({
             nodes: z.array(z.object({ state: reviewStateSchema, author: actorSchema.nullable() })),
           }),
           reviews: z.object({
-            nodes: z.array(z.object({ state: reviewStateSchema, author: actorSchema.nullable() })),
+            pageInfo: z.object({ hasPreviousPage: z.boolean() }),
+            nodes: z.array(
+              z.object({ state: reviewStateSchema, body: z.string(), submittedAt: z.string().nullable(), author: actorSchema.nullable() }),
+            ),
           }),
-          comments: z.object({ nodes: z.array(z.object({ author: actorSchema.nullable() })) }),
-          reviewThreads: z.object({ nodes: z.array(z.object({ isResolved: z.boolean() })) }),
+          comments: z.object({
+            pageInfo: z.object({ hasPreviousPage: z.boolean() }),
+            nodes: z.array(z.object({ createdAt: z.string(), author: actorSchema.nullable() })),
+          }),
+          reviewThreads: z.object({
+            nodes: z.array(
+              z.object({
+                isResolved: z.boolean(),
+                comments: z.object({ nodes: z.array(z.object({ author: actorSchema.nullable() })) }),
+              }),
+            ),
+          }),
           commits: commitsSchema,
         })
         .nullable(),
@@ -185,6 +198,26 @@ export function parseListedPulls(raw: string): ListedPull[] {
     .data.repository.pullRequests.nodes.map((node) => ({ id: node.id, number: node.number, updatedAt: node.updatedAt, checks: checksOf(node.commits) }));
 }
 
+function windowStart(truncated: boolean, times: Array<string | null>): string {
+  return truncated ? (times.filter((at) => at !== null).sort()[0] ?? "") : "";
+}
+
+function conversationOf({ comments, reviews }: BoardNode): ConversationEntry[] {
+  const commentsSince = windowStart(comments.pageInfo.hasPreviousPage, comments.nodes.map((comment) => comment.createdAt));
+  const reviewsSince = windowStart(reviews.pageInfo.hasPreviousPage, reviews.nodes.map((review) => review.submittedAt));
+  const since = commentsSince > reviewsSince ? commentsSince : reviewsSince;
+  return [
+    ...withAuthor(comments.nodes).map((comment) => ({ author: comment.author, at: comment.createdAt, hasBody: true, reviewState: null })),
+    ...withAuthor(reviews.nodes).flatMap((review) =>
+      review.submittedAt === null
+        ? []
+        : [{ author: review.author, at: review.submittedAt, hasBody: review.body.trim() !== "", reviewState: review.state }],
+    ),
+  ]
+    .filter((entry) => entry.at >= since)
+    .sort((a, b) => a.at.localeCompare(b.at));
+}
+
 export function parseBoardPulls(repo: string, raw: string): PullSnapshot[] {
   return detailSchema.parse(JSON.parse(raw)).data.nodes.flatMap((node) => (node === null ? [] : [toSnapshot(repo, node)]));
 }
@@ -218,7 +251,11 @@ function toSnapshot(repo: string, node: BoardNode): PullSnapshot {
     latestReviews: withAuthor(node.latestReviews.nodes),
     reviews: withAuthor(node.reviews.nodes),
     commentAuthors: withAuthor(node.comments.nodes).map((comment) => comment.author),
+    conversation: conversationOf(node),
     unresolvedThreads: node.reviewThreads.nodes.filter((thread) => !thread.isResolved).length,
+    unresolvedThreadAuthors: node.reviewThreads.nodes.flatMap((thread) =>
+      thread.isResolved ? [] : [withAuthor(thread.comments.nodes).map((comment) => comment.author)],
+    ),
   };
 }
 
@@ -231,9 +268,11 @@ const PULL_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
       reviewThreads(first: 100) {
         nodes {
           id isResolved isOutdated path line startLine diffSide
-          comments(first: 50) { nodes { id databaseId body createdAt url author { login avatarUrl(size: 40) } } }
+          comments(first: 50) { nodes { id databaseId body createdAt url author { __typename login avatarUrl(size: 40) } } }
         }
       }
+      comments(last: 100) { nodes { id body createdAt url author { __typename login avatarUrl(size: 40) } } }
+      reviews(last: 100) { nodes { id state body submittedAt url author { __typename login avatarUrl(size: 40) } } }
     }
   }
 }`;
@@ -284,6 +323,21 @@ const pullSchema = z.object({
             }),
           ),
         }),
+        comments: z.object({
+          nodes: z.array(z.object({ id: z.string(), body: z.string(), createdAt: z.string(), url: z.string(), author: actorSchema.nullable() })),
+        }),
+        reviews: z.object({
+          nodes: z.array(
+            z.object({
+              id: z.string(),
+              state: reviewStateSchema,
+              body: z.string(),
+              submittedAt: z.string().nullable(),
+              url: z.string(),
+              author: actorSchema.nullable(),
+            }),
+          ),
+        }),
       }),
     }),
   }),
@@ -307,6 +361,86 @@ const versionSchema = z.object({
   }),
 });
 
+type PullNode = z.infer<typeof pullSchema>["data"]["repository"]["pullRequest"];
+
+function toPerson(author: z.infer<typeof actorSchema> | null) {
+  return author === null ? { login: "ghost", avatarUrl: null } : { login: author.login, avatarUrl: author.avatarUrl ?? null };
+}
+
+function isBotAuthor(author: z.infer<typeof actorSchema> | null): boolean {
+  return author !== null && isAutomated(toActor(author));
+}
+
+export function pullConversation({ comments, reviews }: Pick<PullNode, "comments" | "reviews">): ConversationComment[] {
+  return [
+    ...comments.nodes.map((comment) => ({
+      id: comment.id,
+      kind: "comment" as const,
+      author: toPerson(comment.author),
+      isBot: isBotAuthor(comment.author),
+      body: comment.body,
+      createdAt: comment.createdAt,
+      url: comment.url,
+    })),
+    ...reviews.nodes.flatMap((review) =>
+      review.submittedAt === null || review.body.trim() === ""
+        ? []
+        : [
+            {
+              id: review.id,
+              kind: "review" as const,
+              author: toPerson(review.author),
+              isBot: isBotAuthor(review.author),
+              body: review.body,
+              createdAt: review.submittedAt,
+              url: review.url,
+            },
+          ],
+    ),
+  ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export function pullAwaitingReply({ comments, reviews }: Pick<PullNode, "comments" | "reviews">, viewer: string): string[] {
+  const entries: Array<ConversationEntry & { id: string }> = [
+    ...comments.nodes.flatMap((comment) =>
+      comment.author === null ? [] : [{ id: comment.id, author: toActor(comment.author), at: comment.createdAt, hasBody: true, reviewState: null }],
+    ),
+    ...reviews.nodes.flatMap((review) =>
+      review.author === null || review.submittedAt === null
+        ? []
+        : [{ id: review.id, author: toActor(review.author), at: review.submittedAt, hasBody: review.body.trim() !== "", reviewState: review.state }],
+    ),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  return awaitingReplyFrom(entries, viewer).map((entry) => entry.id);
+}
+
+const OPEN_BRANCHES_QUERY = `query OpenPullBranches($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: OPEN, first: 100, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      nodes { number title url headRefName baseRefName isCrossRepository }
+    }
+  }
+}`;
+
+const openBranchesSchema = z.object({
+  data: z.object({
+    repository: z.object({
+      pullRequests: z.object({
+        nodes: z.array(
+          z.object({
+            number: z.number(),
+            title: z.string(),
+            url: z.string(),
+            headRefName: z.string(),
+            baseRefName: z.string(),
+            isCrossRepository: z.boolean(),
+          }),
+        ),
+      }),
+    }),
+  }),
+});
+
 function versionOf(updatedAt: string, headSha: string, resolved: readonly boolean[]): string {
   return `${updatedAt}|${headSha}|${resolved.map((value) => (value ? "1" : "0")).join("")}`;
 }
@@ -314,6 +448,8 @@ function versionOf(updatedAt: string, headSha: string, resolved: readonly boolea
 export function detailVersion(detail: Pick<PullDetail, "updatedAt" | "headSha" | "threads">): string {
   return versionOf(detail.updatedAt, detail.headSha, detail.threads.map((thread) => thread.isResolved));
 }
+
+export type OpenPullBranch = z.infer<typeof openBranchesSchema>["data"]["repository"]["pullRequests"]["nodes"][number];
 
 const pullStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
 
@@ -438,6 +574,10 @@ export function createGitHub(gh: Gh) {
       return versionOf(pull.updatedAt, pull.headRefOid, pull.reviewThreads.nodes.map((thread) => thread.isResolved));
     },
 
+    async openPullBranches(repo: string): Promise<OpenPullBranch[]> {
+      return openBranchesSchema.parse(JSON.parse(await graphql(OPEN_BRANCHES_QUERY, split(repo)))).data.repository.pullRequests.nodes;
+    },
+
     async pullStates(repo: string, numbers: readonly number[]): Promise<Map<number, PullState>> {
       const fields = numbers.map((number) => `pr${number}: pullRequest(number: ${number}) { state }`).join(" ");
       const raw = await graphql(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`, split(repo));
@@ -469,6 +609,7 @@ export function createGitHub(gh: Gh) {
         comments: thread.comments.nodes.map((comment) => ({
           id: comment.id,
           databaseId: comment.databaseId,
+          isBot: isBotAuthor(comment.author),
           body: comment.body,
           createdAt: comment.createdAt,
           url: comment.url,
@@ -496,6 +637,8 @@ export function createGitHub(gh: Gh) {
         viewer: viewer.login,
         files: parseFilePages(rawFiles).map((file) => ({ ...file, viewed: viewed.get(file.path) ?? false })),
         threads,
+        conversation: pullConversation(pull),
+        awaitingReply: pullAwaitingReply(pull, viewer.login),
       };
     },
 
@@ -531,6 +674,12 @@ export function createGitHub(gh: Gh) {
     async postComment(repo: string, number: number, headSha: string, target: CommentTarget, body: string): Promise<void> {
       await gh(["api", "--method", "POST", `repos/${repo}/pulls/${number}/comments`, "--input", "-"], {
         input: JSON.stringify({ commit_id: headSha, body, ...reviewCommentFields(target) }),
+      });
+    },
+
+    async postIssueComment(repo: string, number: number, body: string): Promise<void> {
+      await gh(["api", "--method", "POST", `repos/${repo}/issues/${number}/comments`, "--input", "-"], {
+        input: JSON.stringify({ body }),
       });
     },
 
