@@ -5,7 +5,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": [
-      "ES2023"
+      "ES2023",
+      "DOM"
     ],
     "types": [
       "node"
@@ -14,6 +15,6 @@
     "skipLibCheck": false
   },
   "include": [
-    "server.ts"
+    "*.ts"
   ]
 }
