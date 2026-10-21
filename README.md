@@ -6,6 +6,7 @@ one plugin with its own `package.json`, README, and tests. Themes live in
 
 | Plugin | What it does |
 | --- | --- |
+| [Database](bb-plugin-database) | A Postgres GUI: schema browser, SQL editor with autocomplete, plain-English queries, EXPLAIN plans, and RDS access through your AWS SSO session. |
 | [Launcher](bb-plugin-launcher) | A Raycast-style ⌘K for threads, projects, quick prompts, settings, and plugins. |
 | [Library](bb-plugin-library) | Save diagrams, call flows, explanations, and design docs from any thread, then search them in one place. |
 | [Panel Dock](bb-plugin-panel-dock) | Open bb's side panel on the right or at the bottom, or float a terminal over the thread with Ctrl+`. |
