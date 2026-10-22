@@ -28,7 +28,8 @@ AWS SSO session you already have.
   click a column to insert its name, hover a table to **preview** 100 rows or
   **describe** it with indexes and foreign keys. Drag its edge to resize it, or
   hide it with the panel button at the left of the toolbar; it starts hidden
-  when the page is narrow so the editor keeps its room.
+  when the page is narrow so the editor keeps its room. Both dividers also
+  move with the arrow keys once focused.
 - The editor completes keywords, tables, and columns as you type. Press
   **⌘↵** to run the selection or the whole editor, **⇧⌘↵** for the plan.
   **Esc** cancels a running query.
