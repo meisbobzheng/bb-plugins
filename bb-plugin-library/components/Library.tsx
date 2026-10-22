@@ -268,14 +268,18 @@ function ResultRow({ id, hit, selected, active, onSelect }: ResultRowProps) {
   );
 }
 
+function Key({ children }: { children: string }) {
+  return <kbd className="rounded border border-border px-1 font-mono text-xs">{children}</kbd>;
+}
+
 function Placeholder() {
   return (
     <div className="mx-auto flex h-full max-w-md flex-col justify-center gap-3 p-6 text-sm text-muted-foreground">
       <p className="text-base font-medium text-foreground">Pick an entry to read it</p>
       <ul className="list-disc space-y-1.5 pl-5">
         <li>
-          Press <kbd className="rounded border border-border px-1 font-mono text-xs">/</kbd> to search. Prefixes match, so “regis” finds registration
-          flows.
+          Press <Key>/</Key> to search, then <Key>↑</Key> <Key>↓</Key> and <Key>Enter</Key> to open a result. Prefixes match, so “regis” finds
+          registration flows.
         </li>
         <li>
           Save any chat message with <strong className="text-foreground">Save to Library</strong> in its action bar, or select text first to save
