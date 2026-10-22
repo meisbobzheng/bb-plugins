@@ -258,6 +258,14 @@ describe("hints", () => {
     expect(vim.get().hints).toBeNull();
   });
 
+  it("measures each offscreen button once and gives it no hint", () => {
+    start(`${SHELL}${'<button class="later" data-box="300,900,60,24">Later</button>'.repeat(50)}`);
+    const measured = [...document.querySelectorAll<HTMLElement>(".later")].map((el) => vi.spyOn(el, "getBoundingClientRect"));
+    press("f");
+    expect(vim.get().hints).toHaveLength(6);
+    expect(measured.map((spy) => spy.mock.calls.length)).toEqual(measured.map(() => 1));
+  });
+
   it("focuses a text field picked by hint", () => {
     start(SHELL);
     press("f");

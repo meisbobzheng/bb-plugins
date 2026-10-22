@@ -1,4 +1,4 @@
-import { area, comparePosition, coverage, inViewport } from "./layout";
+import { area, comparePosition, coverage, inViewport, type Box } from "./layout";
 
 const ITEM = [
   "[data-vim-item]",
@@ -74,14 +74,18 @@ export function eventTarget(event: Event): Element | null {
   return target instanceof Element ? target : null;
 }
 
-export function isRendered(el: Element): boolean {
-  const box = el.getBoundingClientRect();
+function shown(el: Element, box: Box): boolean {
   return box.width > 0 && box.height > 0 && el.closest(HIDDEN) === null && el.checkVisibility?.({ visibilityProperty: true }) !== false;
+}
+
+export function isRendered(el: Element): boolean {
+  return shown(el, el.getBoundingClientRect());
 }
 
 export function isVisible(el: Element): boolean {
   const view = el.ownerDocument.defaultView;
-  return isRendered(el) && view !== null && inViewport(el.getBoundingClientRect(), view.innerWidth, view.innerHeight);
+  const box = el.getBoundingClientRect();
+  return view !== null && inViewport(box, view.innerWidth, view.innerHeight) && shown(el, box);
 }
 
 function navigable(el: Element): el is HTMLElement {
@@ -161,26 +165,29 @@ export function isFocusable(el: Element): boolean {
   return el.matches(FOCUSABLE);
 }
 
-function unoccluded(el: HTMLElement): boolean {
+function unoccluded(el: HTMLElement, box: Box): boolean {
   const doc = el.ownerDocument;
   const view = doc.defaultView;
   if (view === null || typeof doc.elementFromPoint !== "function") return true;
-  const box = el.getBoundingClientRect();
   const x = Math.min(Math.max(box.left + box.width / 2, 0), view.innerWidth - 1);
   const y = Math.min(Math.max(box.top + box.height / 2, 0), view.innerHeight - 1);
   const hit = doc.elementFromPoint(x, y);
   return hit === null || el.contains(hit) || hit.contains(el) || el.parentElement?.contains(hit) === true;
 }
 
-export function hintTargets(scope: Element): HTMLElement[] {
+export function hintTargets(scope: Element): { element: HTMLElement; box: DOMRect }[] {
+  const view = scope.ownerDocument.defaultView;
+  if (view === null) return [];
   const seen = new Set<string>();
-  return [...scope.querySelectorAll(CLICKABLE)].filter((el): el is HTMLElement => {
-    if (!navigable(el) || !isVisible(el) || el.parentElement?.closest(EDITOR) != null) return false;
-    const box = el.getBoundingClientRect();
+  return [...scope.querySelectorAll(CLICKABLE)].flatMap((element) => {
+    if (!(element instanceof HTMLElement)) return [];
+    const box = element.getBoundingClientRect();
+    if (!inViewport(box, view.innerWidth, view.innerHeight) || !shown(element, box) || element.matches(DISABLED)) return [];
+    if (element.parentElement?.closest(EDITOR) != null) return [];
     const key = [box.left, box.top, box.width, box.height].map(Math.round).join(",");
-    if (seen.has(key) || !unoccluded(el)) return false;
+    if (seen.has(key) || !unoccluded(element, box)) return [];
     seen.add(key);
-    return true;
+    return [{ element, box }];
   });
 }
 

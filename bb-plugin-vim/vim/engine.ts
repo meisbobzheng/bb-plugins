@@ -164,7 +164,7 @@ export function mountVim(host: VimHost, doc: Document = document, mac: boolean =
     const labels = hintLabels(targets.length);
     hintsMove = moveCursor;
     if (targets.length > 0) {
-      vim.set({ hints: targets.map((element, index) => ({ label: labels[index]!, element, box: element.getBoundingClientRect() })), typed: "" });
+      vim.set({ hints: targets.map((target, index) => ({ ...target, label: labels[index]! })), typed: "" });
     }
     return true;
   };
