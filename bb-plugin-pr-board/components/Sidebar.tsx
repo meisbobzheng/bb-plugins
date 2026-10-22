@@ -172,9 +172,25 @@ export function Sidebar({
       {tab === "files" ? (
         <>
           <div className="shrink-0 p-1.5">
-            <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter files" aria-label="Filter files" className="h-7 text-xs" />
+            <Input
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && filter.length > 0) {
+                  event.stopPropagation();
+                  setFilter("");
+                }
+              }}
+              placeholder="Filter files"
+              aria-label="Filter files"
+              title="Esc clears the filter"
+              className="h-7 text-xs"
+            />
           </div>
           <ul className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+            {shown.length === 0 && files.length > 0 ? (
+              <li className="px-2 py-6 text-center text-xs text-muted-foreground">No changed file matches “{filter.trim()}”.</li>
+            ) : null}
             {shown.map((file) => (
               <FileRow
                 key={file.path}

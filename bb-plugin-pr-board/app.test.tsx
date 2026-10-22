@@ -436,6 +436,18 @@ describe("review workspace", () => {
     await waitFor(() => expect(states()).toBe(4));
   });
 
+  it("says when no file matches the file filter, and clears it with Escape", async () => {
+    const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/7" }, { rpc: workspaceRpc(STATE) });
+    await slot.findByText("Add thing");
+    const filter = slot.getByRole("textbox", { name: "Filter files" }) as HTMLInputElement;
+    fireEvent.change(filter, { target: { value: "zzz" } });
+    expect(slot.getByText("No changed file matches “zzz”.")).toBeTruthy();
+    fireEvent.keyDown(filter, { key: "Escape" });
+    expect(filter.value).toBe("");
+    expect(slot.queryByText(/No changed file matches/)).toBeNull();
+    expect(slot.getByTitle("docs/readme.md")).toBeTruthy();
+  });
+
   it("deletes a pending comment with an Undo that puts it back", async () => {
     render(<Toaster theme="light" />);
     const saved: unknown[] = [];
