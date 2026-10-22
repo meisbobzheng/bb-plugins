@@ -24,11 +24,12 @@ thresholds bb uses for its own context indicator.
 | Figure | Source | Refreshes on |
 | --- | --- | --- |
 | Context | `threads.context` | `thread/contextWindowUsage/updated`, compaction, context clear |
-| Tokens and cost | `thread/tokenUsage/updated` events, each priced with the model from the preceding `client/turn/requested` | each new token-usage event |
+| Tokens and cost | `thread/tokenUsage/updated` events, each priced with the model from the preceding `client/turn/requested` | each new token-usage event, reading only the events after the last one counted |
 | Plan usage | the `provider-usage.v1` RPC published by the thread's provider plugin, called from this plugin's server so the app bundle stays small | each `turn/completed` |
 
 Updates arrive over bb's realtime `thread:changed` feed, with no polling. All
-feeds reload after a realtime reconnect.
+feeds reload from scratch after a realtime reconnect or when the thread's history
+is rewritten or compacted.
 
 ## Caveats
 

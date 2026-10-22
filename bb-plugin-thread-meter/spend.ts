@@ -20,6 +20,11 @@ export interface Spend {
   unpricedTurns: number;
 }
 
+export interface SpendTally {
+  spend: Spend;
+  model: string | undefined;
+}
+
 interface Rates {
   input: number;
   output: number;
@@ -83,9 +88,8 @@ export function addTurn(spend: Spend, usage: TokenUsage, model: string | undefin
   };
 }
 
-export function summarizeSpend(events: readonly SpendEvent[], fallbackModel?: string): Spend {
-  let model = fallbackModel;
-  let spend = EMPTY_SPEND;
+export function summarizeSpend(events: readonly SpendEvent[], from: SpendTally): SpendTally {
+  let { spend, model } = from;
   for (const event of events) {
     if (event.type === "client/turn/requested") {
       model = event.data.execution?.model ?? model;
@@ -93,5 +97,5 @@ export function summarizeSpend(events: readonly SpendEvent[], fallbackModel?: st
       spend = addTurn(spend, event.data.tokenUsage.last, model);
     }
   }
-  return spend;
+  return { spend, model };
 }

@@ -65,10 +65,10 @@ function fakeBb(events: unknown[]) {
       },
     },
   };
-  const emit = (eventTypes: string[]) =>
+  const emit = (eventTypes: string[], changes = ["events-appended"]) =>
     act(async () => {
       for (const listener of threadListeners) {
-        listener({ entity: "thread", changes: ["events-appended"], metadata: { eventTypes } });
+        listener({ entity: "thread", changes, metadata: { eventTypes } });
       }
     });
   return { sdk: sdk as unknown as PluginSdkTestFakes, emit };
@@ -115,6 +115,22 @@ describe("thread meter", () => {
     expect(slot.queryByText("$36.00")).toBeNull();
     await emit(["thread/tokenUsage/updated"]);
     await slot.findByText("$36.00");
+  });
+
+  it("reads only new events on each update and rereads after a history rewrite", async () => {
+    const events: unknown[] = [requested(1, "claude-opus-5-5"), tokenUsage(2)];
+    const { slot, emit } = await renderMeter(events);
+    await slot.findByText("$24.00");
+    events.push(requested(3, "claude-sonnet-5"), tokenUsage(4));
+    await emit(["thread/tokenUsage/updated"]);
+    await slot.findByText("$36.00");
+    events.splice(2);
+    await emit([], ["history-rewritten"]);
+    await slot.findByText("$24.00");
+    const listedAfter = slot.sdkCalls
+      .filter((call) => call.method === "threads.events.list")
+      .map((call) => (call.args[0] as { afterSeq?: string }).afterSeq);
+    expect(listedAfter).toEqual([undefined, "2", "2", "4", undefined, "2"]);
   });
 
   it("asks for fresh plan usage when a turn completes", async () => {

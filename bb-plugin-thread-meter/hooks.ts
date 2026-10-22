@@ -1,12 +1,14 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { experimental_useSidebarThreads, useRpc, useSdk } from "@get-bb/plugin-sdk/app";
 import type { rpcContract } from "./server";
-import { loadContext, loadSpend } from "./sources";
+import { loadContext, loadSpend, type SpendCursor } from "./sources";
+import { EMPTY_SPEND } from "./spend";
 
-type Feed = "context" | "spend" | "plan";
+type Feed = "context" | "spend" | "plan" | "history";
 type Ticks = Readonly<Record<Feed, number>>;
 
-const ALL_FEEDS: readonly Feed[] = ["context", "spend", "plan"];
+const APPENDED_FEEDS: readonly Feed[] = ["context", "spend", "plan"];
+const ALL_FEEDS: readonly Feed[] = [...APPENDED_FEEDS, "history"];
 
 const FEED_BY_EVENT_TYPE: Readonly<Record<string, Feed>> = {
   "thread/contextWindowUsage/updated": "context",
@@ -24,7 +26,7 @@ function bump(ticks: Ticks, feeds: Iterable<Feed>): Ticks {
 
 function useThreadTicks(threadId: string | null): Ticks {
   const sdk = useSdk();
-  const [ticks, dispatch] = useReducer(bump, { context: 0, spend: 0, plan: 0 });
+  const [ticks, dispatch] = useReducer(bump, { context: 0, spend: 0, plan: 0, history: 0 });
   useEffect(() => {
     if (!threadId) return;
     const offThread = sdk.subscribe({
@@ -38,7 +40,7 @@ function useThreadTicks(threadId: string | null): Ticks {
         if (!changes.includes("events-appended")) return;
         const types = metadata?.eventTypes;
         if (!types) {
-          dispatch(ALL_FEEDS);
+          dispatch(APPENDED_FEEDS);
           return;
         }
         const feeds = new Set(types.flatMap((type) => FEED_BY_EVENT_TYPE[type] ?? []));
@@ -81,6 +83,22 @@ function useLoaded<T>(
   return loaded?.key === key ? loaded.value : null;
 }
 
+function useSpend(threadId: string | null, ticks: Ticks, fallbackModel: string | undefined) {
+  const sdk = useSdk();
+  const cursor = useRef<{ key: string; value: SpendCursor } | null>(null);
+  return useLoaded(threadId, ticks.spend, async (signal) => {
+    if (!threadId) return null;
+    const key = `${threadId}:${ticks.history}`;
+    const from =
+      cursor.current?.key === key
+        ? cursor.current.value
+        : { spend: EMPTY_SPEND, model: fallbackModel, afterSeq: undefined };
+    const value = await loadSpend(sdk, threadId, from, signal);
+    cursor.current = { key, value };
+    return value.spend;
+  });
+}
+
 export function useThreadMeter({
   threadId,
   providerId,
@@ -98,9 +116,7 @@ export function useThreadMeter({
   const context = useLoaded(threadId, ticks.context, (signal) =>
     threadId ? loadContext(sdk, threadId, signal) : Promise.resolve(null),
   );
-  const spend = useLoaded(threadId, ticks.spend, (signal) =>
-    threadId ? loadSpend(sdk, threadId, model, signal) : Promise.resolve(null),
-  );
+  const spend = useSpend(threadId, ticks, model);
   const plan = useLoaded(
     providerId ? `${providerId}:${hostId ?? ""}` : null,
     ticks.plan,
