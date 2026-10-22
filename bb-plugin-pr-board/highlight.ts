@@ -1,6 +1,6 @@
 import type { Draft, Finding, Severity, Side } from "./contract.js";
 
-export const FINDING_COLOR = "#f59e0b";
+export const FINDING_COLOR = "var(--warning)";
 export const DRAFT_COLOR = "#8b5cf6";
 const MAX_HIGHLIGHT_LINES = 400;
 

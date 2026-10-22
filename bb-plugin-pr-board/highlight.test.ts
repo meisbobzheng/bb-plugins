@@ -25,7 +25,7 @@ describe("highlightCss", () => {
     expect(css).toContain('[data-additions] [data-line="4"]');
     expect(css).toContain('[data-additions] [data-column-number="4"]');
     expect(css).not.toContain('[data-line="5"]');
-    expect(css).toContain("#f59e0b");
+    expect(css).toContain("var(--warning)");
   });
 
   it("separates deleted lines from new lines in unified view", () => {
@@ -38,7 +38,7 @@ describe("highlightCss", () => {
   it("skips dismissed and file-level findings and tints drafts", () => {
     const draft: Draft = { id: "d", path: "a.go", side: "deletions", startLine: 9, endLine: 9, body: "x" };
     const css = highlightCss([finding({ dismissed: true }), finding({ startLine: null, endLine: null })], [draft], "split");
-    expect(css).not.toContain("#f59e0b");
+    expect(css).not.toContain("var(--warning)");
     expect(css).toContain('[data-deletions] [data-line="9"]');
     expect(css).toContain("#8b5cf6");
   });

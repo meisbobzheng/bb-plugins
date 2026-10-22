@@ -38,9 +38,9 @@ export function relativeTime(iso: string, now = Date.now()): string {
 }
 
 export const SEVERITY_STYLES: Record<Severity, string> = {
-  blocker: "bg-red-500/15 text-red-700 dark:text-red-300",
-  major: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
-  minor: "bg-yellow-500/15 text-yellow-800 dark:text-yellow-200",
+  blocker: "bg-destructive/15 text-destructive-text",
+  major: "bg-warning/20 text-warning-text",
+  minor: "bg-attention/20 text-foreground",
   nit: "bg-muted text-muted-foreground",
 };
 

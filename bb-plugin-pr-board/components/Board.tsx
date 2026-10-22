@@ -38,16 +38,16 @@ const REFRESH_MS = 60_000;
 const ADD_REPO = "__add__";
 
 const CHECK_STYLES: Record<Checks, { className: string; label: string } | null> = {
-  success: { className: "bg-emerald-500", label: "Checks passed" },
-  failure: { className: "bg-red-500", label: "Checks failed" },
-  pending: { className: "bg-amber-400 animate-pulse", label: "Checks running" },
+  success: { className: "bg-success", label: "Checks passed" },
+  failure: { className: "bg-destructive", label: "Checks failed" },
+  pending: { className: "bg-attention animate-pulse", label: "Checks running" },
   none: null,
 };
 
 const REVIEWER_RING: Record<ReviewerState, string> = {
-  approved: "ring-emerald-500",
-  "changes-requested": "ring-red-500",
-  commented: "ring-sky-500",
+  approved: "ring-success",
+  "changes-requested": "ring-destructive",
+  commented: "ring-timeline-accent",
   requested: "ring-border opacity-60",
 };
 
@@ -76,7 +76,7 @@ function AgentBadge({ card }: { card: BoardCard }) {
   if (card.agent.threadId === null) return null;
   if (card.agent.running) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400">
+      <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-timeline-accent">
         <span className="size-1.5 animate-pulse rounded-full bg-current" aria-hidden />
         Agent working
       </span>
@@ -86,7 +86,7 @@ function AgentBadge({ card }: { card: BoardCard }) {
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1 text-[11px]",
-        card.agent.findings > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+        card.agent.findings > 0 ? "text-warning-text" : "text-muted-foreground",
       )}
     >
       <Icon name="Bot" className="size-3" aria-hidden />
@@ -170,8 +170,8 @@ function PullCard({
                 <span className="truncate">{card.author.login}</span>
               </span>
               <span className="ml-auto shrink-0 tabular-nums">
-                <span className="text-emerald-600 dark:text-emerald-400">+{card.additions}</span>{" "}
-                <span className="text-red-600 dark:text-red-400">−{card.deletions}</span>
+                <span className="text-diff-added">+{card.additions}</span>{" "}
+                <span className="text-diff-removed">−{card.deletions}</span>
               </span>
             </span>
             <span className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -194,13 +194,13 @@ function PullCard({
                 </span>
               ) : null}
               {card.unresolvedThreads > 0 ? (
-                <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400" title="Unresolved review threads">
+                <span className="inline-flex items-center gap-0.5 text-warning-text" title="Unresolved review threads">
                   <Icon name="AlertCircle" className="size-3" aria-hidden />
                   {card.unresolvedThreads}
                 </span>
               ) : null}
               {card.unansweredComments > 0 ? (
-                <span className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400" title="Comments waiting for your reply">
+                <span className="inline-flex items-center gap-0.5 text-destructive-text" title="Comments waiting for your reply">
                   <Icon name="AlertTriangle" className="size-3" aria-hidden />
                   {card.unansweredComments}
                 </span>

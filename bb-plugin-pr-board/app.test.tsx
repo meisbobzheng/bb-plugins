@@ -279,7 +279,7 @@ describe("review workspace", () => {
       expect(root?.querySelector('[data-additions] [data-line="4"]')).toBeTruthy();
       const css = [...(root?.querySelectorAll("style") ?? [])].map((style) => style.textContent).join("\n");
       expect(css).toContain('[data-additions] [data-line="3"]');
-      expect(css).toContain("#f59e0b");
+      expect(css).toContain("var(--warning)");
     });
     expect(slot.getAllByText("Inline b into a")).toHaveLength(1);
     expect(slot.getByText("Pending note")).toBeTruthy();

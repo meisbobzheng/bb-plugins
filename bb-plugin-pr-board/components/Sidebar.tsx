@@ -9,12 +9,12 @@ import { Input } from "./ui/input";
 export type SidebarTab = "files" | "findings" | "comments";
 
 const STATUS: Record<FileStatus, { letter: string; className: string }> = {
-  added: { letter: "A", className: "text-emerald-600 dark:text-emerald-400" },
-  removed: { letter: "D", className: "text-red-600 dark:text-red-400" },
-  modified: { letter: "M", className: "text-amber-600 dark:text-amber-400" },
-  renamed: { letter: "R", className: "text-sky-600 dark:text-sky-400" },
-  copied: { letter: "C", className: "text-sky-600 dark:text-sky-400" },
-  changed: { letter: "M", className: "text-amber-600 dark:text-amber-400" },
+  added: { letter: "A", className: "text-diff-added" },
+  removed: { letter: "D", className: "text-diff-removed" },
+  modified: { letter: "M", className: "text-warning-text" },
+  renamed: { letter: "R", className: "text-file-accent" },
+  copied: { letter: "C", className: "text-file-accent" },
+  changed: { letter: "M", className: "text-warning-text" },
   unchanged: { letter: "·", className: "text-muted-foreground" },
 };
 
@@ -72,8 +72,8 @@ function FileRow({
           <span className="font-medium">{file.path.slice(slash + 1)}</span>
           {slash < 0 ? null : <span className="ml-1 text-muted-foreground">{file.path.slice(0, slash)}</span>}
         </span>
-        <Count value={findings} className="bg-amber-500/20 text-amber-700 dark:text-amber-300" title="Review findings" />
-        <Count value={threads} className="bg-sky-500/15 text-sky-700 dark:text-sky-300" title="Unresolved comment threads" />
+        <Count value={findings} className="bg-warning/20 text-warning-text" title="Review findings" />
+        <Count value={threads} className="bg-timeline-accent/15 text-timeline-accent" title="Unresolved comment threads" />
         <Count value={drafts} className="bg-violet-500/15 text-violet-700 dark:text-violet-300" title="Pending comments" />
       </button>
       <button
@@ -84,7 +84,7 @@ function FileRow({
         title={file.viewed ? "Viewed" : "Mark as viewed"}
         className={cn(
           "absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 outline-none hover:bg-state-hover focus-visible:ring-1 focus-visible:ring-ring",
-          file.viewed ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+          file.viewed ? "text-success" : "text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
         )}
       >
         <Icon name={file.viewed ? "CircleCheck" : "Circle"} className="size-3.5" />

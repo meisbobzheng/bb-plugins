@@ -88,8 +88,8 @@ export function openSuggestionParts(suggestion: Suggestion): number {
 function Stats({ additions, deletions }: { additions: number; deletions: number }) {
   return (
     <span className="shrink-0 tabular-nums">
-      <span className="text-emerald-600 dark:text-emerald-400">+{additions}</span>{" "}
-      <span className="text-red-600 dark:text-red-400">−{deletions}</span>
+      <span className="text-diff-added">+{additions}</span>{" "}
+      <span className="text-diff-removed">−{deletions}</span>
     </span>
   );
 }
@@ -201,16 +201,16 @@ function SuggestionBlock({
   const hasReply = suggestion.reply !== null && (suggestion.replyState !== "dismissed" || showDismissed);
   if (!hasChange && !hasReply) return null;
   return (
-    <div className="space-y-2 rounded-md border border-sky-500/40 bg-sky-500/5 p-2.5">
+    <div className="space-y-2 rounded-md border border-timeline-accent/40 bg-timeline-accent/5 p-2.5">
       <p className="flex items-center gap-1.5 text-xs font-medium">
-        <Icon name="Bot" className="size-3.5 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
+        <Icon name="Bot" className="size-3.5 shrink-0 text-timeline-accent" aria-hidden />
         <span className="min-w-0">{suggestion.summary}</span>
       </p>
       {hasChange ? (
         <div className={cn("space-y-1.5", suggestion.changeState === "dismissed" && "opacity-60")}>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Suggested change</p>
           {suggestion.changeState === "applied" ? (
-            <p className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+            <p className="flex items-center gap-1 text-xs text-success">
               <Icon name="CircleCheck" className="size-3.5" aria-hidden />
               Applied to the address thread's worktree. Submit Address commits and pushes it.
             </p>
@@ -251,7 +251,7 @@ function SuggestionBlock({
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Suggested reply{suggestion.replyState === "used" ? " · used" : ""}
           </p>
-          <div className="rounded border-l-2 border-sky-500/50 bg-background px-2.5 py-1.5">
+          <div className="rounded border-l-2 border-timeline-accent/50 bg-background px-2.5 py-1.5">
             <Markdown content={suggestion.reply} className="text-sm" />
           </div>
           <div className="flex gap-1.5">
@@ -383,7 +383,7 @@ function CardShell({ focused, children }: { focused: CommentFocus | null; childr
   return (
     <article
       ref={ref}
-      className={cn("scroll-mt-3 space-y-2.5 rounded-lg border border-border bg-background p-3 text-sm shadow-xs", focused !== null && "ring-2 ring-sky-500/60")}
+      className={cn("scroll-mt-3 space-y-2.5 rounded-lg border border-border bg-background p-3 text-sm shadow-xs", focused !== null && "ring-2 ring-timeline-accent/60")}
     >
       {children}
     </article>
@@ -430,7 +430,7 @@ function CodeCommentCard({
             {range}
           </span>
           {thread.isOutdated ? <span className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground">outdated</span> : null}
-          {thread.isResolved ? <span className="shrink-0 text-xs text-emerald-600 dark:text-emerald-400">resolved</span> : null}
+          {thread.isResolved ? <span className="shrink-0 text-xs text-success">resolved</span> : null}
         </button>
         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => actions.viewInDiff(thread)}>
           View in diff
@@ -563,7 +563,7 @@ function AddressStatus({ review, actions }: { review: ReviewState; actions: Comm
           : `${open} open suggestion${open === 1 ? "" : "s"}. Accepted changes go to the address thread's worktree until you click Submit Address.`;
   return (
     <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-      {running ? <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-sky-500" aria-hidden /> : null}
+      {running ? <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-timeline-accent" aria-hidden /> : null}
       <span className="min-w-0 flex-1">{text}</span>
       {threadId === null ? null : (
         <Button size="sm" variant="ghost" className="h-6 shrink-0 text-xs" onClick={() => actions.openThread(threadId)}>
@@ -721,7 +721,7 @@ export function CommentIndex({
                 <span className="shrink-0 font-medium">{item.comment.author.login}</span>
                 <span className={cn("min-w-0 flex-1 truncate", !item.waiting && "text-muted-foreground")}>{snippet(item.comment.body)}</span>
                 {open > 0 ? (
-                  <span className="rounded bg-sky-500/15 px-1 text-[10px] font-semibold tabular-nums text-sky-700 dark:text-sky-300" title="Open suggestions">
+                  <span className="rounded bg-timeline-accent/15 px-1 text-[10px] font-semibold tabular-nums text-timeline-accent" title="Open suggestions">
                     {open}
                   </span>
                 ) : null}

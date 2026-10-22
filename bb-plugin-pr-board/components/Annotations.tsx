@@ -77,9 +77,9 @@ const SIDE_LABEL: Record<Side, string> = { additions: "new", deletions: "old" };
 export function FindingCard({ finding, outdated, actions }: { finding: Finding; outdated: boolean; actions: ReviewActions }) {
   const { busy, run } = useBusy();
   return (
-    <Card className="border-amber-500/50 bg-amber-500/5">
+    <Card className="border-warning/50 bg-warning/5">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Icon name="Bot" className="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden />
+        <Icon name="Bot" className="size-3.5 text-warning-text" aria-hidden />
         <SeverityBadge severity={finding.severity} />
         <span className="min-w-0 flex-1 font-medium">{finding.title}</span>
         {outdated ? (
@@ -136,7 +136,7 @@ export function ThreadCard({ thread, actions }: { thread: ReviewThread; actions:
           <span className="shrink-0 text-xs text-muted-foreground">
             {thread.comments.length} comment{thread.comments.length === 1 ? "" : "s"}
           </span>
-          {thread.isResolved ? <span className="shrink-0 text-xs text-emerald-600 dark:text-emerald-400">resolved</span> : null}
+          {thread.isResolved ? <span className="shrink-0 text-xs text-success">resolved</span> : null}
         </button>
         <Button
           size="sm"
@@ -230,7 +230,7 @@ export function CommentEditor({ composer, suggestion, actions }: { composer: Com
   const post = () => run("post", () => actions.postComment(composer, body));
   const ask = () => run("ask", () => actions.askAgent(composer, body));
   return (
-    <Card className="border-sky-500/50">
+    <Card className="border-timeline-accent/50">
       <p className="mb-2 text-xs text-muted-foreground">
         {composer.draftId === null ? "Comment on" : "Edit pending comment on"} {lineLabel(composer.startLine, composer.endLine)} (
         {SIDE_LABEL[composer.side]})

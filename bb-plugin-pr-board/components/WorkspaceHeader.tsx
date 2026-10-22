@@ -78,17 +78,17 @@ export function WorkspaceHeader({
             </span>
             <span aria-hidden>·</span>
             <span className="shrink-0 tabular-nums">
-              <span className="text-emerald-600 dark:text-emerald-400">+{detail.additions}</span>{" "}
-              <span className="text-red-600 dark:text-red-400">−{detail.deletions}</span>
+              <span className="text-diff-added">+{detail.additions}</span>{" "}
+              <span className="text-diff-removed">−{detail.deletions}</span>
             </span>
             {review.agent.running ? (
-              <span className="inline-flex shrink-0 items-center gap-1 text-sky-600 dark:text-sky-400">
+              <span className="inline-flex shrink-0 items-center gap-1 text-timeline-accent">
                 <span className="size-1.5 animate-pulse rounded-full bg-current" aria-hidden />
                 agent working
               </span>
             ) : null}
             {review.agent.findings > 0 ? (
-              <button type="button" className="shrink-0 text-amber-600 underline-offset-2 hover:underline dark:text-amber-400" onClick={onShowFindings}>
+              <button type="button" className="shrink-0 text-warning-text underline-offset-2 hover:underline" onClick={onShowFindings}>
                 {review.agent.findings} findings
               </button>
             ) : null}
