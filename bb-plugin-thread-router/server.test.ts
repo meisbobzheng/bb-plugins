@@ -48,6 +48,15 @@ describe("thread router", () => {
     expect(updates()).toEqual([{ threadId: "thr_1", sectionId: REVIEWS.id, title: expect.stringMatching(/^hss-h[a-z]+$/) }]);
   });
 
+  it("names a thread apart from recent threads on the same topic", async () => {
+    const { harness, created, active, updates } = await setup();
+    const recent = ["hss-hammer", "hss-hank", "hss-hawk", "hss-hero", "hss-hornet"];
+    harness.inspection.sdk.stub("threads.list", async () => recent.map((title) => ({ title })));
+    await created();
+    await active();
+    expect(updates()).toEqual([{ threadId: "thr_1", sectionId: REVIEWS.id, title: "hss-husky" }]);
+  });
+
   it("keeps a title set when the thread was created", async () => {
     const { created, active, updates } = await setup({ title: "My ULR fix" });
     await created();

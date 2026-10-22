@@ -27,6 +27,10 @@ renames untitled threads to a funky name like `hss-warrior`.
   (lowercase, a-z0-9, at most 16 characters; falling back to the project name,
   then `thread`), a dash, and a name or noun from a fixed list, alliterative
   with the topic when the list has one, e.g. `rfc-randy`.
+- Names stay distinct. A new name skips every name the 100 most recent threads
+  already use, giving up alliteration before it repeats one, and a topic that
+  is the singular or plural of a recent topic takes that topic's spelling, so a
+  `plugins` thread next to `plugin-phoenix` becomes, say, `plugin-pirate`.
 - Only threads created without a title are renamed; bb's generated title is
   replaced. A title set at creation, or changed while routing runs, is kept.
 

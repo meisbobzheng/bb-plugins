@@ -1,5 +1,5 @@
 import type { BbPluginApi, PluginThreadEventPayloads } from "@get-bb/plugin-sdk";
-import { funkyName, toTopic } from "./names";
+import { funkyName, parseFunkyName, toTopic } from "./names";
 
 type Thread = PluginThreadEventPayloads["thread.created"]["thread"];
 type Section = Awaited<ReturnType<BbPluginApi["sdk"]["threadSections"]["list"]>>[number];
@@ -8,6 +8,7 @@ type Pending = { untitled: boolean };
 const FALLBACK_SECTION = "other";
 const PROMPT_CHAR_LIMIT = 4000;
 const EXAMPLES_PER_SECTION = 8;
+const RECENT_NAMES_LIMIT = 100;
 const CLASSIFY_TIMEOUT_MS = 120_000;
 
 const pendingKey = (threadId: string) => `pending:${threadId}`;
@@ -94,7 +95,7 @@ export default async function plugin(bb: BbPluginApi) {
     const current = await bb.sdk.threads.get({ threadId });
     const sectionId = current.sectionId === null ? target.id : undefined;
     const untouched = current.title === null || current.title === thread.title;
-    const title = rename && verdict && untouched ? funkyName(verdict.topic) : undefined;
+    const title = rename && verdict && untouched ? funkyName(verdict.topic, await recentNames()) : undefined;
     if (sectionId === undefined && title === undefined) return;
 
     await bb.sdk.threads.update({ threadId, sectionId, title });
@@ -176,6 +177,14 @@ export default async function plugin(bb: BbPluginApi) {
     return (first?.input ?? [])
       .flatMap((part) => (part.type === "text" ? [part.text] : []))
       .join("\n");
+  }
+
+  async function recentNames() {
+    const threads = await bb.sdk.threads.list({ limit: RECENT_NAMES_LIMIT });
+    return threads.flatMap((thread) => {
+      const name = thread.title === null ? null : parseFunkyName(thread.title);
+      return name ? [name] : [];
+    });
   }
 
   async function recentTitles(sectionId: string) {

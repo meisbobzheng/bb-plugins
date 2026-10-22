@@ -9,8 +9,9 @@ glance.
 - Threads that fit nowhere go to `other`, which is created when missing.
 - Routing hints in settings describe sections whose names are ambiguous.
 - Untitled threads get a funky name: a one-word topic and a name, often
-  alliterative, like `hss-warrior`, `review-beast`, or `rfc-randy`. Turn it
-  off with the `naming` setting.
+  alliterative, like `hss-warrior`, `review-beast`, or `rfc-randy`. No two
+  recent threads share a name, and `plugin` and `plugins` threads share one
+  topic. Turn it off with the `naming` setting.
 - A section or title you pick yourself, or a move or rename you make while
   routing runs, always wins. Each thread is routed once.
 
