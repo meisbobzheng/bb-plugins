@@ -47,6 +47,12 @@ describe("detectTags", () => {
   it("needs both halves of an ambiguous command pair", () => {
     expect(detectTags("Convert the value with STR before logging.")).toEqual([]);
     expect(detectTags("The P-CSCF sends STR and the PCRF answers STA.")).toContain("STR/STA");
+    expect(detectTags("The PCRF answers STA once the P-CSCF sends STR.")).toContain("STR/STA");
+    expect(detectTags("The P-CSCF sends a Session-Termination-Request.")).toContain("STR/STA");
+  });
+
+  it("scans a long body with one half of a pair many times without slowing down", () => {
+    expect(detectTags("The UDM reads the profile from the UDR. ".repeat(30_000))).toEqual(["UDM", "UDR"]);
   });
 
   it("does not read radio Rx/Tx as the Rx interface", () => {

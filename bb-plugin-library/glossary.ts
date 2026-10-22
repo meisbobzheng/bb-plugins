@@ -6,6 +6,7 @@ export interface Term {
   about: string;
   specs: readonly string[];
   pattern: RegExp | null;
+  partner?: RegExp;
 }
 
 export interface TagDraft {
@@ -45,10 +46,8 @@ function procedure(tag: string, specs: readonly string[], pattern: RegExp): Term
 
 function command(request: string, answer: string, name: string, specs: readonly string[], ambiguous = false): Term {
   const longName = `\\b${word(name)}-(?:Request|Answer)\\b`;
-  const pattern = ambiguous
-    ? new RegExp(`${longName}|\\b${request}\\b[\\s\\S]*\\b${answer}\\b|\\b${answer}\\b[\\s\\S]*\\b${request}\\b`)
-    : new RegExp(`${longName}|\\b${request}\\b`);
-  return term("messages", `${request}/${answer}`, `${name}-Request/Answer`, specs, pattern);
+  const entry = term("messages", `${request}/${answer}`, `${name}-Request/Answer`, specs, new RegExp(`${longName}|\\b${request}\\b`));
+  return ambiguous ? { ...entry, partner: new RegExp(`${longName}|\\b${answer}\\b`) } : entry;
 }
 
 function nf(tag: string, about: string, pattern: RegExp | null = new RegExp(`\\b${word(tag)}\\b`)): Term {
@@ -281,9 +280,16 @@ export function termFor(tag: string): Term | undefined {
   return TERMS_BY_TAG.get(tag.toLowerCase());
 }
 
+function firstMention({ pattern, partner }: Term, text: string): number {
+  const index = pattern === null ? -1 : text.search(pattern);
+  if (index < 0 || partner === undefined) return index;
+  const other = text.search(partner);
+  return other < 0 ? -1 : Math.min(index, other);
+}
+
 export function detectTags(text: string): string[] {
   const found = TERMS.flatMap((entry) => {
-    const index = entry.pattern === null ? -1 : text.search(entry.pattern);
+    const index = firstMention(entry, text);
     return index < 0 ? [] : [{ entry, index }];
   });
   return TAG_GROUPS.flatMap((group) =>
