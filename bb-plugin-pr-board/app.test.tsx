@@ -581,6 +581,27 @@ describe("comments", () => {
     await waitFor(() => expect(calls("addressComments")).toEqual([{ repo: "acme/app", number: 9 }]));
   });
 
+  it("shows a resolved thread as resolved as soon as GitHub takes it, before the PR reloads", async () => {
+    let loads = 0;
+    const slot = renderSlot(
+      boardPanel(),
+      { subPath: "pr/acme/app/18" },
+      {
+        rpc: workspaceRpc(SUGGESTED, {
+          pull: () => (loads++ === 0 ? { ...COMMENTED, number: 18 } : new Promise<PullDetail>(() => {})),
+          resolveThread: () => ({}),
+        }),
+      },
+    );
+    fireEvent.click(await slot.findByRole("tab", { name: "Comments 2" }));
+    const card = (await slot.findAllByText("Rename b")).map((text) => text.closest("article")).find((article) => article !== null) as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: "Resolve" }));
+    expect(await within(card).findByRole("button", { name: "Unresolve" })).toBeTruthy();
+    expect(within(card).getByText("resolved")).toBeTruthy();
+    expect(slot.getByRole("tab", { name: "Comments 1" })).toBeTruthy();
+    expect(loads).toBe(2);
+  });
+
   it("stacks the review and address buttons and confirms Submit Address before sending it", async () => {
     const slot = renderSlot(
       boardPanel(),

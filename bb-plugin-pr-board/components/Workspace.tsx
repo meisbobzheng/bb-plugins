@@ -9,6 +9,7 @@ import type {
   PullFile,
   ReviewEvent,
   ReviewState,
+  ReviewThread,
   rpcContract,
 } from "../contract";
 import type { DiffStyle } from "../highlight";
@@ -167,6 +168,10 @@ function Workspace({
   const [composer, setComposer] = useState<Composer | null>(null);
   const [picker, setPicker] = useState<{ result: DefinitionResult; sha: string } | null>(null);
   const [viewed, setViewed] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [resolutions, setResolutions] = useState<{ of: readonly ReviewThread[]; resolved: ReadonlyMap<string, boolean> }>(() => ({
+    of: detail.threads,
+    resolved: new Map(),
+  }));
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitAddressOpen, setSubmitAddressOpen] = useState(false);
   const [running, setRunning] = useState(false);
@@ -177,6 +182,13 @@ function Workspace({
   const files = useMemo(
     () => detail.files.map((file) => ({ ...file, viewed: viewed.get(file.path) ?? file.viewed })),
     [detail.files, viewed],
+  );
+  const threads = useMemo(
+    () =>
+      resolutions.of !== detail.threads || resolutions.resolved.size === 0
+        ? detail.threads
+        : detail.threads.map((thread) => ({ ...thread, isResolved: resolutions.resolved.get(thread.id) ?? thread.isResolved })),
+    [detail.threads, resolutions],
   );
   const firstPath = files[0]?.path;
   const current = useMemo(
@@ -344,6 +356,10 @@ function Workspace({
     },
     async resolveThread(threadId, resolved) {
       await rpc.call("resolveThread", { ...pull, threadId, resolved });
+      setResolutions((previous) => ({
+        of: detail.threads,
+        resolved: new Map(previous.of === detail.threads ? previous.resolved : []).set(threadId, resolved),
+      }));
       refreshDetail();
     },
     async dismissFinding(id, dismissed) {
@@ -487,9 +503,9 @@ function Workspace({
     return {
       findings: review.findings.filter((finding) => !finding.dismissed && matches(finding.path)),
       drafts: review.drafts.filter((draft) => draft.path === path),
-      threads: detail.threads.filter((thread) => thread.path === path),
+      threads: threads.filter((thread) => thread.path === path),
     };
-  }, [currentFile?.path, currentFile?.previousPath, detail.threads, review.drafts, review.findings]);
+  }, [currentFile?.path, currentFile?.previousPath, threads, review.drafts, review.findings]);
 
   const fullFile = currentFile !== null && fullFiles.has(currentFile.path);
   const showFullFile = () => {
@@ -504,7 +520,7 @@ function Workspace({
       selectedPath={currentFile?.path ?? null}
       findings={review.findings}
       drafts={review.drafts}
-      threads={detail.threads}
+      threads={threads}
       conversation={detail.conversation}
       viewer={detail.viewer}
       awaitingReply={detail.awaitingReply}
@@ -670,7 +686,7 @@ function Workspace({
             {commentsVisited ? (
               <div className={current?.kind === "comments" ? undefined : "hidden"}>
                 <CommentsView
-                  detail={detail}
+                  detail={threads === detail.threads ? detail : { ...detail, threads }}
                   review={review}
                   focus={current?.kind === "comments" && current.commentId !== null ? { commentId: current.commentId, seq: current.seq } : null}
                   actions={commentActions}
