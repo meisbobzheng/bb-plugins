@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import {
   experimental_usePluginId,
   useBbNavigate,
@@ -73,11 +73,14 @@ export function LibraryBrowser({ filters, onFiltersChange, selectedId, onSelect,
     limit: RESULT_LIMIT,
   });
   const searchRef = useRef<HTMLInputElement>(null);
+  const listId = useId();
   const [active, setActive] = useState(-1);
-  useSlashFocus(searchRef, focusShortcut);
-  useEffect(() => setActive(-1), [result]);
-
   const entries = result?.entries ?? [];
+  const activeHit = entries[active];
+  const order = entries.map(({ id }) => id).join(" ");
+  useSlashFocus(searchRef, focusShortcut);
+  useEffect(() => setActive(-1), [order]);
+
   const set = (patch: Partial<Filters>) => onFiltersChange({ ...filters, ...patch });
   const hasFilters = filters.query.trim() !== "" || filters.kind !== null || filters.tags.length > 0 || filters.thisThread;
 
@@ -107,7 +110,8 @@ export function LibraryBrowser({ filters, onFiltersChange, selectedId, onSelect,
             maxLength={LIMITS.query}
             placeholder={focusShortcut ? "Search flows, diagrams, docs…  ( / )" : "Search flows, diagrams, docs…"}
             aria-label="Search the Library"
-            aria-controls="library-results"
+            aria-controls={listId}
+            aria-activedescendant={activeHit === undefined ? undefined : `${listId}-${activeHit.id}`}
             className="pl-8"
             onChange={(event) => set({ query: event.target.value })}
             onKeyDown={onSearchKeyDown}
@@ -148,9 +152,16 @@ export function LibraryBrowser({ filters, onFiltersChange, selectedId, onSelect,
               {result.total === 1 ? "1 entry" : `${result.total} entries`}
               {result.total > entries.length ? ` · showing ${entries.length}` : ""}
             </p>
-            <ul id="library-results" className="pb-2">
+            <ul id={listId} className="pb-2">
               {entries.map((hit, index) => (
-                <ResultRow key={hit.id} hit={hit} selected={hit.id === selectedId} active={index === active} onSelect={() => onSelect(hit.id)} />
+                <ResultRow
+                  key={hit.id}
+                  id={`${listId}-${hit.id}`}
+                  hit={hit}
+                  selected={hit.id === selectedId}
+                  active={index === active}
+                  onSelect={() => onSelect(hit.id)}
+                />
               ))}
             </ul>
           </>
@@ -204,7 +215,15 @@ function TagFilter({ result, selected, onChange }: { result: SearchResult | null
   );
 }
 
-function ResultRow({ hit, selected, active, onSelect }: { hit: EntryHit; selected: boolean; active: boolean; onSelect: () => void }) {
+interface ResultRowProps {
+  id: string;
+  hit: EntryHit;
+  selected: boolean;
+  active: boolean;
+  onSelect: () => void;
+}
+
+function ResultRow({ id, hit, selected, active, onSelect }: ResultRowProps) {
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: "nearest" });
@@ -219,6 +238,7 @@ function ResultRow({ hit, selected, active, onSelect }: { hit: EntryHit; selecte
     <li>
       <button
         ref={ref}
+        id={id}
         type="button"
         data-vim-item=""
         aria-current={selected ? "true" : undefined}

@@ -94,6 +94,25 @@ describe("Library app", () => {
     expect(slot.getByRole("button", { name: "from “Debug attach”" }).getAttribute("title")).toBe("Debug attach");
   });
 
+  it("keeps the active result while the list refreshes, and opens it with Enter", async () => {
+    const app = await load();
+    const first = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: { search: () => RESULT } });
+    await first.findByText(OTHER_HIT.title);
+    await settle();
+    first.lifecycle.unmount();
+
+    const refreshed = () => new Promise<SearchResult>((resolve) => setTimeout(() => resolve(structuredClone(RESULT)), 20));
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: { search: refreshed } });
+    const search = slot.getByLabelText("Search the Library");
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    await settle();
+    expect(document.getElementById(search.getAttribute("aria-activedescendant")!)?.textContent).toContain(OTHER_HIT.title);
+
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: OTHER_HIT.id, replace: true } }]);
+  });
+
   it("filters by tags chosen from a group menu", async () => {
     const app = await load();
     const searches: Array<{ tags: string[] }> = [];
