@@ -59,6 +59,11 @@ describe("store", () => {
     expect(regis.entries.map((entry) => entry.title)).toEqual(["Registration flow", "Gx session"]);
     expect(search({ query: "CCR-I" }).entries.map((entry) => entry.title)).toEqual(["Gx session"]);
     expect(search({ query: "ccr-i pcrf" }).entries[0]?.snippet).toContain(MARK_START);
+
+    const first = search({ query: "regis", limit: 1 });
+    expect(first.entries.map((entry) => entry.title)).toEqual(["Registration flow"]);
+    expect(first.entries[0]?.snippet).toContain(MARK_START);
+    expect(first.total).toBe(2);
   });
 
   it("filters by tag case-insensitively and by kind, with grouped tag facets", () => {

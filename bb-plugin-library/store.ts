@@ -133,6 +133,13 @@ export function createStore(storage: BbPluginApi["storage"]) {
     usedSpelling: db.prepare("SELECT t.value AS tag FROM entries e JOIN json_each(e.tags) AS t WHERE lower(t.value) = lower(?) LIMIT 1"),
   };
 
+  const prepared = new Map<string, ReturnType<typeof db.prepare>>();
+  function prepare(sql: string) {
+    const statement = prepared.get(sql) ?? db.prepare(sql);
+    prepared.set(sql, statement);
+    return statement;
+  }
+
   const registry = new Map<string, { tag: string; group: TagGroup }>();
   for (const row of statements.groups.all() as Array<{ tag: string; grp: string }>) {
     if (isTagGroup(row.grp)) registry.set(row.tag.toLowerCase(), { tag: row.tag, group: row.grp });
@@ -279,19 +286,21 @@ export function createStore(storage: BbPluginApi["storage"]) {
       const snippet = match === null ? "NULL" : "snippet(entries_fts, 3, char(2), char(3), '…', 24)";
       const order = match === null ? "e.updated_at DESC, e.seq DESC" : "bm25(entries_fts, 10.0, 5.0, 8.0, 1.0), e.updated_at DESC";
 
-      const rows = db
-        .prepare(`SELECT ${columns}, ${snippet} AS snippet FROM ${from} ${all.where} ORDER BY ${order} LIMIT @limit`)
-        .all({ ...all.params, limit: input.limit }) as Array<EntryRow & { snippet: string | null }>;
-      const total = db.prepare(`SELECT COUNT(*) AS count FROM ${from} ${all.where}`).get(all.params) as { count: number };
-      const kinds = db
-        .prepare(`SELECT e.kind AS kind, COUNT(*) AS count FROM ${from} ${anyKind.where} GROUP BY e.kind ORDER BY count DESC`)
-        .all(anyKind.params) as Array<{ kind: string; count: number }>;
-      const tags = db
-        .prepare(
-          `SELECT t.value AS tag, COUNT(*) AS count FROM ${from} JOIN json_each(e.tags) AS t ${all.where}
-           GROUP BY lower(t.value) ORDER BY count DESC, tag COLLATE NOCASE LIMIT ${TAG_FACETS}`,
-        )
-        .all(all.params) as Array<{ tag: string; count: number }>;
+      const top = `SELECT e.seq FROM ${from} ${all.where} ORDER BY ${order} LIMIT @limit`;
+      const ranked = match === null ? `e.seq IN (${top})` : `entries_fts MATCH @match AND e.seq IN (${top})`;
+
+      const rows = prepare(`SELECT ${columns}, ${snippet} AS snippet FROM ${from} WHERE ${ranked} ORDER BY ${order}`).all({
+        ...all.params,
+        limit: input.limit,
+      }) as Array<EntryRow & { snippet: string | null }>;
+      const total = prepare(`SELECT COUNT(*) AS count FROM ${from} ${all.where}`).get(all.params) as { count: number };
+      const kinds = prepare(
+        `SELECT e.kind AS kind, COUNT(*) AS count FROM ${from} ${anyKind.where} GROUP BY e.kind ORDER BY count DESC`,
+      ).all(anyKind.params) as Array<{ kind: string; count: number }>;
+      const tags = prepare(
+        `SELECT t.value AS tag, COUNT(*) AS count FROM ${from} JOIN json_each(e.tags) AS t ${all.where}
+         GROUP BY lower(t.value) ORDER BY count DESC, tag COLLATE NOCASE LIMIT ${TAG_FACETS}`,
+      ).all(all.params) as Array<{ tag: string; count: number }>;
 
       return {
         entries: rows.map(toHit),
