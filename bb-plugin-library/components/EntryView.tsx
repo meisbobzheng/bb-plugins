@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Markdown, UrlLink, useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
@@ -79,7 +79,8 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const article = useRef<HTMLElement>(null);
   const body = useRef<HTMLDivElement>(null);
-  const specs = specsFor(entry.tags.map(({ tag }) => tag), entry.body);
+  const specs = useMemo(() => specsFor(entry.tags.map(({ tag }) => tag), entry.body), [entry.tags, entry.body]);
+  const markdown = useMemo(() => <Markdown content={entry.body} />, [entry.body]);
   const { threadId, threadTitle } = entry.source;
 
   const copy = () => {
@@ -158,7 +159,7 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
         </div>
       </header>
       <div ref={body} className="mt-4 border-t border-border pt-4">
-        <Markdown content={entry.body} />
+        {markdown}
       </div>
       {confirmingDelete ? <DeleteDialog entry={entry} onClose={() => setConfirmingDelete(false)} onDeleted={onDeleted} /> : null}
     </article>
