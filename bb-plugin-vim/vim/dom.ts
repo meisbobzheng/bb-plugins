@@ -139,12 +139,16 @@ function isScrollable(el: Element): boolean {
   return overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay";
 }
 
+function outermostScrollers(el: Element): Element[] {
+  return isScrollable(el) ? [el] : [...el.children].flatMap(outermostScrollers);
+}
+
 export function scrollerFor(pane: Element, from: Element | null): Element {
   for (let el = from?.parentElement ?? null; el !== null && pane.contains(el); el = el.parentElement) {
     if (isScrollable(el)) return el;
   }
-  const inner = [pane, ...pane.querySelectorAll("*")]
-    .filter((el) => isScrollable(el) && isRendered(el))
+  const inner = outermostScrollers(pane)
+    .filter(isRendered)
     .sort((a, b) => area(b.getBoundingClientRect()) - area(a.getBoundingClientRect()))[0];
   if (inner !== undefined) return inner;
   for (let el = pane.parentElement; el !== null; el = el.parentElement) {

@@ -101,6 +101,16 @@ describe("panes and lists", () => {
     expect(timeline.scrollTop).toBe(4000);
   });
 
+  it("finds the chat's scroller without measuring every message in it", () => {
+    start(SHELL);
+    byId("timeline").insertAdjacentHTML("beforeend", "<article><p><span>message</span></p></article>".repeat(200));
+    const measured = vi.spyOn(Element.prototype, "scrollHeight", "get");
+    press("j");
+    expect(byId("timeline").scrollTop).toBe(60);
+    expect(measured.mock.calls.length).toBeLessThan(10);
+    measured.mockRestore();
+  });
+
   it("leaves Ctrl+D to bb elsewhere, where it toggles the diff", () => {
     start(SHELL);
     expect(press("d", { ctrlKey: true }).defaultPrevented).toBe(false);
