@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { Toaster } from "sonner";
 import type { Board, BoardCard, PullDetail, ReviewState } from "./contract";
 import { commentCount } from "./components/Comments";
 
@@ -433,6 +434,31 @@ describe("review workspace", () => {
     await slot.behavior.setRealtimeConnectionState("reconnecting");
     await slot.behavior.setRealtimeConnectionState("connected");
     await waitFor(() => expect(states()).toBe(4));
+  });
+
+  it("deletes a pending comment with an Undo that puts it back", async () => {
+    render(<Toaster theme="light" />);
+    const saved: unknown[] = [];
+    const slot = renderSlot(
+      boardPanel(),
+      { subPath: "pr/acme/app/17" },
+      {
+        rpc: workspaceRpc(STATE, {
+          pull: () => ({ ...DETAIL, number: 17 }),
+          deleteDraft: () => ({}),
+          saveDraft: (input) => {
+            saved.push(input);
+            return { id: "d3", path: "cmd/main.go", side: "additions", startLine: 4, endLine: 4, body: "Pending note" };
+          },
+        }),
+      },
+    );
+    fireEvent.click(await slot.findByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(slot.inspection.rpcCalls.filter((call) => call.method === "deleteDraft").map((call) => call.input)).toEqual([{ id: "d1" }]));
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() =>
+      expect(saved).toEqual([{ repo: "acme/app", number: 17, id: null, path: "cmd/main.go", side: "additions", startLine: 4, endLine: 4, body: "Pending note" }]),
+    );
   });
 
   it("stacks the file list above a unified diff when the page is narrow", async () => {

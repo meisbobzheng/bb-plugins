@@ -298,8 +298,18 @@ function Workspace({
       reloadState();
     },
     async deleteDraft(id) {
+      const draft = review.drafts.find((candidate) => candidate.id === id);
       await rpc.call("deleteDraft", { id });
       reloadState();
+      if (draft === undefined) return;
+      toast("Deleted the pending comment", {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            rpc.call("saveDraft", { ...pull, ...draft, id: null }).then(reloadState, (error: unknown) => toast.error(errorMessage(error)));
+          },
+        },
+      });
     },
     async postComment(target, body) {
       await rpc.call("postComment", {

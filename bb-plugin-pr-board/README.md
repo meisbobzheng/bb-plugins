@@ -223,6 +223,7 @@ Hover a line number and click **+**, or drag across line numbers first for a
 range. The editor offers:
 
 - **Add to review**: saves a pending comment in the plugin's database (⌘↵).
+  Deleting a pending comment offers **Undo**.
 - **Comment now**: posts a single review comment immediately.
 - **Suggest change**: inserts a GitHub suggestion block with the selected new
   lines.
