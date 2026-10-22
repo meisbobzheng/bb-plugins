@@ -839,6 +839,24 @@ describe("address comments", () => {
     expect(address.tools.map((tool) => tool.name)).toEqual([SUGGESTIONS_TOOL]);
   });
 
+  it("reads the PR and the repository's open PR stack at the same time", async () => {
+    let reading = false;
+    let overlapped = false;
+    const { harness } = setup({
+      onGraphql: async (variables) => {
+        if (variables.number !== undefined && !("after" in variables)) {
+          reading = true;
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          reading = false;
+        } else if (variables.number === undefined && variables.ids === undefined) {
+          overlapped ||= reading;
+        }
+      },
+    });
+    await harness.behavior.callRpc("addressComments", { repo: "acme/app", number: 7 });
+    expect(overlapped).toBe(true);
+  });
+
   it("starts no thread when every comment's last reply is mine", async () => {
     const pullRequest = PULL_RESPONSE.data.repository.pullRequest;
     const [thread] = pullRequest.reviewThreads.nodes;

@@ -734,17 +734,17 @@ export function createPlugin(deps: PluginDeps) {
     const addressing = new Map<string, Promise<AddressResult>>();
     const preparing = new Set<string>();
     async function addressOnce(pull: PullKey): Promise<AddressResult> {
-      const detail = await pullDetail(pull, true);
-      const existing = await addressThreadFor(pull);
+      const [detail, existing, open] = await Promise.all([
+        pullDetail(pull, true),
+        addressThreadFor(pull),
+        github.openPullBranches(pull.repo).catch((error: unknown) => {
+          bb.log.warn(`could not read the PR stack of ${pullKey(pull)}: ${errorMessage(error)}`);
+          return null;
+        }),
+      ]);
       if (existing !== null && preparing.has(existing.id)) return { threadId: existing.id, created: false, delivery: "queued" };
       if (addressableIds(detail).size === 0) throw new Error("No comments are waiting for your reply, so there is nothing to address.");
-      const stack = await github.openPullBranches(pull.repo).then(
-        (open) => pullStack(detail, open),
-        (error: unknown) => {
-          bb.log.warn(`could not read the PR stack of ${pullKey(pull)}: ${errorMessage(error)}`);
-          return undefined;
-        },
-      );
+      const stack = open === null ? undefined : pullStack(detail, open);
       if (existing !== null) {
         await updateAddressWorktree(existing.id, detail);
         return { threadId: existing.id, created: false, delivery: await sendAddress(existing.id, detail, true, stack) };
