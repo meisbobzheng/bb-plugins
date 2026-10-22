@@ -1,0 +1,4 @@
+.sp-mini-frame {
+  position: fixed;
+  z-index: 60;
+}
