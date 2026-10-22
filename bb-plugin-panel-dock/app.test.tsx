@@ -134,6 +134,22 @@ describe("content script", () => {
     await mounted.lifecycle.dispose();
   });
 
+  it("resets the bottom panel height on a double-click of its top edge", async () => {
+    const panel = renderPanels();
+    localStorage.setItem(`${PLUGIN_ID}:height`, "320px");
+    const mounted = await mount();
+
+    pointer(panel, "click", { detail: 1 });
+    expect(root.style.getPropertyValue("--panel-dock-height")).toBe("320px");
+    pointer(panel.querySelector("aside")!, "click", { detail: 2 });
+    expect(root.style.getPropertyValue("--panel-dock-height")).toBe("320px");
+    pointer(panel, "click", { detail: 2 });
+
+    expect(root.style.getPropertyValue("--panel-dock-height")).toBe("");
+    expect(localStorage.getItem(`${PLUGIN_ID}:height`)).toBeNull();
+    await mounted.lifecycle.dispose();
+  });
+
   it("clears a drag in progress on dispose", async () => {
     const panel = renderPanels();
     const mounted = await mount();

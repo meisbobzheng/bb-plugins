@@ -11,7 +11,8 @@ A button in the thread header, next to bb's panel toggle, opens a menu:
   panel.
 - **Floating terminal** opens a terminal in a window floating over the thread.
 
-When the panel is at the bottom, drag its top edge to resize it. The position
+When the panel is at the bottom, drag its top edge to resize it, or
+double-click the edge to reset it to 40% of the thread's height. The position
 and height are saved per window and restored on reload.
 
 ## Floating terminal

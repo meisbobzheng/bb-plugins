@@ -91,10 +91,12 @@ function focusWhenReady(selector: string, frames = 60) {
   }
 }
 
+const isBottomPanel = (target: EventTarget | null): target is HTMLElement =>
+  target instanceof HTMLElement && target.matches(BOTTOM_PANEL);
+
 function startResize(event: PointerEvent, signal: AbortSignal) {
   const panel = event.target;
-  if (event.button !== 0 || !(panel instanceof HTMLElement)) return;
-  if (!panel.matches(BOTTOM_PANEL) || !panel.parentElement) return;
+  if (event.button !== 0 || !isBottomPanel(panel) || !panel.parentElement) return;
   event.preventDefault();
   event.stopPropagation();
 
@@ -120,6 +122,12 @@ function startResize(event: PointerEvent, signal: AbortSignal) {
   panel.addEventListener("lostpointercapture", end, { once: true, signal });
 }
 
+function resetHeight(event: MouseEvent) {
+  if (event.detail !== 2 || !isBottomPanel(event.target)) return;
+  root().style.removeProperty(HEIGHT_VAR);
+  localStorage.removeItem(storageKey("height"));
+}
+
 export function mountDock({ pluginId, signal }: PluginContentScriptContext) {
   storagePrefix = pluginId;
   root().dataset.panelDock = parseDock(localStorage.getItem(storageKey("dock")));
@@ -131,6 +139,7 @@ export function mountDock({ pluginId, signal }: PluginContentScriptContext) {
     (event) => startResize(event, signal),
     { capture: true, signal },
   );
+  document.addEventListener("click", resetHeight, { capture: true, signal });
 
   return () => {
     endFloat({ hide: false });

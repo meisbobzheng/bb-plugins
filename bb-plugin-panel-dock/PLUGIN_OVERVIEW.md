@@ -7,6 +7,7 @@ floating terminal with Ctrl+`.
 - A header button that opens the panel on the right or at the bottom.
 - A New terminal item that starts a shell in the thread's workspace.
 - A draggable top edge for the bottom panel, with its height remembered.
+  Double-click the edge to reset the height.
 - A command palette entry that moves the panel between the two positions.
 
 ## How it works
