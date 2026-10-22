@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { experimental_useAppPanel as useAppPanel, type PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { AskResult, Connection, ExplainResult, QueryRun, TableInfo } from "../contract";
@@ -29,6 +29,7 @@ const MIN_RESULTS = 160;
 const MIN_SCHEMA = 180;
 const MAX_SCHEMA = 480;
 const SCHEMA_AUTO_WIDTH = 720;
+const RESIZE_STEP = 16;
 
 function newQueryId(): string {
   return `qry_${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
@@ -71,6 +72,13 @@ function drag(event: ReactPointerEvent<HTMLElement>, onMove: (dx: number, dy: nu
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", end);
+}
+
+function nudge(event: ReactKeyboardEvent<HTMLElement>, smaller: string, larger: string, apply: (step: number) => void): void {
+  const step = event.key === smaller ? -RESIZE_STEP : event.key === larger ? RESIZE_STEP : 0;
+  if (step === 0) return;
+  event.preventDefault();
+  apply(step);
 }
 
 function ToolLabel({ children }: { children: ReactNode }) {
@@ -203,13 +211,15 @@ function Workbench({ connection }: { connection: Connection }) {
     void execute(text);
   };
 
+  const editorBounds = (height: number) => Math.min(Math.max(MIN_EDITOR, height), Math.max(MIN_EDITOR, (column.current?.clientHeight ?? 800) - MIN_RESULTS));
+  const schemaBounds = (width: number) => Math.min(Math.max(MIN_SCHEMA, width), MAX_SCHEMA);
+
   const resizeEditor = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const available = column.current?.clientHeight ?? 800;
     let next = editorHeight;
     drag(
       event,
       (_dx, dy) => {
-        next = Math.min(Math.max(MIN_EDITOR, editorHeight + dy), Math.max(MIN_EDITOR, available - MIN_RESULTS));
+        next = editorBounds(editorHeight + dy);
         setEditorHeight(next);
       },
       () => writeStored(EDITOR_HEIGHT_KEY, String(next)),
@@ -221,12 +231,26 @@ function Workbench({ connection }: { connection: Connection }) {
     drag(
       event,
       (dx) => {
-        next = Math.min(Math.max(MIN_SCHEMA, schemaWidth + dx), MAX_SCHEMA);
+        next = schemaBounds(schemaWidth + dx);
         setSchemaWidth(next);
       },
       () => writeStored(SCHEMA_WIDTH_KEY, String(next)),
     );
   };
+
+  const nudgeEditor = (event: ReactKeyboardEvent<HTMLDivElement>) =>
+    nudge(event, "ArrowUp", "ArrowDown", (step) => {
+      const next = editorBounds(editorHeight + step);
+      setEditorHeight(next);
+      writeStored(EDITOR_HEIGHT_KEY, String(next));
+    });
+
+  const nudgeSchema = (event: ReactKeyboardEvent<HTMLDivElement>) =>
+    nudge(event, "ArrowLeft", "ArrowRight", (step) => {
+      const next = schemaBounds(schemaWidth + step);
+      setSchemaWidth(next);
+      writeStored(SCHEMA_WIDTH_KEY, String(next));
+    });
 
   const toggleSchema = () => {
     setSchemaPinned(!schemaOpen);
@@ -248,7 +272,18 @@ function Workbench({ connection }: { connection: Connection }) {
           onDescribe={(table) => setView({ kind: "table", table })}
           onInsert={(text) => editor.current?.insert(text)}
         />
-        <div role="separator" aria-orientation="vertical" aria-label="Resize schema" onPointerDown={resizeSchema} className="absolute inset-y-0 -right-0.5 z-10 w-1 cursor-col-resize hover:bg-ring" />
+        <div
+          role="separator"
+          tabIndex={0}
+          aria-orientation="vertical"
+          aria-label="Resize schema"
+          aria-valuenow={schemaWidth}
+          aria-valuemin={MIN_SCHEMA}
+          aria-valuemax={MAX_SCHEMA}
+          onPointerDown={resizeSchema}
+          onKeyDown={nudgeSchema}
+          className="absolute inset-y-0 -right-0.5 z-10 w-1 cursor-col-resize outline-none hover:bg-ring focus-visible:bg-ring"
+        />
       </aside>
       <div ref={column} className="flex min-w-0 flex-1 flex-col">
         <form onSubmit={askNow} className="flex flex-col gap-1 border-b border-border px-3 py-2">
@@ -270,7 +305,7 @@ function Workbench({ connection }: { connection: Connection }) {
             </Button>
           </div>
           {ask.busy ? (
-            <p role="status" className="pl-6 text-xs text-muted-foreground">
+            <p role="status" className="truncate pl-6 text-xs text-muted-foreground">
               Writing SQL for “{ask.prompt.trim()}”…
             </p>
           ) : null}
@@ -294,9 +329,19 @@ function Workbench({ connection }: { connection: Connection }) {
         <section style={{ height: editorHeight }} className="shrink-0">
           <Editor ref={editor} value={sql} onChange={setSql} snapshot={schema.snapshot} onRun={() => void execute()} onExplain={() => void explain(false)} />
         </section>
-        <div role="separator" aria-orientation="horizontal" aria-label="Resize editor" onPointerDown={resizeEditor} className="h-1 shrink-0 cursor-row-resize bg-border hover:bg-ring" />
+        <div
+          role="separator"
+          tabIndex={0}
+          aria-orientation="horizontal"
+          aria-label="Resize editor"
+          aria-valuenow={editorHeight}
+          aria-valuemin={MIN_EDITOR}
+          onPointerDown={resizeEditor}
+          onKeyDown={nudgeEditor}
+          className="h-1 shrink-0 cursor-row-resize bg-border outline-none hover:bg-ring focus-visible:bg-ring"
+        />
         <div className="@container/toolbar flex items-center gap-1 border-b border-border px-2 py-1">
-          <IconButton label={schemaOpen ? "Hide schema" : "Show schema"} icon="PanelLeft" pressed={schemaOpen} onClick={toggleSchema} className="w-7 px-0" />
+          <IconButton label={schemaOpen ? "Hide schema" : "Show schema"} icon="PanelLeft" onClick={toggleSchema} className="w-7 px-0" />
           <Hint label={busy ? "Cancel the query (Esc)" : "Run the selection or the whole editor (⌘↵)"}>
             <Button size="sm" className="h-7 shrink-0 gap-1.5 px-2.5 text-xs" onClick={() => (busy ? cancel() : void execute())} disabled={!busy && sql.trim() === ""}>
               <Icon name={busy ? "Square" : "Play"} className="size-3.5" />

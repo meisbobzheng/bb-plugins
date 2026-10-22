@@ -156,6 +156,16 @@ describe("Database page", () => {
     expect(await again.findByRole("button", { name: "Show schema" })).toBeTruthy();
   });
 
+  it("resizes the schema pane from the keyboard", async () => {
+    const app = await load();
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: baseRpc });
+    await settle();
+    const handle = await slot.findByRole("separator", { name: "Resize schema" });
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(handle.getAttribute("aria-valuenow")).toBe("272");
+    expect(window.localStorage.getItem("database:schema-width")).toBe("272");
+  });
+
   it("starts with the schema pane hidden when the page is narrow", async () => {
     const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 480 } as DOMRect);
     try {
