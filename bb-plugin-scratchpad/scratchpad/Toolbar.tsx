@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ComponentType } from "react";
+import { memo, type ButtonHTMLAttributes, type ComponentType } from "react";
 import {
   Circle,
   Diamond,
@@ -97,7 +97,7 @@ function Divider() {
   return <div className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
 }
 
-export function Toolbar({
+export const Toolbar = memo(function Toolbar({
   tool,
   onTool,
   style,
@@ -178,4 +178,4 @@ export function Toolbar({
       </ToolbarButton>
     </div>
   );
-}
+});

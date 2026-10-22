@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useId,
@@ -144,7 +145,7 @@ function fitView(elements: readonly Element[], width: number, height: number): V
   };
 }
 
-export function Editor({ board }: { board: Board }) {
+export const Editor = memo(function Editor({ board }: { board: Board }) {
   const rpc = useRpc<typeof rpcContract>();
   const { elements, canUndo, canRedo, replace, commit, apply, undo, redo } = useHistory(board.elements);
   const [tool, setTool] = useState<Tool>("select");
@@ -916,4 +917,4 @@ export function Editor({ board }: { board: Board }) {
       </div>
     </div>
   );
-}
+});
