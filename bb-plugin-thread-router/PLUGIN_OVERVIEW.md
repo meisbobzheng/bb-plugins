@@ -22,5 +22,6 @@ sees your section names, a few recent titles from each, the project, and the
 new thread's title and first message, then names one section and a one-word
 topic for the thread's name. It runs on your own agent provider, by default
 `claude-code` with `claude-haiku-4-5-20251001`, so each routed thread costs one
-small classifier turn on that provider. Change the provider and model with
-`bb plugin config thread-router`.
+small classifier turn on that provider. A thread titled like recent threads
+that share a section, such as a daily automation run, joins them without one.
+Change the provider and model with `bb plugin config thread-router`.

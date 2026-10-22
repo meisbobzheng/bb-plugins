@@ -16,6 +16,10 @@ renames untitled threads to a funky name like `hss-warrior`.
   `claude-haiku-4-5-20251001`) runs in the new thread's environment. It sees
   every section name, up to 8 recent thread titles per section, the project
   name, the thread title, and the first message.
+- A titled thread skips the classifier when the recent threads in its project
+  with the same title all sit in one section; it joins them there. A recurring
+  automation such as a daily brief costs a classifier turn only on its first
+  run.
 - Only threads that are new, unsectioned, top-level, visible, and not created by
   this plugin are routed. A section picked at creation time, or a manual move
   during classification, always wins.

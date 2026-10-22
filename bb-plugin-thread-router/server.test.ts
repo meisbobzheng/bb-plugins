@@ -64,6 +64,30 @@ describe("thread router", () => {
     expect(updates()).toEqual([{ threadId: "thr_1", sectionId: REVIEWS.id }]);
   });
 
+  it("files a thread where its same-titled threads are, without classifying it", async () => {
+    const { harness, created, active, updates } = await setup({ title: "Fantasy football daily brief" });
+    harness.inspection.sdk.stub("threads.list", async () => [
+      { id: "thr_0", title: "Fantasy football daily brief", sectionId: OTHER.id },
+      { id: "thr_2", title: "Review hss#639", sectionId: REVIEWS.id },
+    ]);
+    await created();
+    await active();
+    expect(harness.inspection.sdk.callsTo("threads.spawn")).toHaveLength(0);
+    expect(updates()).toEqual([{ threadId: "thr_1", sectionId: OTHER.id }]);
+  });
+
+  it("classifies a thread whose same-titled threads sit in different sections", async () => {
+    const { harness, created, active, updates } = await setup({ title: "Standup" });
+    harness.inspection.sdk.stub("threads.list", async () => [
+      { id: "thr_0", title: "Standup", sectionId: OTHER.id },
+      { id: "thr_2", title: "Standup", sectionId: REVIEWS.id },
+    ]);
+    await created();
+    await active();
+    expect(harness.inspection.sdk.callsTo("threads.spawn")).toHaveLength(1);
+    expect(updates()).toEqual([{ threadId: "thr_1", sectionId: REVIEWS.id }]);
+  });
+
   it("keeps a title the user changes while routing runs", async () => {
     const { harness, state, created, active, updates } = await setup();
     await created();

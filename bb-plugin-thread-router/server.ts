@@ -9,6 +9,7 @@ const FALLBACK_SECTION = "other";
 const PROMPT_CHAR_LIMIT = 4000;
 const EXAMPLES_PER_SECTION = 8;
 const RECENT_NAMES_LIMIT = 100;
+const SAME_TITLE_LIMIT = 50;
 const CLASSIFY_TIMEOUT_MS = 120_000;
 
 const pendingKey = (threadId: string) => `pending:${threadId}`;
@@ -91,14 +92,15 @@ export default async function plugin(bb: BbPluginApi) {
       sections.find((section) => normalize(section.name) === FALLBACK_SECTION) ??
       (await bb.sdk.threadSections.create({ name: FALLBACK_SECTION }));
     const candidates = sections.filter((section) => section.id !== fallback.id);
+    const precedent = rename ? undefined : await sameTitleSection(thread, sections);
     const verdict =
-      candidates.length > 0 || rename
+      !precedent && (candidates.length > 0 || rename)
         ? await classify(thread, candidates, config).catch((error) => {
             bb.log.error(`failed to classify ${threadId}, filing it in ${fallback.name}: ${errorMessage(error)}`);
             return null;
           })
         : null;
-    const target = verdict?.section ?? fallback;
+    const target = precedent ?? verdict?.section ?? fallback;
 
     const current = await bb.sdk.threads.get({ threadId });
     const sectionId = current.sectionId === null ? target.id : undefined;
@@ -107,7 +109,7 @@ export default async function plugin(bb: BbPluginApi) {
     if (sectionId === undefined && title === undefined) return;
 
     await bb.sdk.threads.update({ threadId, sectionId, title });
-    if (sectionId) bb.log.info(`routed ${threadId} to ${target.name}`);
+    if (sectionId) bb.log.info(`routed ${threadId} to ${target.name}${precedent ? " by title" : ""}`);
     if (title) bb.log.info(`named ${threadId} ${title}`);
   }
 
@@ -174,6 +176,15 @@ export default async function plugin(bb: BbPluginApi) {
       await bb.sdk.threads.archive({ threadId: worker.id });
       await bb.sdk.threads.stop({ threadId: worker.id });
     }
+  }
+
+  async function sameTitleSection(thread: Thread, sections: Section[]) {
+    if (thread.title === null) return undefined;
+    const threads = await bb.sdk.threads.list({ projectId: thread.projectId, limit: SAME_TITLE_LIMIT });
+    const homes = new Set(
+      threads.filter((other) => other.title === thread.title && other.sectionId !== null).map((other) => other.sectionId),
+    );
+    return homes.size === 1 ? sections.find((section) => homes.has(section.id)) : undefined;
   }
 
   async function readFirstPrompt(threadId: string) {
