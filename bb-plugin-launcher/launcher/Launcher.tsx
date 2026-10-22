@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   experimental_usePluginId,
@@ -24,7 +24,7 @@ import {
 } from "./pages";
 import { PluginPage, PluginsPage, usePlugins } from "./plugins";
 import { projectKey } from "./rank";
-import { KeyHandlerContext, type KeyHandler } from "./Results";
+import { ResultsHostContext, type KeyHandler, type ResultsHost } from "./Results";
 import { ProvidersPage, SettingsPage, ThemesPage } from "./settings";
 import { launcher, useLauncherOpen } from "./store";
 import type { Controls, Page } from "./types";
@@ -142,6 +142,8 @@ function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowPr
   const inputRef = useRef<HTMLInputElement>(null);
   const anchorRef = useRef<HTMLAnchorElement>(null);
   const keyHandler = useRef<KeyHandler | null>(null);
+  const listboxId = useId();
+  const [selections] = useState(() => new WeakMap<Page, string>());
   const scopeProps = usePortalScopeProps();
 
   const sdk = useSdk();
@@ -192,6 +194,17 @@ function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowPr
     };
   }, [sdk, navigate, controls, pluginId, now, state, recordUse, setProjectPinned, threads, projects, providers, bbContext, config, plugins]);
 
+  const host = useMemo(
+    (): ResultsHost => ({
+      keyHandler,
+      input: inputRef,
+      listboxId,
+      restoreSelection: () => selections.get(top.page) ?? null,
+      saveSelection: (id) => selections.set(top.page, id),
+    }),
+    [listboxId, selections, top.page],
+  );
+
   useEffect(() => inputRef.current?.focus(), [stack.length]);
 
   const setQuery = (query: string) =>
@@ -235,7 +248,7 @@ function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowPr
     >
       <Dialog.Title className="sr-only">Launcher</Dialog.Title>
       <LauncherContext.Provider value={ctx}>
-        <KeyHandlerContext.Provider value={keyHandler}>
+        <ResultsHostContext.Provider value={host}>
           <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
             {stack.length > 1 ? (
               <button
@@ -259,6 +272,10 @@ function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowPr
               value={top.query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={onKeyDown}
+              role="combobox"
+              aria-expanded
+              aria-controls={listboxId}
+              aria-autocomplete="list"
               placeholder={placeholder}
               aria-label={placeholder || title || "Search"}
               spellCheck={false}
@@ -267,7 +284,7 @@ function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowPr
             />
           </div>
           <PageView key={stack.length} frame={top} showPreview={showPreview} />
-        </KeyHandlerContext.Provider>
+        </ResultsHostContext.Provider>
       </LauncherContext.Provider>
       <a ref={anchorRef} href="/" hidden tabIndex={-1} aria-hidden />
     </Dialog.Content>

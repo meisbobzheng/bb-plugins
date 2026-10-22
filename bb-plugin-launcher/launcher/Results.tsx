@@ -10,6 +10,7 @@ import {
   useState,
   type KeyboardEvent,
   type MutableRefObject,
+  type RefObject,
 } from "react";
 import { toast } from "sonner";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
@@ -22,7 +23,21 @@ import type { Action, Item, Section } from "./types";
 
 export type KeyHandler = (event: KeyboardEvent<HTMLInputElement>) => boolean;
 
-export const KeyHandlerContext = createContext<MutableRefObject<KeyHandler | null> | null>(null);
+export interface ResultsHost {
+  keyHandler: MutableRefObject<KeyHandler | null>;
+  input: RefObject<HTMLInputElement | null>;
+  listboxId: string;
+  restoreSelection(): string | null;
+  saveSelection(id: string): void;
+}
+
+export const ResultsHostContext = createContext<ResultsHost | null>(null);
+
+function useResultsHost(): ResultsHost {
+  const host = useContext(ResultsHostContext);
+  if (host === null) throw new Error("Results must be used inside the launcher");
+  return host;
+}
 
 export interface ResultsProps {
   sections: readonly Section[];
@@ -54,6 +69,7 @@ export function useRunAction() {
 }
 
 interface RowProps {
+  id: string;
   item: Item;
   index: number;
   active: boolean;
@@ -61,9 +77,10 @@ interface RowProps {
   onRun(item: Item, action: Action): void;
 }
 
-const Row = memo(function Row({ item, index, active, onSelect, onRun }: RowProps) {
+const Row = memo(function Row({ id, item, index, active, onSelect, onRun }: RowProps) {
   return (
     <div
+      id={id}
       role="option"
       aria-selected={active}
       data-index={index}
@@ -89,27 +106,39 @@ const Row = memo(function Row({ item, index, active, onSelect, onRun }: RowProps
 export function Results({ sections, query, emptyText = "No results", showPreview }: ResultsProps) {
   const ctx = useLauncher();
   const runAction = useRunAction();
-  const keyHandler = useContext(KeyHandlerContext);
+  const host = useResultsHost();
   const compact = useIsCompactViewport();
   const items = useMemo(() => sections.flatMap((section) => section.items), [sections]);
   const previewable = useMemo(() => items.some((item) => item.preview !== undefined), [items]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selection, setSelection] = useState(() => ({ query, id: host.restoreSelection() }));
   const listRef = useRef<HTMLDivElement>(null);
 
-  const index = Math.max(0, items.findIndex((item) => item.id === selectedId));
+  if (selection.query !== query) setSelection({ query, id: null });
+  const index = Math.max(0, items.findIndex((item) => item.id === selection.id));
   const selected = items[index];
+  const optionId = (position: number) => `${host.listboxId}-${position}`;
+  const select = useCallback((id: string) => setSelection({ query, id }), [query]);
 
-  useEffect(() => setSelectedId(null), [query]);
+  useEffect(() => {
+    if (selected !== undefined) host.saveSelection(selected.id);
+  }, [host, selected?.id]);
 
   useLayoutEffect(() => {
-    listRef.current
-      ?.querySelector(`[data-index="${index}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [index]);
+    const list = listRef.current;
+    if (list === null) return;
+    if (index === 0) list.scrollTop = 0;
+    else list.querySelector(`[data-index="${index}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [index, query]);
+
+  useLayoutEffect(() => {
+    const input = host.input.current;
+    if (selected === undefined) input?.removeAttribute("aria-activedescendant");
+    else input?.setAttribute("aria-activedescendant", optionId(index));
+  });
 
   const move = (delta: number) => {
     if (items.length === 0) return;
-    setSelectedId(items[(index + delta + items.length) % items.length]!.id);
+    select(items[(index + delta + items.length) % items.length]!.id);
   };
 
   const openActions = (item: Item) =>
@@ -146,7 +175,7 @@ export function Results({ sections, query, emptyText = "No results", showPreview
   };
 
   useLayoutEffect(() => {
-    if (keyHandler !== null) keyHandler.current = handleKey;
+    host.keyHandler.current = handleKey;
   });
 
   let position = 0;
@@ -155,7 +184,14 @@ export function Results({ sections, query, emptyText = "No results", showPreview
   return (
     <>
       <div className="flex min-h-0 flex-1">
-        <div ref={listRef} role="listbox" className="min-h-0 flex-1 overflow-y-auto p-2">
+        <div
+          ref={listRef}
+          id={host.listboxId}
+          role="listbox"
+          aria-label="Results"
+          onMouseDown={(event) => event.preventDefault()}
+          className="min-h-0 flex-1 overflow-y-auto p-2"
+        >
           {items.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">{emptyText}</p>
           ) : (
@@ -170,10 +206,11 @@ export function Results({ sections, query, emptyText = "No results", showPreview
                     return (
                       <Row
                         key={item.id}
+                        id={optionId(itemIndex)}
                         item={item}
                         index={itemIndex}
                         active={itemIndex === index}
-                        onSelect={setSelectedId}
+                        onSelect={select}
                         onRun={runAction}
                       />
                     );
@@ -189,7 +226,10 @@ export function Results({ sections, query, emptyText = "No results", showPreview
           </aside>
         ) : null}
       </div>
-      <div className="flex h-10 shrink-0 items-center justify-end gap-4 border-t border-border px-3 text-xs text-muted-foreground">
+      <div
+        onMouseDown={(event) => event.preventDefault()}
+        className="flex h-10 shrink-0 items-center justify-end gap-4 border-t border-border px-3 text-xs text-muted-foreground"
+      >
         {primary !== undefined ? (
           <button
             type="button"

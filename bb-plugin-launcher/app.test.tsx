@@ -158,13 +158,13 @@ describe("launcher", () => {
     const preview = await slot.findByRole("complementary", { name: "Preview" });
     await within(preview).findByText("Please check the CER");
     expect(preview.textContent).toContain("#12 Handle CER retries");
-    fireEvent.keyDown(slot.getByRole("textbox"), { key: "ArrowDown" });
+    fireEvent.keyDown(slot.getByRole("combobox"), { key: "ArrowDown" });
     await wait(200);
     expect(preview.textContent).toContain("Pinned rollout plan");
     expect(preview.textContent).toContain("Loading conversation…");
     expect(preview.textContent).not.toContain("Please check the CER");
     expect(preview.textContent).not.toContain("Handle CER retries");
-    fireEvent.keyDown(slot.getByRole("textbox"), { key: "ArrowDown" });
+    fireEvent.keyDown(slot.getByRole("combobox"), { key: "ArrowDown" });
     await within(preview).findByText("Could not load messages.");
   });
 
@@ -185,7 +185,7 @@ describe("launcher", () => {
   it("filters by query and opens the selected thread", async () => {
     const slot = await renderLauncher();
     pressModK();
-    const input = await slot.findByRole("textbox");
+    const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "cleanup" } });
     expect(slot.getByRole("option", { selected: true }).textContent).toContain("Old cleanup");
     fireEvent.keyDown(input, { key: "Enter" });
@@ -198,7 +198,7 @@ describe("launcher", () => {
   it("opens the actions panel and pins a thread", async () => {
     const slot = await renderLauncher();
     pressModK();
-    const input = await slot.findByRole("textbox");
+    const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "old cleanup" } });
     fireEvent.keyDown(input, { key: "k", ctrlKey: true });
     await slot.findByRole("group", { name: "Actions" });
@@ -212,7 +212,7 @@ describe("launcher", () => {
   it("starts a thread in the current project from a typed prompt", async () => {
     const slot = await renderLauncher();
     pressModK();
-    const input = await slot.findByRole("textbox");
+    const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "add retry to the CER loop" } });
     fireEvent.mouseMove(await slot.findByText("Ask in hss"));
     fireEvent.keyDown(input, { key: "Enter" });
@@ -228,7 +228,7 @@ describe("launcher", () => {
     );
     const slot = await renderLauncher({ threads });
     pressModK();
-    const input = await slot.findByRole("textbox");
+    const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "go-diameter" } });
     fireEvent.mouseMove(within(slot.getByRole("group", { name: "Projects" })).getByText("go-diameter"));
     fireEvent.keyDown(input, { key: "Enter" });
@@ -241,7 +241,7 @@ describe("launcher", () => {
   it("toggles an app setting from the settings page", async () => {
     const slot = await renderLauncher();
     pressModK();
-    const input = await slot.findByRole("textbox");
+    const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "streamer" } });
     await slot.findByText("Streamer mode");
     fireEvent.mouseMove(slot.getByText("Streamer mode"));
@@ -255,7 +255,7 @@ describe("launcher", () => {
   it("lists results from plugins that publish launcher.search and runs their action", async () => {
     const slot = await renderLauncher();
     pressModK();
-    const input = await slot.findByRole("textbox");
+    const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "deep" } });
     const group = await slot.findByRole("group", { name: "Spotify playlists" });
     expect(group.textContent).toContain("Deep Work");
@@ -268,18 +268,52 @@ describe("launcher", () => {
     await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
   });
 
+  it("points the search field at the selected result and starts over as you type", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    const selected = () => slot.getByRole("option", { selected: true });
+    expect(input.getAttribute("aria-controls")).toBe(slot.getByRole("listbox").id);
+    expect(input.getAttribute("aria-activedescendant")).toBe(selected().id);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(selected().textContent).toContain("Pinned rollout plan");
+    expect(input.getAttribute("aria-activedescendant")).toBe(selected().id);
+    fireEvent.change(input, { target: { value: "o" } });
+    expect(slot.getAllByRole("option")[0]).toBe(selected());
+  });
+
+  it("returns to the same result after its actions close", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(slot.getByRole("option", { selected: true }).textContent).toContain("Old cleanup");
+    fireEvent.keyDown(input, { key: "k", ctrlKey: true });
+    await slot.findByRole("group", { name: "Actions" });
+    fireEvent.keyDown(slot.getByRole("combobox"), { key: "Escape" });
+    await waitFor(() => expect(slot.getByRole("option", { selected: true }).textContent).toContain("Old cleanup"));
+  });
+
+  it("keeps focus in the search field when a result is clicked", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    await slot.findByRole("dialog");
+    expect(fireEvent.mouseDown(slot.getByText("Old cleanup"))).toBe(false);
+  });
+
   it("goes back with Escape before closing", async () => {
     const slot = await renderLauncher();
     pressModK();
-    const input = await slot.findByRole("textbox");
+    const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "plugins" } });
     fireEvent.mouseMove(await slot.findByText("Plugins…"));
     fireEvent.keyDown(input, { key: "Enter" });
     await slot.findByText("Plugins", { selector: "span" });
     expect(callCount(slot.inspection.sdkCalls, "plugins.list")).toBe(1);
-    fireEvent.keyDown(slot.getByRole("textbox"), { key: "Escape" });
-    await waitFor(() => expect(slot.getByRole("textbox").getAttribute("placeholder")).toContain("Search threads"));
-    fireEvent.keyDown(slot.getByRole("textbox"), { key: "Escape" });
+    fireEvent.keyDown(slot.getByRole("combobox"), { key: "Escape" });
+    await waitFor(() => expect(slot.getByRole("combobox").getAttribute("placeholder")).toContain("Search threads"));
+    fireEvent.keyDown(slot.getByRole("combobox"), { key: "Escape" });
     await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
   });
 });
