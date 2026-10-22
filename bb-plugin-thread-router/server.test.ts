@@ -76,6 +76,20 @@ describe("thread router", () => {
     expect(updates()).toEqual([{ threadId: "thr_1", sectionId: REVIEWS.id }]);
   });
 
+  it("files the thread in other when the classifier fails", async () => {
+    const { harness, created, active, updates } = await setup();
+    harness.inspection.sdk.stub("threads.wait", async () => {
+      throw new Error("timed out");
+    });
+    await created();
+    await active();
+    expect(updates()).toEqual([{ threadId: "thr_1", sectionId: OTHER.id }]);
+    expect(harness.inspection.logEntries).toContainEqual({
+      level: "error",
+      message: "failed to classify thr_1, filing it in other: timed out",
+    });
+  });
+
   it("names from the project when the classifier gives no topic, even with no sections to pick", async () => {
     const { harness, created, active, updates } = await setup({ sections: [OTHER], output: "other" });
     await created();

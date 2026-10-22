@@ -16,6 +16,8 @@ const pendingKey = (threadId: string) => `pending:${threadId}`;
 const normalize = (name: string) =>
   name.trim().toLowerCase().replace(/^["'`*\s]+|["'`*.\s]+$/g, "");
 
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
 export default async function plugin(bb: BbPluginApi) {
   const settings = bb.settings.define({
     providerId: {
@@ -67,7 +69,7 @@ export default async function plugin(bb: BbPluginApi) {
     try {
       await route(thread.id, pending.untitled);
     } catch (error) {
-      bb.log.error(`failed to route ${thread.id}: ${error instanceof Error ? error.message : String(error)}`);
+      bb.log.error(`failed to route ${thread.id}: ${errorMessage(error)}`);
     } finally {
       await bb.storage.kv.delete(pendingKey(thread.id));
       inFlight.delete(thread.id);
@@ -89,7 +91,13 @@ export default async function plugin(bb: BbPluginApi) {
       sections.find((section) => normalize(section.name) === FALLBACK_SECTION) ??
       (await bb.sdk.threadSections.create({ name: FALLBACK_SECTION }));
     const candidates = sections.filter((section) => section.id !== fallback.id);
-    const verdict = candidates.length > 0 || rename ? await classify(thread, candidates, config) : null;
+    const verdict =
+      candidates.length > 0 || rename
+        ? await classify(thread, candidates, config).catch((error) => {
+            bb.log.error(`failed to classify ${threadId}, filing it in ${fallback.name}: ${errorMessage(error)}`);
+            return null;
+          })
+        : null;
     const target = verdict?.section ?? fallback;
 
     const current = await bb.sdk.threads.get({ threadId });
