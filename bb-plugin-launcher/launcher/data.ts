@@ -82,9 +82,14 @@ export function useLauncherState() {
   return { state, recordUse, setProjectPinned };
 }
 
-export function useAppConfig(): AsyncState<AppConfig> {
+export function useAppConfig(open: boolean): AsyncState<AppConfig> {
   const sdk = useSdk();
-  return useAsync((signal) => sdk.system.config({ signal }), [sdk]);
+  const config = useAsync((signal) => sdk.system.config({ signal }), [sdk]);
+  const { reload } = config;
+  useEffect(() => {
+    if (open) reload();
+  }, [open, reload]);
+  return config;
 }
 
 export function useMessageSearch(query: string): SearchHit[] {

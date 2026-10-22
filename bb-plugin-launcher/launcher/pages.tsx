@@ -21,7 +21,7 @@ import { useLauncher, type LauncherContextValue } from "./context";
 import { useMessageSearch, type SearchHit } from "./data";
 import { newThreadAction, projectItem, spawnAction, threadItem } from "./items";
 import { shortcutLabel } from "./keys";
-import { pluginItem, pluginKey, pluginTerms, usePlugins } from "./plugins";
+import { pluginItem, pluginKey, pluginTerms } from "./plugins";
 import { commandKey, isRunning, needsAttention, projectKey, rank, rootGroups, threadKey, visibleThreads } from "./rank";
 import { Results } from "./Results";
 import { useSourceSections } from "./sources";
@@ -168,9 +168,8 @@ function messageItem(ctx: LauncherContextValue, hit: SearchHit): Item {
 
 export function RootPage({ query, showPreview }: PageProps) {
   const ctx = useLauncher();
-  const plugins = usePlugins();
   const hits = useMessageSearch(query);
-  const sources = useSourceSections(query, plugins.data);
+  const sources = useSourceSections(query, ctx.plugins.data);
   const sections = useMemo((): Section[] => {
     const toThread = (thread: PluginSidebarThread) => threadItem(thread, ctx);
     const toProject = (project: PluginSidebarProject) => projectItem(project, ctx);
@@ -188,7 +187,7 @@ export function RootPage({ query, showPreview }: PageProps) {
     }
     const rankItems = (items: Item[], limit = 8) =>
       rank(items, query, itemTerms, (item) => item.usageKey ?? item.id, ctx.state.usage, ctx.now, limit);
-    const reloadPlugins = plugins.reload;
+    const { plugins } = ctx;
     return [
       { title: "Threads", items: rankThreads(ctx, visibleThreads(ctx.threads), query).map(toThread) },
       { title: "Projects", items: rankProjects(ctx, query).slice(0, 8).map(toProject) },
@@ -198,13 +197,13 @@ export function RootPage({ query, showPreview }: PageProps) {
       {
         title: "Plugins",
         items: rank(plugins.data ?? [], query, pluginTerms, (plugin) => pluginKey(plugin.id), ctx.state.usage, ctx.now, 6).map(
-          (plugin) => pluginItem(ctx, plugin, reloadPlugins),
+          (plugin) => pluginItem(ctx, plugin, plugins.reload),
         ),
       },
       { title: "Ask an agent", items: quickPromptItems(ctx, query.trim()) },
       { title: "Messages", items: hits.map((hit) => messageItem(ctx, hit)) },
     ];
-  }, [ctx, query, plugins.data, plugins.reload, hits, sources]);
+  }, [ctx, query, hits, sources]);
   return <Results sections={sections} query={query} showPreview={showPreview} />;
 }
 

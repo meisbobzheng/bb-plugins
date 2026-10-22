@@ -47,10 +47,13 @@ const THREADS = [
   makeThread({ id: "thr_old", displayTitle: "Old cleanup", updatedAt: 1 }),
 ];
 
-async function renderLauncher(settings: Record<string, boolean> = {}) {
+async function renderLauncher(
+  settings: Record<string, boolean> = {},
+  initialState: LauncherState = { pinnedProjectIds: [], usage: {} },
+) {
   const app = await loadPluginApp(() => import("./app"));
   const overlay = app.appOverlays[0]!;
-  let state: LauncherState = { pinnedProjectIds: [], usage: {} };
+  let state = initialState;
   const sdk = {
     system: {
       config: async () => ({ generalSettings: GENERAL }),
@@ -98,6 +101,9 @@ async function renderLauncher(settings: Record<string, boolean> = {}) {
 }
 
 const pressModK = () => fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+const callCount = (calls: readonly { method: string }[], method: string) =>
+  calls.filter((call) => call.method === method).length;
 
 describe("launcher", () => {
   it("opens with ⌘K and groups threads by attention, pins, and projects", async () => {
@@ -109,6 +115,18 @@ describe("launcher", () => {
     expect(slot.getByRole("group", { name: "Pinned" }).textContent).toContain("Pinned rollout plan");
     expect(slot.getByRole("group", { name: "Projects" }).textContent).toContain("go-diameter");
     await slot.findByText("Please check the CER");
+  });
+
+  it("has pins and usage loaded before it opens and keeps them between opens", async () => {
+    const slot = await renderLauncher({}, { pinnedProjectIds: ["proj_b"], usage: {} });
+    await settle();
+    pressModK();
+    expect(slot.getByRole("group", { name: "Pinned" }).textContent).toContain("go-diameter");
+    act(() => launcher.close());
+    pressModK();
+    await slot.findByRole("dialog");
+    expect(callCount(slot.inspection.rpcCalls, "state_get")).toBe(1);
+    expect(callCount(slot.inspection.sdkCalls, "system.config")).toBe(3);
   });
 
   it("leaves ⌘K to bb when the shortcut setting is off", async () => {
@@ -195,6 +213,7 @@ describe("launcher", () => {
     fireEvent.mouseMove(await slot.findByText("Plugins…"));
     fireEvent.keyDown(input, { key: "Enter" });
     await slot.findByText("Plugins", { selector: "span" });
+    expect(callCount(slot.inspection.sdkCalls, "plugins.list")).toBe(1);
     fireEvent.keyDown(slot.getByRole("textbox"), { key: "Escape" });
     await waitFor(() => expect(slot.getByRole("textbox").getAttribute("placeholder")).toContain("Search threads"));
     fireEvent.keyDown(slot.getByRole("textbox"), { key: "Escape" });

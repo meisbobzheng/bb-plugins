@@ -1,9 +1,9 @@
-import { experimental_Icon as Icon, experimental_copyToClipboard as copyToClipboard } from "@get-bb/plugin-sdk/app";
+import { experimental_Icon as Icon, experimental_copyToClipboard as copyToClipboard, useSdk } from "@get-bb/plugin-sdk/app";
 import { ArrowRight, Check, Copy, ExternalLink, Pencil, Power, PowerOff, Puzzle, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { Toggle, ValueBadge } from "./badges";
 import { useLauncher, type LauncherContextValue } from "./context";
-import { useAsync, type PluginEntry, type PluginSettings } from "./data";
+import { errorMessage, useAsync, type AsyncState, type PluginEntry, type PluginSettings } from "./data";
 import { rank } from "./rank";
 import { Results } from "./Results";
 import type { Item, Section } from "./types";
@@ -34,9 +34,14 @@ export function PluginIcon({ plugin }: { plugin: PluginEntry }) {
   return <Puzzle className="size-4 text-muted-foreground" aria-hidden />;
 }
 
-export function usePlugins() {
-  const { sdk } = useLauncher();
+export function usePlugins(): AsyncState<PluginEntry[]> {
+  const sdk = useSdk();
   return useAsync((signal) => sdk.plugins.list({ signal }).then(({ plugins }) => plugins), [sdk]);
+}
+
+function pluginsEmptyText({ data, error }: AsyncState<PluginEntry[]>, loaded: string): string {
+  if (data !== undefined) return loaded;
+  return error === null ? "Loading plugins…" : `Could not load plugins: ${errorMessage(error)}`;
 }
 
 export const pluginTerms = (plugin: PluginEntry) => [plugin.name ?? plugin.id, plugin.id, plugin.description ?? ""];
@@ -110,7 +115,7 @@ export function pluginItem(ctx: LauncherContextValue, plugin: PluginEntry, reloa
 
 export function PluginsPage({ query, showPreview }: { query: string; showPreview: boolean }) {
   const ctx = useLauncher();
-  const { data, reload } = usePlugins();
+  const { data, reload } = ctx.plugins;
   const plugins = rank(data ?? [], query, pluginTerms, (plugin) => pluginKey(plugin.id), ctx.state.usage, ctx.now, 200);
   const toItem = (plugin: PluginEntry) => pluginItem(ctx, plugin, reload);
   const sections: Section[] =
@@ -121,7 +126,7 @@ export function PluginsPage({ query, showPreview }: { query: string; showPreview
         ]
       : [{ title: "Plugins", items: plugins.map(toItem) }];
   return (
-    <Results sections={sections} query={query} showPreview={showPreview} emptyText={data === undefined ? "Loading plugins…" : "No plugins"} />
+    <Results sections={sections} query={query} showPreview={showPreview} emptyText={pluginsEmptyText(ctx.plugins, "No plugins")} />
   );
 }
 
@@ -252,7 +257,7 @@ function settingItem(
 
 export function PluginPage({ pluginId, query, showPreview }: { pluginId: string; query: string; showPreview: boolean }) {
   const ctx = useLauncher();
-  const plugins = usePlugins();
+  const { plugins } = ctx;
   const plugin = plugins.data?.find((candidate) => candidate.id === pluginId);
   const settings = useAsync(
     (signal) =>
@@ -260,7 +265,7 @@ export function PluginPage({ pluginId, query, showPreview }: { pluginId: string;
     [ctx.sdk, pluginId, plugin?.hasSettings],
   );
   if (plugin === undefined) {
-    return <Results sections={[]} query={query} showPreview={false} emptyText={plugins.data ? "Plugin not found" : "Loading…"} />;
+    return <Results sections={[]} query={query} showPreview={false} emptyText={pluginsEmptyText(plugins, "Plugin not found")} />;
   }
   const reload = () => {
     plugins.reload();

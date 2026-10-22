@@ -6,7 +6,7 @@ import type {
   PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import type { LauncherState } from "../model";
-import type { AppConfig, AsyncState, Sdk } from "./data";
+import type { AppConfig, AsyncState, PluginEntry, Sdk } from "./data";
 import type { Controls } from "./types";
 
 export type ProviderInfo = PluginProvidersState["providers"][number];
@@ -26,6 +26,7 @@ export interface LauncherContextValue {
   currentProjectId: string | null;
   providers: ReadonlyMap<string, ProviderInfo>;
   config: AsyncState<AppConfig>;
+  plugins: AsyncState<PluginEntry[]>;
 }
 
 export const LauncherContext = createContext<LauncherContextValue | null>(null);

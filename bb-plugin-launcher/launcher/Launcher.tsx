@@ -12,7 +12,7 @@ import {
 import { ArrowLeft, Search } from "lucide-react";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import { LauncherContext, type LauncherContextValue } from "./context";
-import { useAppConfig, useLauncherState } from "./data";
+import { useAppConfig, useLauncherState, type AppConfig, type AsyncState } from "./data";
 import { MOD_K, matchesShortcut } from "./keys";
 import {
   ActionsPage,
@@ -22,7 +22,7 @@ import {
   ProjectPage,
   RootPage,
 } from "./pages";
-import { PluginPage, PluginsPage } from "./plugins";
+import { PluginPage, PluginsPage, usePlugins } from "./plugins";
 import { projectKey } from "./rank";
 import { KeyHandlerContext, type KeyHandler } from "./Results";
 import { ProvidersPage, SettingsPage, ThemesPage } from "./settings";
@@ -130,7 +130,13 @@ function PageView({ frame, showPreview }: { frame: Frame; showPreview: boolean }
   }
 }
 
-function LauncherWindow({ showPreview }: { showPreview: boolean }) {
+interface LauncherWindowProps {
+  showPreview: boolean;
+  launcherState: ReturnType<typeof useLauncherState>;
+  config: AsyncState<AppConfig>;
+}
+
+function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowProps) {
   const [stack, setStack] = useState<Frame[]>([{ page: { kind: "root" }, query: "" }]);
   const top = stack[stack.length - 1]!;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -144,8 +150,8 @@ function LauncherWindow({ showPreview }: { showPreview: boolean }) {
   const bbContext = useBbContext();
   const { threads, projects } = experimental_useSidebarThreads();
   const { providers } = experimental_useProviders();
-  const { state, recordUse, setProjectPinned } = useLauncherState();
-  const config = useAppConfig();
+  const { state, recordUse, setProjectPinned } = launcherState;
+  const plugins = usePlugins();
   const [now] = useState(Date.now);
 
   const controls = useMemo<Controls>(
@@ -182,8 +188,9 @@ function LauncherWindow({ showPreview }: { showPreview: boolean }) {
       currentProjectId: bbContext.projectId ?? activeThreadProject ?? frecentProject ?? null,
       providers: new Map(providers.map((provider) => [provider.id, provider])),
       config,
+      plugins,
     };
-  }, [sdk, navigate, controls, pluginId, now, state, recordUse, setProjectPinned, threads, projects, providers, bbContext, config]);
+  }, [sdk, navigate, controls, pluginId, now, state, recordUse, setProjectPinned, threads, projects, providers, bbContext, config, plugins]);
 
   useEffect(() => inputRef.current?.focus(), [stack.length]);
 
@@ -271,12 +278,14 @@ export function LauncherOverlay() {
   const open = useLauncherOpen();
   const { values } = useSettings();
   const scopeProps = usePortalScopeProps();
+  const launcherState = useLauncherState();
+  const config = useAppConfig(open);
   useModKInterceptor(values?.replaceShortcut !== false);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => (next ? launcher.open() : launcher.close())}>
       <Dialog.Portal>
         <Dialog.Overlay {...scopeProps} className="fixed inset-0 z-50 bg-black/30" />
-        {open ? <LauncherWindow showPreview={values?.showPreview !== false} /> : null}
+        {open ? <LauncherWindow showPreview={values?.showPreview !== false} launcherState={launcherState} config={config} /> : null}
       </Dialog.Portal>
     </Dialog.Root>
   );
