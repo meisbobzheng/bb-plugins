@@ -429,6 +429,19 @@ describe("pull detail cache", () => {
     expect(count()).toEqual({ full: 3, checks: 2 });
   });
 
+  it("reuses the merge base while the PR's base and head commits stay the same", async () => {
+    const { harness, runner, response } = counting();
+    const fetch = () => harness.behavior.callRpc("pull", { repo: "acme/app", number: 7, refresh: true }) as Promise<{ mergeBaseSha: string }>;
+    const compares = () => runner.calls.filter((call) => String(call.args[1]).includes("/compare/")).length;
+    await fetch();
+    response.data.repository.pullRequest.updatedAt = "2026-10-14T12:01:00Z";
+    expect((await fetch()).mergeBaseSha).toBe(MERGE_BASE);
+    expect(compares()).toBe(1);
+    response.data.repository.pullRequest.headRefOid = "4".repeat(40);
+    await fetch();
+    expect(compares()).toBe(2);
+  });
+
   it("trusts the board's check from the last 50 seconds instead of asking GitHub again", async () => {
     const { harness, runner, count, open } = counting();
     runner.board.push({ ...boardNode(7), id: "PR_node" });

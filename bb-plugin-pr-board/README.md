@@ -114,7 +114,8 @@ it again when it changed:
   the board checked the PR in the last 50 seconds and it has not been updated,
   it skips even that.
 - Only a change, a PR Board action on the PR, or the page's refresh fetches the
-  PR, its files, viewed states, and merge base again. Marking a file viewed in
+  PR, its files, and viewed states again, and its merge base only when the
+  base or head commit moved. Marking a file viewed in
   PR Board updates the saved PR; marking it on GitHub's website is not noticed
   until the PR changes.
 

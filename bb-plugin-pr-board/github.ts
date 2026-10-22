@@ -47,6 +47,7 @@ export const runCommand: Runner = (command, args, options) =>
 export type Gh = (args: readonly string[], options?: Partial<RunOptions>) => Promise<string>;
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
+const MERGE_BASE_LIMIT = 500;
 
 const actorSchema = z.object({
   __typename: z.string().optional(),
@@ -554,6 +555,17 @@ export function createGitHub(gh: Gh) {
     return viewed;
   }
 
+  const mergeBases = new Map<string, string>();
+  async function mergeBase(repo: string, base: string, head: string): Promise<string> {
+    const path = `repos/${repo}/compare/${base}...${head}`;
+    const known = mergeBases.get(path);
+    if (known !== undefined) return known;
+    const sha = (await gh(["api", path, "--jq", ".merge_base_commit.sha"], { timeoutMs: 60_000 })).trim();
+    mergeBases.set(path, sha);
+    if (mergeBases.size > MERGE_BASE_LIMIT) mergeBases.delete(mergeBases.keys().next().value!);
+    return sha;
+  }
+
   return {
     async listPulls(repo: string): Promise<ListedPull[]> {
       return parseListedPulls(await graphql(LIST_QUERY, split(repo)));
@@ -593,11 +605,7 @@ export function createGitHub(gh: Gh) {
       ]);
       const { viewer, repository } = pullSchema.parse(JSON.parse(rawPull)).data;
       const pull = repository.pullRequest;
-      const mergeBaseSha = (
-        await gh(["api", `repos/${repo}/compare/${pull.baseRefOid}...${pull.headRefOid}`, "--jq", ".merge_base_commit.sha"], {
-          timeoutMs: 60_000,
-        })
-      ).trim();
+      const mergeBaseSha = await mergeBase(repo, pull.baseRefOid, pull.headRefOid);
       const threads: ReviewThread[] = pull.reviewThreads.nodes.map((thread) => ({
         id: thread.id,
         path: thread.path,
