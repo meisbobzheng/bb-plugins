@@ -549,6 +549,21 @@ describe("review threads", () => {
     expect(second).toEqual({ threadId: "thr_review", created: false });
     expect(harness.inspection.sdk.callsTo("threads.spawn")).toHaveLength(1);
   });
+
+  it("announces its PR when a review thread starts, stops, or is archived, and ignores other threads", async () => {
+    const { harness } = setup();
+    await harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
+    await vi.waitFor(() => expect(harness.inspection.sdk.callsTo("threads.send")).toHaveLength(1));
+    const before = harness.inspection.realtimeSignals.length;
+    const review = makeThreadResponse({ id: "thr_review" });
+    await harness.behavior.emitThreadEvent("thread.idle", { thread: review, lastAssistantText: null });
+    await harness.behavior.emitThreadEvent("thread.archived", { thread: review });
+    await harness.behavior.emitThreadEvent("thread.active", { thread: makeThreadResponse({ id: "thr_other" }) });
+    expect(harness.inspection.realtimeSignals.slice(before)).toEqual([
+      { channel: "pr-board-updates", payload: { repo: "acme/app", number: 7 } },
+      { channel: "pr-board-updates", payload: { repo: "acme/app", number: 7 } },
+    ]);
+  });
 });
 
 describe("archiving finished reviews", () => {

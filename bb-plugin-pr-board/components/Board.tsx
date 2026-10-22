@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useBbNavigate, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import { UPDATES_CHANNEL } from "../channel";
 import type { BoardCard, Checks, Column, ReviewerState, rpcContract } from "../contract";
 import { BOARD_PANEL, workspacePath } from "../routes";
 import { cn } from "../lib/utils";
@@ -11,6 +10,7 @@ import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { Input } from "./ui/input";
 import { usePreference, useStoredSet, type StoredSet } from "./use-preference";
+import { useUpdates } from "./use-updates";
 
 const COLUMNS: ReadonlyArray<{ id: Column; title: string; hint: string }> = [
   { id: "draft", title: "Draft", hint: "Draft pull requests" },
@@ -486,7 +486,7 @@ export function BoardView() {
   const reloadIfVisible = useCallback(() => {
     if (document.visibilityState === "visible") board.reload();
   }, [board.reload]);
-  useRealtime(UPDATES_CHANNEL, reloadIfVisible);
+  useUpdates(null, reloadIfVisible);
   useEffect(() => {
     const timer = setInterval(reloadIfVisible, REFRESH_MS);
     document.addEventListener("visibilitychange", reloadIfVisible);

@@ -67,6 +67,8 @@ everything else that uses your `gh` login), the board refreshes cheaply:
   becomes visible again; it does not check while hidden. The server reuses a
   check for 50 seconds, so going in and out of the board costs nothing, and
   live updates from review threads also wait until the board is visible.
+  A review or address thread starting, finishing, or being archived updates
+  the board and the review page at once, without polling.
 - A check lists only the repository's open PRs with each one's id, number, last update
   time, and CI status (about 1 point). CI status updates the cards directly.
 - Full details (reviewers, reviews, comments, and review threads) are fetched

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { experimental_useAppPanel, useBbNavigate, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { experimental_useAppPanel, useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import { UPDATES_CHANNEL } from "../channel";
 import type {
   Definition,
   DefinitionResult,
@@ -28,6 +27,7 @@ import { SubmitReviewDialog } from "./SubmitReview";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { usePreference } from "./use-preference";
+import { useUpdates } from "./use-updates";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { useWidth } from "./use-width";
 
@@ -51,12 +51,6 @@ const lastPaths = new Map<string, string>();
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
-}
-
-function samePull(payload: unknown, pull: PullRoute): boolean {
-  if (typeof payload !== "object" || payload === null) return true;
-  const { repo, number } = payload as { repo?: unknown; number?: unknown };
-  return repo === pull.repo && number === pull.number;
 }
 
 function useReviewThread(pull: PullRoute, onReady: () => void) {
@@ -91,9 +85,7 @@ export function ReviewWorkspace({ pull }: { pull: PullRoute }) {
     return rpc.call("pull", { ...pull, refresh });
   });
   const state = useCached(`state:${key}`, () => rpc.call("reviewState", pull));
-  useRealtime(UPDATES_CHANNEL, (payload) => {
-    if (samePull(payload, pull)) state.reload();
-  });
+  useUpdates(pull, state.reload);
   useReviewThread(pull, state.reload);
   const refreshDetail = useCallback(() => {
     force.current = true;
@@ -131,7 +123,6 @@ const EMPTY_STATE: ReviewState = {
   addressAgent: { threadId: null, running: false },
   suggestions: [],
 };
-const ADDRESS_POLL_MS = 10_000;
 
 function Workspace({
   detail,
@@ -475,12 +466,6 @@ function Workspace({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [back, current?.kind, stepFile]);
-
-  useEffect(() => {
-    if (!review.addressAgent.running) return;
-    const timer = setInterval(reloadState, ADDRESS_POLL_MS);
-    return () => clearInterval(timer);
-  }, [reloadState, review.addressAgent.running]);
 
   const scoped = useMemo(() => {
     const path = currentFile?.path;

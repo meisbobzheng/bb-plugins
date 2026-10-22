@@ -352,6 +352,20 @@ describe("review workspace", () => {
     expect(saved[0]).toMatchObject({ repo: "acme/app", number: 7, id: null, path: "cmd/main.go", side: "additions", startLine: 3, endLine: 4 });
   });
 
+  it("reloads the review state on its own PR's updates and after the connection comes back", async () => {
+    const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/7" }, { rpc: workspaceRpc(STATE) });
+    await slot.findByText("Add thing");
+    const states = () => slot.inspection.rpcCalls.filter((call) => call.method === "reviewState").length;
+    await waitFor(() => expect(states()).toBe(2));
+    await slot.behavior.emitRealtime("pr-board-updates", { repo: "acme/app", number: 8 });
+    expect(states()).toBe(2);
+    await slot.behavior.emitRealtime("pr-board-updates", { repo: "acme/app", number: 7 });
+    await waitFor(() => expect(states()).toBe(3));
+    await slot.behavior.setRealtimeConnectionState("reconnecting");
+    await slot.behavior.setRealtimeConnectionState("connected");
+    await waitFor(() => expect(states()).toBe(4));
+  });
+
   it("stacks the file list above a unified diff when the page is narrow", async () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 700, 900));
     const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/7" }, { rpc: workspaceRpc(STATE) });
@@ -552,5 +566,15 @@ describe("thread tabs", () => {
     );
     await waitFor(() => expect(started.inspection.rpcCalls.some((call) => call.method === "reviewState")).toBe(true));
     await waitFor(() => expect(started.queryByText(/Loading the address thread|No address thread yet/)).toBeNull());
+  });
+
+  it("reloads a thread tab only for its own PR's updates", async () => {
+    const slot = renderSlot(fixedTab("thread"), { subPath: "pr/acme/app/13" }, { rpc: { reviewState: () => STATE } });
+    const states = () => slot.inspection.rpcCalls.filter((call) => call.method === "reviewState").length;
+    await waitFor(() => expect(states()).toBe(1));
+    await slot.behavior.emitRealtime("pr-board-updates", { repo: "acme/app", number: 14 });
+    expect(states()).toBe(1);
+    await slot.behavior.emitRealtime("pr-board-updates", { repo: "acme/app", number: 13 });
+    await waitFor(() => expect(states()).toBe(2));
   });
 });

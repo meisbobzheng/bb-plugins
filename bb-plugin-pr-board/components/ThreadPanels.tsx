@@ -1,10 +1,10 @@
-import { ThreadChat, useBbNavigate, useRealtime, useRpc, type PluginNavPanelProps, type PluginThreadHeaderActionProps } from "@get-bb/plugin-sdk/app";
-import { UPDATES_CHANNEL } from "../channel";
+import { ThreadChat, useBbNavigate, useRpc, type PluginNavPanelProps, type PluginThreadHeaderActionProps } from "@get-bb/plugin-sdk/app";
 import type { rpcContract } from "../contract";
 import { BOARD_PANEL, parseWorkspacePath, workspacePath, type PullRoute } from "../routes";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { useCached } from "./cache";
+import { useUpdates } from "./use-updates";
 
 function Hint({ children }: { children: string }) {
   return <p className="p-4 text-sm text-muted-foreground">{children}</p>;
@@ -20,7 +20,7 @@ type ThreadKind = keyof typeof THREAD_KINDS;
 function PullThread({ pull, kind }: { pull: PullRoute; kind: ThreadKind }) {
   const rpc = useRpc<typeof rpcContract>();
   const state = useCached(`state:${pull.repo}#${pull.number}`, () => rpc.call("reviewState", pull));
-  useRealtime(UPDATES_CHANNEL, state.reload);
+  useUpdates(pull, state.reload);
   const { name, missing } = THREAD_KINDS[kind];
   const threadId = (kind === "review" ? state.value?.agent.threadId : state.value?.addressAgent.threadId) ?? null;
   if (state.value === null) return <Hint>{state.error ?? `Loading the ${name}…`}</Hint>;

@@ -43,6 +43,7 @@ const SKILL_NAME = "pr-board";
 const LIST_TTL_MS = 50_000;
 const DETAIL_REFRESH_MS = 15 * 60_000;
 const ARCHIVE_SCHEDULE = "*/15 * * * *";
+const THREAD_EVENTS = ["thread.active", "thread.idle", "thread.failed", "thread.archived", "thread.unarchived", "thread.deleted"] as const;
 const PULL_TTL_MS = 50_000;
 const VIEWER_TTL_MS = 60 * 60_000;
 const FILE_CACHE_BYTES = 64 * 1024 * 1024;
@@ -254,6 +255,12 @@ export function createPlugin(deps: PluginDeps) {
     function publish(pull: PullKey): void {
       bb.realtime.publish(UPDATES_CHANNEL, { repo: pull.repo, number: pull.number });
     }
+
+    function publishThreadPull({ thread }: { thread: { id: string } }): void {
+      const pull = store.pullForThread(thread.id) ?? store.pullForAddressThread(thread.id);
+      if (pull !== null) publish(pull);
+    }
+    for (const event of THREAD_EVENTS) bb.events.on(event, publishThreadPull);
 
     let viewerCache: Cached<Viewer> | undefined;
     async function viewer(): Promise<Viewer> {
