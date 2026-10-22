@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { Spend } from "./spend";
-import type { ContextUsage, PlanUsage } from "./sources";
+import type { PlanUsage } from "./server";
+import type { ContextUsage } from "./sources";
 
 export interface MeterData {
   context: ContextUsage | null;

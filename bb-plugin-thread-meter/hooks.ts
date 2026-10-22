@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import { experimental_useSidebarThreads, useSdk } from "@get-bb/plugin-sdk/app";
-import { loadContext, loadPlanUsage, loadSpend } from "./sources";
+import { experimental_useSidebarThreads, useRpc, useSdk } from "@get-bb/plugin-sdk/app";
+import type { rpcContract } from "./server";
+import { loadContext, loadSpend } from "./sources";
 
 type Feed = "context" | "spend" | "plan";
 type Ticks = Readonly<Record<Feed, number>>;
@@ -70,7 +71,9 @@ function useLoaded<T>(
     if (key === null) return;
     const controller = new AbortController();
     loadRef.current(controller.signal).then(
-      (value) => setLoaded({ key, value }),
+      (value) => {
+        if (!controller.signal.aborted) setLoaded({ key, value });
+      },
       () => {},
     );
     return () => controller.abort();
@@ -88,6 +91,7 @@ export function useThreadMeter({
   model: string | undefined;
 }) {
   const sdk = useSdk();
+  const rpc = useRpc<typeof rpcContract>();
   const ticks = useThreadTicks(threadId);
   const { threads } = experimental_useSidebarThreads();
   const hostId = threads.find((thread) => thread.id === threadId)?.host?.id;
@@ -100,9 +104,9 @@ export function useThreadMeter({
   const plan = useLoaded(
     providerId ? `${providerId}:${hostId ?? ""}` : null,
     ticks.plan,
-    (signal) =>
+    () =>
       providerId
-        ? loadPlanUsage(sdk, { providerId, hostId, refresh: ticks.plan > 0, signal })
+        ? rpc.call("plan_usage_get", { providerId, hostId: hostId ?? null, refresh: ticks.plan > 0 })
         : Promise.resolve(null),
   );
   return { context, spend, plan };

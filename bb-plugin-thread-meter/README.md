@@ -25,7 +25,7 @@ thresholds bb uses for its own context indicator.
 | --- | --- | --- |
 | Context | `threads.context` | `thread/contextWindowUsage/updated`, compaction, context clear |
 | Tokens and cost | `thread/tokenUsage/updated` events, each priced with the model from the preceding `client/turn/requested` | each new token-usage event |
-| Plan usage | the `provider-usage.v1` RPC published by the thread's provider plugin | each `turn/completed` |
+| Plan usage | the `provider-usage.v1` RPC published by the thread's provider plugin, called from this plugin's server so the app bundle stays small | each `turn/completed` |
 
 Updates arrive over bb's realtime `thread:changed` feed, with no polling. All
 feeds reload after a realtime reconnect.
@@ -44,7 +44,7 @@ feeds reload after a realtime reconnect.
 
 ```
 npm install --include=dev
-npm test             # vitest: pricing and aggregation, composer wiring
+npm test             # vitest: pricing and aggregation, plan usage lookup, composer wiring
 npm run typecheck
 bb plugin build .
 bb plugin install .  # or `bb plugin dev` for rebuild-on-save

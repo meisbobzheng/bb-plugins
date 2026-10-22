@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot, type PluginSdkTestFakes } from "@get-bb/plugin-sdk/testing/app";
+import type { rpcContract } from "./server";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -14,7 +15,6 @@ beforeAll(() => {
 afterEach(cleanup);
 
 const THREAD_ID = "thr_test";
-const USAGE_SOURCE = "provider-claude-code";
 
 const requested = (seq: number, model: string) => ({
   id: `evt_${seq}`,
@@ -64,30 +64,6 @@ function fakeBb(events: unknown[]) {
           events.filter((event) => (event as { seq: number }).seq > Number(afterSeq ?? 0)),
       },
     },
-    plugins: {
-      experimental_discoverRpc: async () => [{ pluginId: USAGE_SOURCE }],
-      callRpc: async ({ method }: { method: string }) =>
-        method === "provider-usage.v1.listResources"
-          ? {
-              resources: [
-                {
-                  id: "res",
-                  providerId: "claude-code",
-                  scope: { kind: "host", hostId: "host_1" },
-                },
-              ],
-            }
-          : {
-              usage: {
-                status: "ok",
-                planLabel: "Max (5x)",
-                windows: [
-                  { id: "5h", label: "Current session", usedPercent: 12, resetsAt: null },
-                  { id: "wk", label: "Weekly limit", usedPercent: 40, resetsAt: null },
-                ],
-              },
-            },
-    },
   };
   const emit = (eventTypes: string[]) =>
     act(async () => {
@@ -102,8 +78,17 @@ async function renderMeter(events: unknown[]) {
   const app = await loadPluginApp(() => import("./app"));
   const action = app.composerCustomizations[0]!.actions![0]!;
   const { sdk, emit } = fakeBb(events);
-  const slot = renderSlot(action, {}, {
+  const slot = renderSlot<object, typeof rpcContract>(action, {}, {
     sdk,
+    rpc: {
+      plan_usage_get: () => ({
+        planLabel: "Max (5x)",
+        windows: [
+          { id: "5h", label: "Current session", usedPercent: 12, resetsAt: null },
+          { id: "wk", label: "Weekly limit", usedPercent: 40, resetsAt: null },
+        ],
+      }),
+    },
     composer: {
       scope: { kind: "thread", threadId: THREAD_ID },
       selection: { providerId: "claude-code", model: "claude-opus-5-5" },
@@ -130,6 +115,19 @@ describe("thread meter", () => {
     expect(slot.queryByText("$36.00")).toBeNull();
     await emit(["thread/tokenUsage/updated"]);
     await slot.findByText("$36.00");
+  });
+
+  it("asks for fresh plan usage when a turn completes", async () => {
+    const { slot, emit } = await renderMeter([requested(1, "claude-opus-5-5"), tokenUsage(2)]);
+    await slot.findByText("40% plan");
+    expect(slot.rpcCalls).toEqual([
+      { method: "plan_usage_get", input: { providerId: "claude-code", hostId: null, refresh: false } },
+    ]);
+    await emit(["turn/completed"]);
+    expect(slot.rpcCalls.at(-1)).toEqual({
+      method: "plan_usage_get",
+      input: { providerId: "claude-code", hostId: null, refresh: true },
+    });
   });
 
   it("opens a breakdown with tokens, cost, and plan reset windows", async () => {
