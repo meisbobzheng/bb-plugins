@@ -78,6 +78,13 @@ describe.skipIf(target === null)("plain-language requests", () => {
     await expect(service.ask(connection, "plans?", null, true)).rejects.toThrow(/more detail/);
   });
 
+  it("shares one introspection between concurrent schema requests", async () => {
+    const [first, second] = await Promise.all([service.schema(connection, true), service.schema(connection, true)]);
+    expect(second).toBe(first);
+    expect(await service.schema(connection, false)).toBe(first);
+    expect(await service.schema(connection, true)).not.toBe(first);
+  });
+
   it("publishes history changes", () => {
     expect(published).toContain("history");
   });

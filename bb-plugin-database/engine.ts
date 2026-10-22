@@ -1,6 +1,6 @@
 import pg from "pg";
 import type { Connection, ExplainResult, QueryError, QueryRun, ResultSet, SchemaSnapshot, TestResult } from "./contract.js";
-import { COLUMNS_SQL, DATABASES_SQL, FOREIGN_KEYS_SQL, INDEXES_SQL, TABLES_SQL, VERSION_SQL, shapeSnapshot, type Row } from "./introspect.js";
+import { DATABASES_SQL, INTROSPECTION_SQL, VERSION_SQL, shapeSnapshot, type Row } from "./introspect.js";
 import { newId } from "./store.js";
 import { cursorable, splitStatements } from "./sql.js";
 
@@ -49,8 +49,8 @@ class CancelledBeforeStart extends Error {
 
 interface CachedSchema {
   fingerprint: string;
-  fetchedAt: number;
-  snapshot: SchemaSnapshot;
+  fetchedAt: number | null;
+  snapshot: Promise<SchemaSnapshot>;
 }
 
 export function effectiveUser(connection: Connection): string {
@@ -81,6 +81,10 @@ export function describeError(error: unknown, cancelled = false): QueryError {
   const code = error instanceof Error ? ((error as { code?: unknown }).code as string | undefined) : undefined;
   const connectionProblem = /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EHOSTUNREACH|timeout|terminated|closed/i.test(`${code ?? ""} ${message}`);
   return { kind: connectionProblem ? "connection" : "sql", message, code: code ?? null, position: null, detail: null, hint: null };
+}
+
+function resultsOf<T>(result: T | T[]): T[] {
+  return Array.isArray(result) ? result : [result];
 }
 
 function shapeResult(result: pg.QueryArrayResult<Array<string | null>>, typeNames: Map<number, string>, maxRows: number, command?: string): ResultSet {
@@ -117,8 +121,9 @@ export class Engine {
       password: () => this.deps.password(connection),
       ssl: connection.ssl ? { rejectUnauthorized: false } : false,
       max: 4,
-      idleTimeoutMillis: 60_000,
+      idleTimeoutMillis: 5 * 60_000,
       connectionTimeoutMillis: 15_000,
+      keepAlive: true,
       allowExitOnIdle: true,
       application_name: "bb-database",
       types: TEXT_TYPES,
@@ -151,15 +156,14 @@ export class Engine {
     const client = await entry.pool.connect();
     let failure: unknown = null;
     try {
-      await client.query(`SET default_transaction_read_only = ${options.readOnly ? "on" : "off"}`);
-      await client.query(`SET statement_timeout = ${Math.max(0, Math.round(options.timeoutMs))}`);
+      await client.query(`SET default_transaction_read_only = ${options.readOnly ? "on" : "off"}; SET statement_timeout = ${Math.max(0, Math.round(options.timeoutMs))}`);
       return await work(client, entry);
     } catch (error) {
       failure = error;
       throw error;
     } finally {
       const broken = failure !== null && !isDatabaseError(failure);
-      if (!broken) await client.query("ROLLBACK").catch(() => undefined);
+      if (!broken && (failure !== null || client.getTransactionStatus() !== "I")) await client.query("ROLLBACK").catch(() => undefined);
       client.release(broken ? (failure instanceof Error ? failure : new Error(String(failure))) : undefined);
     }
   }
@@ -188,28 +192,20 @@ export class Engine {
         if (statements.length === 0) return finish([], null);
         const single = statements.length === 1 ? statements[0]! : null;
         if (single !== null && cursorable(single)) {
-          await client.query("BEGIN");
-          try {
-            const prefix = `DECLARE ${CURSOR} NO SCROLL CURSOR FOR `;
-            await client.query(prefix + single.text).catch((error: unknown) => {
-              if (isDatabaseError(error) && error.position !== undefined) {
-                const position = Number(error.position) - prefix.length;
-                error.position = position > 0 ? String(position) : undefined;
-              }
-              throw error;
-            });
-            const fetched = await client.query<Array<string | null>>({ text: `FETCH ${options.maxRows + 1} FROM ${CURSOR}`, rowMode: "array", types: TEXT_TYPES });
-            await client.query("COMMIT");
-            return finish([shapeResult({ ...fetched, rowCount: Math.min(fetched.rows.length, options.maxRows) }, typeNames, options.maxRows, "SELECT")], null);
-          } catch (error) {
-            await client.query("ROLLBACK").catch(() => undefined);
+          const prefix = `BEGIN; DECLARE ${CURSOR} NO SCROLL CURSOR FOR `;
+          await client.query(prefix + single.text).catch((error: unknown) => {
+            if (isDatabaseError(error) && error.position !== undefined) {
+              const position = Number(error.position) - prefix.length;
+              error.position = position > 0 ? String(position) : undefined;
+            }
             throw error;
-          }
+          });
+          const fetched = resultsOf(await client.query<Array<string | null>>({ text: `FETCH ${options.maxRows + 1} FROM ${CURSOR}; COMMIT`, rowMode: "array", types: TEXT_TYPES }))[0]!;
+          return finish([shapeResult({ ...fetched, rowCount: Math.min(fetched.rows.length, options.maxRows) }, typeNames, options.maxRows, "SELECT")], null);
         }
-        const result = await client.query<Array<string | null>>({ text: sql, rowMode: "array", types: TEXT_TYPES });
-        const list = Array.isArray(result) ? result : [result];
+        const results = resultsOf(await client.query<Array<string | null>>({ text: sql, rowMode: "array", types: TEXT_TYPES }));
         return finish(
-          list.map((item) => shapeResult(item, typeNames, options.maxRows)),
+          results.map((item) => shapeResult(item, typeNames, options.maxRows)),
           null,
         );
       });
@@ -265,21 +261,28 @@ export class Engine {
     });
   }
 
-  async schema(connection: Connection, refresh: boolean, timeoutMs: number): Promise<SchemaSnapshot> {
+  schema(connection: Connection, refresh: boolean, timeoutMs: number): Promise<SchemaSnapshot> {
     const fingerprint = fingerprintOf(connection);
     const cached = this.schemas.get(connection.id);
-    if (!refresh && cached !== undefined && cached.fingerprint === fingerprint && this.now() - cached.fetchedAt < SCHEMA_TTL_MS) return cached.snapshot;
-    const snapshot = await this.withClient(connection, { readOnly: true, timeoutMs }, async (client) => {
-      const rows = async (text: string) => (await client.query<Row>(text)).rows;
-      const version = await rows(VERSION_SQL);
-      const tables = await rows(TABLES_SQL);
-      const columns = await rows(COLUMNS_SQL);
-      const indexes = await rows(INDEXES_SQL);
-      const foreignKeys = await rows(FOREIGN_KEYS_SQL);
+    if (cached !== undefined && cached.fingerprint === fingerprint && (cached.fetchedAt === null || (!refresh && this.now() - cached.fetchedAt < SCHEMA_TTL_MS))) return cached.snapshot;
+    const entry: CachedSchema = { fingerprint, fetchedAt: null, snapshot: this.introspect(connection, timeoutMs) };
+    this.schemas.set(connection.id, entry);
+    entry.snapshot.then(
+      () => {
+        entry.fetchedAt = this.now();
+      },
+      () => {
+        if (this.schemas.get(connection.id) === entry) this.schemas.delete(connection.id);
+      },
+    );
+    return entry.snapshot;
+  }
+
+  private introspect(connection: Connection, timeoutMs: number): Promise<SchemaSnapshot> {
+    return this.withClient(connection, { readOnly: true, timeoutMs }, async (client) => {
+      const [version = [], tables = [], columns = [], indexes = [], foreignKeys = []] = resultsOf(await client.query<Row>(INTROSPECTION_SQL)).map((result) => result.rows);
       return shapeSnapshot({ version, tables, columns, indexes, foreignKeys }, new Date(this.now()).toISOString());
     });
-    this.schemas.set(connection.id, { fingerprint, fetchedAt: this.now(), snapshot });
-    return snapshot;
   }
 
   invalidateSchema(connectionId: string): void {

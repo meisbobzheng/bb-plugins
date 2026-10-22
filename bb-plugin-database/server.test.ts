@@ -76,6 +76,12 @@ describe.skipIf(target === null)("Database plugin against a live PostgreSQL", ()
     expect(run.error).toMatchObject({ kind: "sql", code: "42703", position: 8 });
   });
 
+  it("rolls back a transaction a script leaves open before the next query", async () => {
+    await harness.behavior.callRpc("query_run", { connectionId: connection.id, sql: "begin; select 1" });
+    const run = (await harness.behavior.callRpc("query_run", { connectionId: connection.id, sql: "select now() = statement_timestamp() as fresh; select 1" })) as QueryRun;
+    expect(run.results[0]?.rows).toEqual([["t"]]);
+  });
+
   it("refuses writes until the connection allows them", async () => {
     const blocked = (await harness.behavior.callRpc("query_run", { connectionId: connection.id, sql: "create table bb_plugin_test (id int)" })) as QueryRun;
     expect(blocked.error).toMatchObject({ kind: "sql", code: "25006" });

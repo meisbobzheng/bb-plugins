@@ -51,6 +51,8 @@ ORDER BY 1, 2, 3`;
 
 export const VERSION_SQL = "SELECT current_setting('server_version') AS version, current_database() AS database";
 
+export const INTROSPECTION_SQL = [VERSION_SQL, TABLES_SQL, COLUMNS_SQL, INDEXES_SQL, FOREIGN_KEYS_SQL].join(";\n");
+
 const KINDS: Record<string, TableKind> = { r: "table", p: "partitioned-table", v: "view", m: "materialized-view", f: "foreign-table" };
 
 export type Row = Record<string, string | null>;
