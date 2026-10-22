@@ -58,6 +58,17 @@ describe("vim overlay", () => {
     expect(indicator()?.textContent).toBe("HINTs");
   });
 
+  it("fades the indicator while the pointer is near it, and draws hints over it", async () => {
+    await renderVim();
+    const move = (clientX: number, clientY: number) => window.dispatchEvent(new MouseEvent("pointermove", { clientX, clientY }));
+    move(1000, 760);
+    expect(indicator()?.hasAttribute("data-near")).toBe(true);
+    move(500, 300);
+    expect(indicator()?.hasAttribute("data-near")).toBe(false);
+    keydown("f");
+    expect(indicator()!.compareDocumentPosition(document.querySelector("[data-vim-hint]")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("fits the ring around the cursor and hides it when the item goes away", async () => {
     await renderVim();
     keydown("h");

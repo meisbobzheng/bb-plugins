@@ -9,6 +9,7 @@ import { useVimState, type Hint, type VimState } from "./store";
 
 const LAYER = "pointer-events-none fixed z-[2147483647]";
 const HINT_HEIGHT = 16;
+const CORNER = { width: 160, height: 48 };
 
 function Ring({ target }: { target: Element }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -57,11 +58,19 @@ function modeLabel(state: VimState): string {
 }
 
 function ModeIndicator({ state }: { state: VimState }) {
+  const ref = useRef<HTMLDivElement>(null);
   const keys = state.hints === null ? state.pending : state.typed;
+  useEffect(() => {
+    const dodge = (event: MouseEvent) =>
+      ref.current?.toggleAttribute("data-near", event.clientX > window.innerWidth - CORNER.width && event.clientY > window.innerHeight - CORNER.height);
+    window.addEventListener("pointermove", dodge, { passive: true });
+    return () => window.removeEventListener("pointermove", dodge);
+  }, []);
   return (
     <div
+      ref={ref}
       data-vim-mode=""
-      className={`${LAYER} bottom-1.5 right-2 rounded bg-muted/90 px-1.5 font-mono text-[10px] font-semibold leading-4 tracking-wide text-muted-foreground`}
+      className={`${LAYER} bottom-1.5 right-2 rounded bg-muted/90 px-1.5 font-mono text-[10px] font-semibold leading-4 tracking-wide text-muted-foreground transition-opacity data-[near]:opacity-0`}
     >
       {modeLabel(state)}
       {keys === "" ? null : <span className="ml-1.5 text-foreground">{keys}</span>}
@@ -96,9 +105,9 @@ export function VimOverlay() {
     <>
       {createPortal(
         <div {...scopeProps} data-vim-ui="">
+          {values?.showModeIndicator === false ? null : <ModeIndicator state={state} />}
           {target === null ? null : <Ring target={target} />}
           {state.hints === null ? null : <Hints hints={state.hints} typed={state.typed} />}
-          {values?.showModeIndicator === false ? null : <ModeIndicator state={state} />}
         </div>,
         document.body,
       )}

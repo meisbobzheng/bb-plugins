@@ -14,7 +14,8 @@ mention menu. Terminals and code editors keep `Esc`.
 
 The mode shows in the bottom-right corner: `NORMAL`, `INSERT`, `HINT`,
 `PASS` (a terminal or editor has every key), or `PAUSED`, followed by any keys
-waiting for the rest of a sequence or the hint letters typed so far. `?` lists
+waiting for the rest of a sequence or the hint letters typed so far. It fades
+while the pointer is near it, so it never hides what is beneath. `?` lists
 every key.
 
 ## Keys
