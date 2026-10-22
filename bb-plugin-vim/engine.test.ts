@@ -111,6 +111,15 @@ describe("panes and lists", () => {
     measured.mockRestore();
   });
 
+  it("scrolls the chat without measuring every sidebar row", () => {
+    start(SHELL.replace("</a>\n</div>", `</a>${'<a href="/threads/tx" class="more" data-sidebar-thread-shortcut-target="" data-box="0,140,240,32">More</a>'.repeat(50)}</div>`));
+    const measured = [...document.querySelectorAll<HTMLElement>(".more")].map((el) => vi.spyOn(el, "getBoundingClientRect"));
+    press("j");
+    expect(byId("timeline").scrollTop).toBe(60);
+    expect(measured).toHaveLength(50);
+    expect(measured.filter((spy) => spy.mock.calls.length > 0)).toEqual([]);
+  });
+
   it("leaves Ctrl+D to bb elsewhere, where it toggles the diff", () => {
     start(SHELL);
     expect(press("d", { ctrlKey: true }).defaultPrevented).toBe(false);

@@ -107,7 +107,11 @@ export function itemsIn(pane: Element, scope: Element): HTMLElement[] {
 
 export function panesIn(scope: Element): Element[] {
   const nested = [...scope.querySelectorAll(PANE)].filter(isVisible);
-  const owners = new Set([...scope.querySelectorAll(ITEM)].filter(navigable).map((el) => paneOf(el, scope)));
+  const owners = new Set<Element>();
+  for (const el of scope.querySelectorAll(ITEM)) {
+    const owner = paneOf(el, scope);
+    if (!owners.has(owner) && navigable(el)) owners.add(owner);
+  }
   const ownsContent = (pane: Element) => {
     const children = nested.filter((other) => other !== pane && paneOf(other.parentElement ?? scope, scope) === pane);
     return coverage(pane.getBoundingClientRect(), children.map((child) => child.getBoundingClientRect())) < 0.5;
