@@ -329,6 +329,15 @@ describe("staying out of the way", () => {
     expect(press("f").defaultPrevented).toBe(false);
   });
 
+  it("drops hints when focus moves into a text field, so typing reaches it", async () => {
+    start(`${SHELL}<input id="name" data-box="10,10,100,20" />`);
+    press("f");
+    byId("name").focus();
+    await settle();
+    expect(vim.get().hints).toBeNull();
+    expect(press("s").defaultPrevented).toBe(false);
+  });
+
   it("passes everything through to terminals, including Escape", async () => {
     start(`${SHELL}<div class="xterm" data-box="300,300,400,200"><textarea id="term"></textarea></div>`);
     byId("term").focus();

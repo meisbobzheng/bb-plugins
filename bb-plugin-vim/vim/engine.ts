@@ -300,9 +300,11 @@ export function mountVim(host: VimHost, doc: Document = document, mac: boolean =
   const onFocusChange = () =>
     queueMicrotask(() => {
       const active = doc.activeElement;
+      const mode = modeOf(active);
       const current = vim.get().cursor;
       const strayed = current !== null && active !== null && active !== doc.body && !current.contains(active);
-      vim.set(strayed ? { mode: modeOf(active), cursor: null } : { mode: modeOf(active) });
+      vim.set(strayed ? { mode, cursor: null } : { mode });
+      if (mode !== "normal") endHints();
     });
 
   view.addEventListener("keydown", onKeyDown);
