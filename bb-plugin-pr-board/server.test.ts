@@ -443,6 +443,19 @@ describe("pull detail cache", () => {
     expect(count()).toEqual({ full: 3, checks: 2 });
   });
 
+  it("keeps the 50 most recently opened PRs in memory and reads older ones back from the database", async () => {
+    const { harness, count } = counting();
+    const openPull = (number: number) =>
+      harness.behavior.callRpc("pull", { repo: "acme/app", number, refresh: false }) as Promise<{ files: Array<{ viewed: boolean }> }>;
+    for (let number = 1; number <= 51; number++) await openPull(number);
+    await harness.behavior.callRpc("setViewed", { repo: "acme/app", number: 1, pullNodeId: "PR_node", path: "a.go", viewed: false });
+    expect(count()).toEqual({ full: 51, checks: 0 });
+    expect((await openPull(1)).files[0]?.viewed).toBe(false);
+    expect(count()).toEqual({ full: 51, checks: 1 });
+    await openPull(51);
+    expect(count()).toEqual({ full: 51, checks: 1 });
+  });
+
   it("reuses the merge base while the PR's base and head commits stay the same", async () => {
     const { harness, runner, response } = counting();
     const fetch = () => harness.behavior.callRpc("pull", { repo: "acme/app", number: 7, refresh: true }) as Promise<{ mergeBaseSha: string }>;

@@ -46,6 +46,7 @@ const ARCHIVE_SCHEDULE = "*/15 * * * *";
 const OFFLINE = /error connecting to /;
 const THREAD_EVENTS = ["thread.active", "thread.idle", "thread.failed", "thread.archived", "thread.unarchived", "thread.deleted"] as const;
 const PULL_TTL_MS = 50_000;
+const KNOWN_PULL_LIMIT = 50;
 const VIEWER_TTL_MS = 60 * 60_000;
 const FILE_CACHE_BYTES = 64 * 1024 * 1024;
 const ENVIRONMENT_TIMEOUT_MS = 5 * 60_000;
@@ -348,15 +349,19 @@ export function createPlugin(deps: PluginDeps) {
     const knownPulls = new Map<string, KnownPull>();
     const pullRuns = new Map<string, Promise<PullDetail>>();
 
+    function rememberPull(key: string, known: KnownPull): KnownPull {
+      knownPulls.delete(key);
+      knownPulls.set(key, known);
+      if (knownPulls.size > KNOWN_PULL_LIMIT) knownPulls.delete(knownPulls.keys().next().value!);
+      return known;
+    }
+
     function knownPull(pull: PullKey): KnownPull | undefined {
       const key = pullKey(pull);
       const known = knownPulls.get(key);
-      if (known !== undefined) return known;
+      if (known !== undefined) return rememberPull(key, known);
       const saved = store.pullDetail(pull);
-      if (saved === null) return undefined;
-      const loaded = { ...saved, checkedAt: Number.NEGATIVE_INFINITY };
-      knownPulls.set(key, loaded);
-      return loaded;
+      return saved === null ? undefined : rememberPull(key, { ...saved, checkedAt: Number.NEGATIVE_INFINITY });
     }
 
     function boardSaysUnchanged(detail: PullDetail): boolean {
@@ -377,7 +382,7 @@ export function createPlugin(deps: PluginDeps) {
       }
       const detail = await github.pullDetail(pull.repo, pull.number);
       const version = detailVersion(detail);
-      knownPulls.set(pullKey(pull), { detail, version, checkedAt: generation === invalidations ? deps.now() : Number.NEGATIVE_INFINITY });
+      rememberPull(pullKey(pull), { detail, version, checkedAt: generation === invalidations ? deps.now() : Number.NEGATIVE_INFINITY });
       store.savePullDetail(pull, version, detail);
       return detail;
     }
@@ -936,7 +941,7 @@ export function createPlugin(deps: PluginDeps) {
       },
       setViewed: async ({ repo, number, pullNodeId, path, viewed }) => {
         await github.setViewed(pullNodeId, path, viewed);
-        const known = knownPulls.get(pullKey({ repo, number }));
+        const known = knownPull({ repo, number });
         if (known !== undefined) {
           known.detail = { ...known.detail, files: known.detail.files.map((file) => (file.path === path ? { ...file, viewed } : file)) };
           store.savePullDetail({ repo, number }, known.version, known.detail);
