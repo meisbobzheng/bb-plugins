@@ -33,4 +33,9 @@ describe("excerpt", () => {
   it("drops code and markdown syntax", () => {
     expect(excerpt("# Title\n\n```\ncode\n```\n- **bold** item", 100)).toBe("Title bold item");
   });
+
+  it("collapses whitespace and truncates long bodies", () => {
+    const body = Array.from({ length: 500 }, (_, index) => `Line\t${index}   of the flow`).join("\n");
+    expect(excerpt(body, 30)).toBe("Line 0 of the flow Line 1 of…");
+  });
 });

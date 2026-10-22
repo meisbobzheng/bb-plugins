@@ -114,13 +114,14 @@ export function guessTitle(body: string): string {
 }
 
 export function excerpt(body: string, limit: number): string {
-  const text = body
-    .replace(/```[\s\S]*?```/g, " ")
-    .split("\n")
-    .map(plainLine)
-    .filter((line) => line !== "")
-    .join(" ");
-  return truncate(text.replace(/\s+/g, " ").trim(), limit);
+  let text = "";
+  for (const line of body.replace(/```[\s\S]*?```/g, " ").split("\n")) {
+    const plain = plainLine(line).replace(/\s+/g, " ");
+    if (plain === "") continue;
+    text = text === "" ? plain : `${text} ${plain}`;
+    if (text.length > limit) break;
+  }
+  return truncate(text, limit);
 }
 
 export function truncate(text: string, limit: number): string {
