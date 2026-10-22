@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { Toaster } from "sonner";
 import type { Board, BoardCard, PullDetail, ReviewState } from "./contract";
+import { reuseEqual } from "./components/cache";
 import { commentCount } from "./components/Comments";
 
 globalThis.ResizeObserver ??= class {
@@ -401,6 +402,20 @@ describe("review workspace", () => {
     expect(fetched()).toHaveLength(3);
   });
 
+  it("keeps the rendered diff when a reload brings the same PR back", async () => {
+    const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/19" }, { rpc: workspaceRpc(STATE, { pull: () => ({ ...DETAIL, number: 19 }) }) });
+    await slot.findByText("Add thing");
+    const line = () => document.querySelector("diffs-container")?.shadowRoot?.querySelector('[data-additions] [data-line="4"]');
+    await waitFor(() => expect(line()).toBeTruthy());
+    const before = line();
+    const refresh = slot.getByRole("button", { name: "Refresh" });
+    await waitFor(() => expect(refresh.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(refresh);
+    await waitFor(() => expect(slot.inspection.rpcCalls.filter((call) => call.method === "pull")).toHaveLength(2));
+    await waitFor(() => expect(refresh.hasAttribute("disabled")).toBe(false));
+    expect(line()).toBe(before);
+  });
+
   it("refreshes the PR on demand and keeps it on screen with a retry when that fails", async () => {
     let fail = false;
     const pull = () => {
@@ -647,6 +662,19 @@ describe("comments", () => {
     await waitFor(() =>
       expect(slot.inspection.rpcCalls.filter((call) => call.method === "submitAddress").map((call) => call.input)).toEqual([{ repo: "acme/app", number: 10 }]),
     );
+  });
+});
+
+describe("reuseEqual", () => {
+  it("keeps the previous objects wherever a reloaded value is equal to them", () => {
+    const previous = { title: "x", files: [{ path: "a" }, { path: "b" }], threads: [{ id: "t", isResolved: false }] };
+    const next = JSON.parse(JSON.stringify({ ...previous, threads: [{ id: "t", isResolved: true }] })) as typeof previous;
+    const merged = reuseEqual(previous, next);
+    expect(merged).toEqual(next);
+    expect(merged.files).toBe(previous.files);
+    expect(merged.threads).not.toBe(previous.threads);
+    expect(reuseEqual(previous, JSON.parse(JSON.stringify(previous)))).toBe(previous);
+    expect(reuseEqual(previous, { ...previous, files: previous.files.slice(1) }).files).toEqual([{ path: "b" }]);
   });
 });
 

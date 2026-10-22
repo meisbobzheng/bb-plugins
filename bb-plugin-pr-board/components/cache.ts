@@ -41,6 +41,24 @@ function recall<T>(key: string, persist: boolean): Entry<T> | null {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function reuseEqual<T>(previous: unknown, next: T): T {
+  if (Object.is(previous, next)) return next;
+  if (Array.isArray(previous) && Array.isArray(next)) {
+    const items = next.map((item, index) => reuseEqual(previous[index], item));
+    return (items.length === previous.length && items.every((item, index) => item === previous[index]) ? previous : items) as T;
+  }
+  if (isRecord(previous) && isRecord(next)) {
+    const keys = Object.keys(next);
+    const merged = Object.fromEntries(keys.map((key) => [key, reuseEqual(previous[key], next[key])]));
+    return (keys.length === Object.keys(previous).length && keys.every((key) => merged[key] === previous[key]) ? previous : merged) as T;
+  }
+  return next;
+}
+
 const loading = new Map<string, Promise<unknown>>();
 
 function shared<T>(key: string, load: () => Promise<T>): Promise<T> {
@@ -93,7 +111,7 @@ export function useCached<T>(
       .then(
         (value) => {
           if (!live) return;
-          const entry = { value, at: Date.now() };
+          const entry = { value: reuseEqual(recall<T>(key, persist)?.value, value), at: Date.now() };
           remember(key, entry, persist);
           setState({ key, entry, error: null });
         },
