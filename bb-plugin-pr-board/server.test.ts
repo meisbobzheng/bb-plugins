@@ -931,6 +931,27 @@ describe("address comments", () => {
     expect(message).toContain("%G?");
   });
 
+  it("looks up the review and address threads of a PR at the same time", async () => {
+    const { harness } = addressSetup();
+    await harness.behavior.callRpc("addressComments", { repo: "acme/app", number: 7 });
+    await harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
+    let inFlight = 0;
+    let most = 0;
+    harness.inspection.sdk.stub("threads.get", async () => {
+      most = Math.max(most, ++inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+      return makeThreadResponse({ id: "thr_address", status: "idle", deletedAt: null, archivedAt: null });
+    });
+    const state = (await harness.behavior.callRpc("reviewState", { repo: "acme/app", number: 7 })) as {
+      agent: { threadId: string | null };
+      addressAgent: { threadId: string | null };
+    };
+    expect(state.agent.threadId).toBe("thr_address");
+    expect(state.addressAgent.threadId).toBe("thr_address");
+    expect(most).toBe(2);
+  });
+
   it("posts a conversation comment through gh", async () => {
     const { harness, runner } = addressSetup();
     await harness.behavior.callRpc("postConversationComment", { repo: "acme/app", number: 7, body: "Thanks!" });

@@ -823,15 +823,15 @@ export function createPlugin(deps: PluginDeps) {
 
     async function reviewState(pull: PullKey) {
       const findings = store.findings(pull);
-      const address = await addressThreadFor(pull);
+      const [agent, address] = await Promise.all([
+        agentState(pull, findings.filter((finding) => !finding.dismissed).length),
+        addressThreadFor(pull),
+      ]);
       return {
-        agent: await agentState(pull, findings.filter((finding) => !finding.dismissed).length),
+        agent,
         findings,
         drafts: store.drafts(pull),
-        addressAgent: {
-          threadId: address?.id ?? null,
-          running: address !== null && (address.status === "active" || address.status === "starting"),
-        },
+        addressAgent: { threadId: address?.id ?? null, running: isRunning(address) },
         suggestions: address === null ? [] : store.suggestions(pull, address.id),
       };
     }
