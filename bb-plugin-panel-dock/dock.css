@@ -89,7 +89,11 @@ html[data-panel-float]
     overflow: hidden !important;
     border: 1px solid var(--border-seam);
     border-radius: 12px;
-    box-shadow: 0 24px 64px rgb(0 0 0 / 0.35);
+    box-shadow: var(--shadow-lg);
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: panel-dock-float-in 160ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
 
     > aside {
       width: 100% !important;
@@ -100,5 +104,12 @@ html[data-panel-float]
       app-region: no-drag !important;
       -webkit-app-region: no-drag !important;
     }
+  }
+}
+
+@keyframes panel-dock-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
