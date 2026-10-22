@@ -1,7 +1,7 @@
-import { useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { processFile, type DiffLineAnnotation, type FileDiffMetadata, type SelectedLineRange } from "@pierre/diffs";
 import { FileDiff, type FileDiffProps } from "@pierre/diffs/react";
-import { experimental_useCodeTheme, useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
+import { experimental_useCodeTheme, useBbNavigate, useRpc, type PluginRpcClient } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { Draft, Finding, PullDetail, PullFile, ReviewThread, Side, rpcContract } from "../contract";
 import { highlightCss, type DiffStyle } from "../highlight";
@@ -10,7 +10,7 @@ import { AnnotationView, annotationKey, FindingCard, ThreadCard, type Annotation
 import { identifierAt, isModifierClick, useModifierUnderline, useScrollToLine, type LineFocus } from "./code";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
-import { useCached } from "./cache";
+import { prefetch, useCached } from "./cache";
 
 export interface DefinitionRequest {
   sha: string;
@@ -39,6 +39,21 @@ function gitPatch(file: PullFile, oldPath: string, patch: string): string {
   ].join("\n");
 }
 
+function contentsKey(detail: PullDetail, file: PullFile): string {
+  return `contents:${detail.repo}@${detail.headSha}:${file.path}`;
+}
+
+async function loadContents(rpc: PluginRpcClient<typeof rpcContract>, detail: PullDetail, file: PullFile): Promise<Contents> {
+  const [old, next] = await Promise.all([
+    file.status === "added" ? null : rpc.call("fileAt", { repo: detail.repo, sha: detail.mergeBaseSha, path: file.previousPath ?? file.path }),
+    file.status === "removed" ? null : rpc.call("fileAt", { repo: detail.repo, sha: detail.headSha, path: file.path }),
+  ]);
+  return {
+    old: file.status === "added" ? "" : (old?.content ?? null),
+    new: file.status === "removed" ? "" : (next?.content ?? null),
+  };
+}
+
 function linesOf(contents: string | null, startLine: number, endLine: number): string | null {
   if (contents === null) return null;
   return contents.split("\n").slice(startLine - 1, endLine).join("\n");
@@ -51,6 +66,7 @@ function Notice({ children }: { children: ReactNode }) {
 export function DiffPane({
   detail,
   file,
+  next,
   findings,
   drafts,
   threads,
@@ -66,6 +82,7 @@ export function DiffPane({
 }: {
   detail: PullDetail;
   file: PullFile;
+  next: PullFile | undefined;
   findings: readonly Finding[];
   drafts: readonly Draft[];
   threads: readonly ReviewThread[];
@@ -86,17 +103,11 @@ export function DiffPane({
   const underline = useModifierUnderline();
   const oldPath = file.previousPath ?? file.path;
 
-  const contents = useCached<Contents>(`contents:${detail.repo}@${detail.headSha}:${file.path}`, async () => {
-    const [old, next] = await Promise.all([
-      file.status === "added" ? null : rpc.call("fileAt", { repo: detail.repo, sha: detail.mergeBaseSha, path: oldPath }),
-      file.status === "removed" ? null : rpc.call("fileAt", { repo: detail.repo, sha: detail.headSha, path: file.path }),
-    ]);
-    return {
-      old: file.status === "added" ? "" : (old?.content ?? null),
-      new: file.status === "removed" ? "" : (next?.content ?? null),
-    };
-  }, { immutable: true });
+  const contents = useCached(contentsKey(detail, file), () => loadContents(rpc, detail, file), { immutable: true });
   const loaded = contents.value;
+  useEffect(() => {
+    if (loaded !== null && next !== undefined && next.patch !== null) prefetch(contentsKey(detail, next), () => loadContents(rpc, detail, next));
+  }, [detail, loaded, next, rpc]);
 
   const fileDiff = useMemo((): FileDiffMetadata | null => {
     if (file.patch === null || (loaded === null && contents.error === null)) return null;

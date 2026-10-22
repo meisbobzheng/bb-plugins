@@ -128,7 +128,8 @@ The page has:
 
 - **Files**: every changed file with its status, finding, unresolved-thread,
   and pending-comment counts. The circle marks a file viewed on GitHub. `j` and
-  `k` move between files.
+  `k` move between files. Once a file's diff loads, the next file's contents
+  load in the background, so `j` shows it at once.
 - **Findings**: the recorded findings, blockers first. Click one to jump to
   its lines. Dismissed findings are hidden until **Show dismissed**.
 - **Comments**: unresolved code comments plus conversation comments from

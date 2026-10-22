@@ -642,6 +642,7 @@ function Workspace({
                 key={currentFile.path}
                 detail={detail}
                 file={currentFile}
+                next={files[currentIndex + 1]}
                 findings={scoped.findings}
                 drafts={scoped.drafts}
                 threads={scoped.threads}

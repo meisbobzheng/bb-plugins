@@ -41,6 +41,24 @@ function recall<T>(key: string, persist: boolean): Entry<T> | null {
   }
 }
 
+const loading = new Map<string, Promise<unknown>>();
+
+function shared<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const running = loading.get(key);
+  if (running !== undefined) return running as Promise<T>;
+  const next = load().finally(() => loading.delete(key));
+  loading.set(key, next);
+  return next;
+}
+
+export function prefetch<T>(key: string, load: () => Promise<T>): void {
+  if (recall(key, false) !== null) return;
+  shared(key, load).then(
+    (value) => remember(key, { value, at: Date.now() }, false),
+    () => undefined,
+  );
+}
+
 export interface Cached<T> {
   value: T | null;
   refreshing: boolean;
@@ -71,8 +89,7 @@ export function useCached<T>(
     }
     let live = true;
     setRefreshing(true);
-    latest
-      .current()
+    (immutable ? shared(key, () => latest.current()) : latest.current())
       .then(
         (value) => {
           if (!live) return;

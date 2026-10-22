@@ -304,7 +304,9 @@ describe("review workspace", () => {
     expect(await slot.findByText("Add thing")).toBeTruthy();
     expect(slot.getByText("Files 1/2")).toBeTruthy();
     expect(slot.getByText("agent working")).toBeTruthy();
-    await waitFor(() => expect(slot.inspection.rpcCalls.filter((call) => call.method === "fileAt")).toHaveLength(2));
+    await waitFor(() =>
+      expect(slot.inspection.rpcCalls.filter((call) => call.method === "fileAt" && (call.input as { path: string }).path === "cmd/main.go")).toHaveLength(2),
+    );
     expect(slot.inspection.rpcCalls.some((call) => call.method === "openReview")).toBe(true);
     expect(slot.inspection.experimental_fixedTabOpenCalls).toHaveLength(1);
 
@@ -384,6 +386,18 @@ describe("review workspace", () => {
     fireEvent.click(slot.getByRole("button", { name: "Add to review" }));
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0]).toMatchObject({ repo: "acme/app", number: 7, id: null, path: "cmd/main.go", side: "additions", startLine: 3, endLine: 4 });
+  });
+
+  it("loads the next file's contents in the background so stepping to it shows its diff at once", async () => {
+    const headSha = "5".repeat(40);
+    const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/16" }, { rpc: workspaceRpc(STATE, { pull: () => ({ ...DETAIL, number: 16, headSha }) }) });
+    await slot.findByText("Add thing");
+    const fetched = () => slot.inspection.rpcCalls.filter((call) => call.method === "fileAt").map((call) => (call.input as { path: string }).path);
+    await waitFor(() => expect(fetched()).toEqual(["cmd/main.go", "cmd/main.go", "docs/readme.md"]));
+    fireEvent.click(slot.getByRole("button", { name: "Next file" }));
+    expect(slot.getByText(/2\/2\s+docs\/readme\.md/)).toBeTruthy();
+    expect(slot.queryByText("Loading diff…")).toBeNull();
+    expect(fetched()).toHaveLength(3);
   });
 
   it("refreshes the PR on demand and keeps it on screen with a retry when that fails", async () => {
