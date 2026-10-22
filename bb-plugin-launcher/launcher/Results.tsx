@@ -51,9 +51,25 @@ export interface ResultsProps {
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="rounded border border-border bg-muted px-1.5 py-px font-sans text-[11px] text-muted-foreground">
+    <kbd className="shrink-0 rounded border border-border bg-muted px-1.5 py-px font-sans text-[11px] text-muted-foreground">
       {children}
     </kbd>
+  );
+}
+
+function Hint({ label, keys, className, onClick }: { label: string; keys: string; className?: string; onClick(): void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex min-w-0 items-center gap-1.5 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        className,
+      )}
+    >
+      <span className="truncate">{label}</span>
+      <Kbd>{keys}</Kbd>
+    </button>
   );
 }
 
@@ -255,32 +271,19 @@ export function Results({ sections, query, emptyText = "No results", showPreview
         onMouseDown={(event) => event.preventDefault()}
         className="flex h-10 shrink-0 items-center justify-end gap-4 border-t border-border px-3 text-xs text-muted-foreground"
       >
-        {primary !== undefined ? (
-          <button
-            type="button"
-            className="flex items-center gap-1.5 hover:text-foreground"
-            onClick={() => selected && runAction(selected, primary)}
-          >
-            {primary.title} <Kbd>↵</Kbd>
-          </button>
+        {selected !== undefined && primary !== undefined ? (
+          <Hint label={primary.title} keys="↵" onClick={() => runAction(selected, primary)} />
         ) : null}
-        {secondary !== undefined ? (
-          <button
-            type="button"
-            className="hidden items-center gap-1.5 hover:text-foreground sm:flex"
-            onClick={() => selected && runAction(selected, secondary)}
-          >
-            {secondary.title} <Kbd>{shortcutLabel(MOD_ENTER)}</Kbd>
-          </button>
+        {selected !== undefined && secondary !== undefined ? (
+          <Hint
+            label={secondary.title}
+            keys={shortcutLabel(MOD_ENTER)}
+            className="hidden sm:flex"
+            onClick={() => runAction(selected, secondary)}
+          />
         ) : null}
         {selected !== undefined && selected.actions.length > 1 ? (
-          <button
-            type="button"
-            className="flex items-center gap-1.5 hover:text-foreground"
-            onClick={() => openActions(selected)}
-          >
-            Actions <Kbd>{shortcutLabel(MOD_K)}</Kbd>
-          </button>
+          <Hint label="Actions" keys={shortcutLabel(MOD_K)} onClick={() => openActions(selected)} />
         ) : null}
       </div>
     </>

@@ -255,7 +255,7 @@ function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowPr
                 type="button"
                 aria-label="Back"
                 onClick={controls.pop}
-                className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground"
+                className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <ArrowLeft className="size-4" />
               </button>
