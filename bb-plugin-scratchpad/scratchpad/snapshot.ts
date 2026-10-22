@@ -16,6 +16,17 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+async function encodePng(canvas: HTMLCanvasElement): Promise<string | null> {
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (blob === null) return null;
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function renderSnapshot(
   content: SVGGElement,
   elements: readonly Element[],
@@ -54,5 +65,5 @@ export async function renderSnapshot(
   const context = canvas.getContext("2d");
   if (context === null) return null;
   context.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL("image/png");
+  return encodePng(canvas);
 }
