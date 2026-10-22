@@ -5,7 +5,8 @@ import path from "node:path";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { registerAgentSurfaces } from "./agent.js";
-import { CHANGED_CHANNEL, LIMITS, rpcContract, type ChangedKind } from "./contract.js";
+import { CHANGED_CHANNEL, type ChangedKind } from "./channel.js";
+import { LIMITS, rpcContract } from "./contract.js";
 import { ServiceError, createService } from "./service.js";
 import { createStore } from "./store.js";
 

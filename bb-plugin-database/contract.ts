@@ -12,9 +12,6 @@ export const LIMITS = {
   historyLimit: 500,
 } as const;
 
-export const CHANGED_CHANNEL = "database-changed";
-export type ChangedKind = "connections" | "history" | "saved";
-
 export const connectionIdSchema = z.string().regex(/^con_[a-z0-9]{8}$/, "expected a connection id like con_1a2b3c4d");
 export const savedIdSchema = z.string().regex(/^sq_[a-z0-9]{8}$/, "expected a saved query id like sq_1a2b3c4d");
 export const queryIdSchema = z.string().regex(/^qry_[a-z0-9]{8,16}$/, "expected a query id like qry_1a2b3c4d");

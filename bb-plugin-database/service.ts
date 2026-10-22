@@ -1,9 +1,9 @@
 import { authError, isCredentialError, listAwsProfiles, mintRdsToken } from "./auth.js";
 import { createAsker, extractSql, schemaText, type Asker } from "./ask.js";
+import type { ChangedKind } from "./channel.js";
 import type {
   AskResult,
   AwsProfile,
-  ChangedKind,
   Connection,
   ConnectionInput,
   ExplainResult,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc, type PluginRpcClient } from "@get-bb/plugin-sdk/app";
-import { CHANGED_CHANNEL, type ChangedKind, type SchemaSnapshot, type Status, type rpcContract } from "../contract";
+import { CHANGED_CHANNEL, type ChangedKind } from "../channel";
+import type { SchemaSnapshot, Status, rpcContract } from "../contract";
 import { readSession, updateSession, useSession, type Session } from "./session";
 
 export type DbRpc = PluginRpcClient<typeof rpcContract>;

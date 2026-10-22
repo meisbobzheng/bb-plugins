@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import type { Asker } from "./ask";
-import type { ChangedKind, Connection } from "./contract";
+import type { ChangedKind } from "./channel";
+import type { Connection } from "./contract";
 import { createService, type Service } from "./service";
 import { createStore } from "./store";
 
