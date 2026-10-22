@@ -13,8 +13,21 @@ export const EMPTY_FILTERS: Filters = { query: "", kind: null, tags: [], thisThr
 const ENTRY_ID = /^lib_[a-z0-9]{8}$/;
 const SCROLL_MEMORY = 50;
 const RESTORE_WINDOW_MS = 3000;
-const scrollPositions = new Map<string, number>();
 let visiblePages = 0;
+
+export function recent<T>(limit: number) {
+  const items = new Map<string, T>();
+  return {
+    get: (key: string) => items.get(key),
+    set(key: string, value: T): void {
+      items.delete(key);
+      items.set(key, value);
+      if (items.size > limit) items.delete(items.keys().next().value!);
+    },
+  };
+}
+
+const scrollPositions = recent<number>(SCROLL_MEMORY);
 
 type Area = "local" | "session";
 
@@ -71,12 +84,6 @@ export function isLibraryVisible(): boolean {
   return visiblePages > 0;
 }
 
-function rememberScroll(id: string, top: number): void {
-  scrollPositions.delete(id);
-  scrollPositions.set(id, top);
-  if (scrollPositions.size > SCROLL_MEMORY) scrollPositions.delete(scrollPositions.keys().next().value!);
-}
-
 export function useScrollMemory(container: RefObject<HTMLElement | null>, id: string | null, ready: boolean): void {
   useEffect(() => {
     const element = container.current;
@@ -92,7 +99,7 @@ export function useScrollMemory(container: RefObject<HTMLElement | null>, id: st
       if (Math.abs(element.scrollTop - target) < 2) finish();
     };
     const onScroll = () => {
-      if (!restoring) rememberScroll(id, element.scrollTop);
+      if (!restoring) scrollPositions.set(id, element.scrollTop);
     };
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(apply);
     for (const child of element.children) observer?.observe(child);

@@ -63,6 +63,7 @@ function memoryStorage(): Storage {
 beforeEach(() => {
   Object.defineProperty(window, "localStorage", { value: memoryStorage(), configurable: true });
   Object.defineProperty(window, "sessionStorage", { value: memoryStorage(), configurable: true });
+  Element.prototype.scrollIntoView = () => {};
 });
 afterEach(cleanup);
 
@@ -201,6 +202,22 @@ describe("Library app", () => {
     expect(await back.findByRole("heading", { name: "S6a attach: ULR/ULA" })).toBeTruthy();
     expect((back.getByLabelText("Search the Library") as HTMLInputElement).value).toBe("regis");
     expect(back.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: HIT.id, replace: true } }]);
+  });
+
+  it("shows the last visit's entry and results at once while it refreshes them", async () => {
+    const app = await load();
+    const first = renderSlot(app.navPanels[0]!, { subPath: HIT.id }, { rpc: { search: () => RESULT, entry: () => ({ ...HIT, body: "x" }) satisfies Entry } });
+    expect(await first.findByRole("heading", { name: HIT.title })).toBeTruthy();
+    expect(await first.findByText("2 entries")).toBeTruthy();
+    first.lifecycle.unmount();
+
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+    const pending = () => new Promise<never>(() => {});
+    const back = renderSlot(app.navPanels[0]!, { subPath: HIT.id }, { rpc: { search: pending, entry: pending } });
+    expect(back.getByRole("heading", { name: HIT.title })).toBeTruthy();
+    expect(back.getByText("2 entries")).toBeTruthy();
+    expect(scrolled.mock.contexts).toEqual([back.getByText(HIT.title, { selector: "span" }).closest("button")]);
+    scrolled.mockRestore();
   });
 
   it("forgets a remembered entry that was deleted", async () => {

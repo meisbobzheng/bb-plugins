@@ -2,8 +2,12 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
 import type { CatalogTag, Entry, SearchInput, SearchResult, rpcContract } from "../contract";
 import { CHANGED_CHANNEL } from "../library";
+import { recent } from "./session";
 
 const SEARCH_DEBOUNCE_MS = 120;
+const RECENT_LOADS = 20;
+const recentSearches = recent<SearchResult>(RECENT_LOADS);
+const recentEntries = recent<Entry | null>(RECENT_LOADS);
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -46,6 +50,7 @@ export function useLibrarySearch(input: SearchInput) {
         rpc.call("search", JSON.parse(key) as SearchInput).then(
           (next) => {
             if (cancelled) return;
+            recentSearches.set(key, next);
             setResult(next);
             setError(null);
           },
@@ -66,7 +71,7 @@ export function useLibrarySearch(input: SearchInput) {
     setError(null);
     nextAttempt();
   };
-  return { result, error, retry };
+  return { result: recentSearches.get(key) ?? result, error, retry };
 }
 
 export function useTagCatalog(): ReadonlyMap<string, CatalogTag> {
@@ -102,6 +107,7 @@ export function useEntry(id: string) {
     rpc.call("entry", { id }).then(
       (entry) => {
         if (cancelled) return;
+        recentEntries.set(id, entry);
         setLoaded({ id, entry });
         setFailed(null);
       },
@@ -118,5 +124,5 @@ export function useEntry(id: string) {
     setFailed(null);
     nextAttempt();
   };
-  return { entry: loaded?.id === id ? loaded.entry : undefined, error: failed?.id === id ? failed.error : null, retry };
+  return { entry: loaded?.id === id ? loaded.entry : recentEntries.get(id), error: failed?.id === id ? failed.error : null, retry };
 }

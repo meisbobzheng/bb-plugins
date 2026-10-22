@@ -209,6 +209,9 @@ function ResultRow({ hit, selected, active, onSelect }: { hit: EntryHit; selecte
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: "nearest" });
   }, [active]);
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: "nearest" });
+  }, []);
   const details = [...hit.tags.slice(0, 4).map(({ tag }) => tag), hit.source.threadTitle, formatDate(hit.updatedAt)].filter((part) => part !== null && part !== "");
   return (
     <li>
