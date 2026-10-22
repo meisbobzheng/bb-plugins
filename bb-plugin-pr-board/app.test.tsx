@@ -386,6 +386,27 @@ describe("review workspace", () => {
     expect(saved[0]).toMatchObject({ repo: "acme/app", number: 7, id: null, path: "cmd/main.go", side: "additions", startLine: 3, endLine: 4 });
   });
 
+  it("refreshes the PR on demand and keeps it on screen with a retry when that fails", async () => {
+    let fail = false;
+    const pull = () => {
+      if (fail) throw new Error("gh api graphql: error connecting to api.github.com");
+      return { ...DETAIL, number: 15 };
+    };
+    const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/15" }, { rpc: workspaceRpc(STATE, { pull }) });
+    await slot.findByText("Add thing");
+    const refresh = slot.getByRole("button", { name: "Refresh" });
+    await waitFor(() => expect(refresh.hasAttribute("disabled")).toBe(false));
+    fail = true;
+    fireEvent.click(refresh);
+    const retry = await slot.findByRole("button", { name: "Update failed · retry" });
+    expect(retry.getAttribute("title")).toContain("error connecting");
+    expect(slot.getByText("Add thing")).toBeTruthy();
+    expect(slot.inspection.rpcCalls.filter((call) => call.method === "pull").at(-1)?.input).toEqual({ repo: "acme/app", number: 15, refresh: true });
+    fail = false;
+    fireEvent.click(retry);
+    expect(await slot.findByRole("button", { name: "Refresh" })).toBeTruthy();
+  });
+
   it("reloads the review state on its own PR's updates and after the connection comes back", async () => {
     const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/7" }, { rpc: workspaceRpc(STATE) });
     await slot.findByText("Add thing");

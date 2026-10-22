@@ -120,6 +120,10 @@ it again when it changed:
   PR Board updates the saved PR; marking it on GitHub's website is not noticed
   until the PR changes.
 
+The refresh button beside the PR number fetches the PR again. If that fails,
+the saved PR stays on screen and the button turns into **Update failed ·
+retry**, whose tooltip has GitHub's error.
+
 The page has:
 
 - **Files**: every changed file with its status, finding, unresolved-thread,

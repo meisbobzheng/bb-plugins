@@ -12,9 +12,11 @@ export function WorkspaceHeader({
   review,
   narrow,
   refreshing,
+  error,
   running,
   addressing,
   submittingAddress,
+  onRefresh,
   onShowFindings,
   onRunReview,
   onAddressComments,
@@ -25,9 +27,11 @@ export function WorkspaceHeader({
   review: ReviewState;
   narrow: boolean;
   refreshing: boolean;
+  error: string | null;
   running: boolean;
   addressing: boolean;
   submittingAddress: boolean;
+  onRefresh(): void;
   onShowFindings(): void;
   onRunReview(): void;
   onAddressComments(): void;
@@ -62,7 +66,23 @@ export function WorkspaceHeader({
               {detail.title}
             </h1>
             <span className="shrink-0 text-sm text-muted-foreground">#{detail.number}</span>
-            {refreshing ? <Icon name="ArrowReloadHorizontal" className="size-3 shrink-0 animate-spin text-muted-foreground" aria-label="Updating" /> : null}
+            {error !== null && !refreshing ? (
+              <button type="button" className="shrink-0 text-xs text-destructive underline-offset-2 hover:underline" title={error} onClick={onRefresh}>
+                Update failed · retry
+              </button>
+            ) : (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-6 shrink-0 text-muted-foreground"
+                disabled={refreshing}
+                title={refreshing ? "Updating…" : "Fetch the pull request from GitHub again"}
+                aria-label={refreshing ? "Updating" : "Refresh"}
+                onClick={onRefresh}
+              >
+                <Icon name="ArrowReloadHorizontal" className={cn("size-3", refreshing && "animate-spin")} />
+              </Button>
+            )}
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
             <span className="inline-flex shrink-0 items-center gap-1">

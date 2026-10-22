@@ -109,6 +109,7 @@ export function ReviewWorkspace({ pull }: { pull: PullRoute }) {
       key={key}
       detail={detail.value}
       refreshing={detail.refreshing}
+      error={detail.error ?? state.error}
       state={state.value}
       reloadState={state.reload}
       refreshDetail={refreshDetail}
@@ -127,12 +128,14 @@ const EMPTY_STATE: ReviewState = {
 function Workspace({
   detail,
   refreshing,
+  error,
   state,
   reloadState,
   refreshDetail,
 }: {
   detail: PullDetail;
   refreshing: boolean;
+  error: string | null;
   state: ReviewState | null;
   reloadState(): void;
   refreshDetail(): void;
@@ -513,8 +516,13 @@ function Workspace({
         review={review}
         narrow={narrow}
         refreshing={refreshing}
+        error={error}
         running={running}
         addressing={addressing}
+        onRefresh={() => {
+          refreshDetail();
+          reloadState();
+        }}
         onShowFindings={() => {
           changeTab("findings");
           setFilesOpen(true);
