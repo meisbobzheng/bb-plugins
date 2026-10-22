@@ -81,7 +81,7 @@ export function PanelDockMenu({
           New terminal
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => toggleFloatingTerminal(threadId)}>
-          <Icon name="Terminal" />
+          <Icon name="AppWindow" />
           Floating terminal
         </DropdownMenuItem>
       </DropdownMenuContent>
