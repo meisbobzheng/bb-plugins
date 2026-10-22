@@ -60,6 +60,10 @@ function defaultLayout(): Layout {
   };
 }
 
+function describeError(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
 function readJson<T>(key: string): T | null {
   try {
     const raw = localStorage.getItem(key);
@@ -88,43 +92,50 @@ function useLayout(storageKey: string) {
 function useBoards() {
   const rpc = useRpc<typeof rpcContract>();
   const [boards, setBoards] = useState<BoardSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const refresh = useCallback(() => {
     rpc.call("boards_list").then(
-      ({ boards: next }) => setBoards(next),
-      (cause: unknown) =>
-        toast.error("Scratchpad: could not load boards", {
-          description: cause instanceof Error ? cause.message : String(cause),
-        }),
+      ({ boards: next }) => {
+        setBoards(next);
+        setError(null);
+      },
+      (cause: unknown) => {
+        setError(describeError(cause));
+        toast.error("Scratchpad: could not load boards", { description: describeError(cause) });
+      },
     );
   }, [rpc]);
   useEffect(refresh, [refresh]);
   useRealtime(BOARDS_CHANGED, refresh);
-  return { rpc, boards, refresh };
+  return { rpc, boards, error, refresh };
 }
 
 function useBoard(boardId: string | null) {
   const rpc = useRpc<typeof rpcContract>();
   const [board, setBoard] = useState<Board | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (boardId === null) return;
     let cancelled = false;
     setBoard(null);
+    setError(null);
     waitForSave(boardId)
       .then(() => rpc.call("board_get", { id: boardId }))
       .then(
         ({ board: next }) => {
           if (!cancelled) setBoard(next);
         },
-        (cause: unknown) =>
-          toast.error("Scratchpad: could not open board", {
-            description: cause instanceof Error ? cause.message : String(cause),
-          }),
+        (cause: unknown) => {
+          if (!cancelled) setError(describeError(cause));
+        },
       );
     return () => {
       cancelled = true;
     };
-  }, [rpc, boardId]);
-  return board?.id === boardId ? board : null;
+  }, [rpc, boardId, attempt]);
+  const reload = useCallback(() => setAttempt((count) => count + 1), []);
+  return { board: board?.id === boardId ? board : null, error, reload };
 }
 
 function useDrag(onMove: (dx: number, dy: number) => void) {
@@ -149,13 +160,14 @@ function useDrag(onMove: (dx: number, dy: number) => void) {
 function ScratchpadWindow({ open, pluginId }: { open: boolean; pluginId: string }) {
   const compact = useIsCompactViewport();
   const [layout, setLayout] = useLayout(`${pluginId}:layout`);
-  const { rpc, boards, refresh } = useBoards();
+  const { rpc, boards, error: boardsError, refresh } = useBoards();
   const { activeBoard } = useScratchpad();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renamingTitle, setRenamingTitle] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const activeId = activeBoard?.id ?? null;
-  const board = useBoard(activeId);
+  const { board, error: boardError, reload } = useBoard(activeId);
+  const loadError = boardError ?? (boards === null ? boardsError : null);
 
   useEffect(() => {
     if (boards === null) return;
@@ -192,7 +204,7 @@ function ScratchpadWindow({ open, pluginId }: { open: boolean; pluginId: string 
   );
 
   const report = (message: string) => (cause: unknown) =>
-    toast.error(message, { description: cause instanceof Error ? cause.message : String(cause) });
+    toast.error(message, { description: describeError(cause) });
 
   const createBoard = () => {
     const name = `Board ${(boards?.length ?? 0) + 1}`;
@@ -311,10 +323,27 @@ function ScratchpadWindow({ open, pluginId }: { open: boolean; pluginId: string 
           />
         ) : null}
         <main className="relative min-w-0 flex-1">
-          {board === null ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading board…</div>
-          ) : (
+          {board !== null ? (
             <Editor key={board.id} board={board} />
+          ) : loadError !== null ? (
+            <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm">
+              <div className="space-y-1">
+                <p className="text-destructive">Could not load this board.</p>
+                <p className="text-xs text-muted-foreground">{loadError}</p>
+              </div>
+              <button
+                type="button"
+                className="h-7 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-state-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                onClick={() => {
+                  refresh();
+                  reload();
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading board…</div>
           )}
         </main>
       </div>
