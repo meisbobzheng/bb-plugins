@@ -35,8 +35,8 @@ sketch, and reference any board from a thread.
 | E | Eraser |
 
 Other keys: ⌘Z / ⇧⌘Z undo/redo, ⌘A select all, ⌘D duplicate, ⌫ delete,
-arrow keys nudge (Shift for 10px). Clicking the zoom percentage fits the board
-to the window.
+arrow keys nudge (Shift for 10px), ⇧1 fits the board to the window (as does
+clicking the zoom percentage), and ⇧0 zooms to 100%.
 
 ## Layout
 

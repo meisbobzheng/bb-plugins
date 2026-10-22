@@ -633,6 +633,11 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
     startEditing({ id: element.id, before, created: true });
   };
 
+  const fitToWindow = () => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    setView(fitView(elementsRef.current, rect?.width ?? 0, rect?.height ?? 0));
+  };
+
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement) return;
     const mod = event.metaKey || event.ctrlKey;
@@ -677,6 +682,8 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
       return;
     }
     if (mod || event.altKey) return;
+    if (event.shiftKey && event.code === "Digit1") return void (handled(), fitToWindow());
+    if (event.shiftKey && event.code === "Digit0") return void (handled(), zoomAt(1 / viewRef.current.zoom));
     const spec = TOOLS.find((candidate) => candidate.shortcut?.toLowerCase() === key);
     if (spec !== undefined) {
       handled();
@@ -902,12 +909,10 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
         </ToolbarButton>
         <button
           type="button"
-          title="Fit board to window"
-          className="h-7 min-w-12 rounded-md px-1 text-xs tabular-nums text-muted-foreground hover:bg-state-hover hover:text-foreground"
-          onClick={() => {
-            const rect = svgRef.current?.getBoundingClientRect();
-            setView(fitView(elementsRef.current, rect?.width ?? 0, rect?.height ?? 0));
-          }}
+          title="Fit board to window — ⇧1"
+          aria-label={`Zoom ${Math.round(zoom * 100)}%, fit board to window`}
+          className="h-7 min-w-12 rounded-md px-1 text-xs tabular-nums text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          onClick={fitToWindow}
         >
           {Math.round(zoom * 100)}%
         </button>
