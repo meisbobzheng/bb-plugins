@@ -1,5 +1,7 @@
 import {
   createContext,
+  memo,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -39,14 +41,50 @@ function Kbd({ children }: { children: string }) {
 
 export function useRunAction() {
   const ctx = useLauncher();
-  return (item: Item, action: Action) => {
-    if (item.usageKey !== undefined) ctx.recordUse(item.usageKey);
-    if (!action.keepOpen) ctx.controls.close();
-    Promise.resolve()
-      .then(() => action.run())
-      .catch((cause: unknown) => toast.error(`${action.title} failed`, { description: errorMessage(cause) }));
-  };
+  return useCallback(
+    (item: Item, action: Action) => {
+      if (item.usageKey !== undefined) ctx.recordUse(item.usageKey);
+      if (!action.keepOpen) ctx.controls.close();
+      Promise.resolve()
+        .then(() => action.run())
+        .catch((cause: unknown) => toast.error(`${action.title} failed`, { description: errorMessage(cause) }));
+    },
+    [ctx],
+  );
 }
+
+interface RowProps {
+  item: Item;
+  index: number;
+  active: boolean;
+  onSelect(id: string): void;
+  onRun(item: Item, action: Action): void;
+}
+
+const Row = memo(function Row({ item, index, active, onSelect, onRun }: RowProps) {
+  return (
+    <div
+      role="option"
+      aria-selected={active}
+      data-index={index}
+      onMouseMove={() => !active && onSelect(item.id)}
+      onClick={() => item.actions[0] && onRun(item, item.actions[0])}
+      className={cn(
+        "flex h-9 cursor-default items-center gap-3 rounded-md px-3 text-sm",
+        active && "bg-state-active",
+      )}
+    >
+      <span className="flex size-5 shrink-0 items-center justify-center">{item.icon}</span>
+      <span className="min-w-0 flex-1 truncate">
+        <span className="text-foreground">{item.title}</span>
+        {item.subtitle ? (
+          <span className="ml-2 text-xs text-muted-foreground">{item.subtitle}</span>
+        ) : null}
+      </span>
+      {item.accessory ? <span className="shrink-0">{item.accessory}</span> : null}
+    </div>
+  );
+});
 
 export function Results({ sections, query, emptyText = "No results", showPreview }: ResultsProps) {
   const ctx = useLauncher();
@@ -128,29 +166,15 @@ export function Results({ sections, query, emptyText = "No results", showPreview
                   </div>
                   {section.items.map((item) => {
                     const itemIndex = position++;
-                    const active = itemIndex === index;
                     return (
-                      <div
+                      <Row
                         key={item.id}
-                        role="option"
-                        aria-selected={active}
-                        data-index={itemIndex}
-                        onMouseMove={() => !active && setSelectedId(item.id)}
-                        onClick={() => item.actions[0] && runAction(item, item.actions[0])}
-                        className={cn(
-                          "flex h-9 cursor-default items-center gap-3 rounded-md px-3 text-sm",
-                          active && "bg-state-active",
-                        )}
-                      >
-                        <span className="flex size-5 shrink-0 items-center justify-center">{item.icon}</span>
-                        <span className="min-w-0 flex-1 truncate">
-                          <span className="text-foreground">{item.title}</span>
-                          {item.subtitle ? (
-                            <span className="ml-2 text-xs text-muted-foreground">{item.subtitle}</span>
-                          ) : null}
-                        </span>
-                        {item.accessory ? <span className="shrink-0">{item.accessory}</span> : null}
-                      </div>
+                        item={item}
+                        index={itemIndex}
+                        active={itemIndex === index}
+                        onSelect={setSelectedId}
+                        onRun={runAction}
+                      />
                     );
                   })}
                 </div>

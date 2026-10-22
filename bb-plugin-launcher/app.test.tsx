@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { loadPluginApp, renderSlot, type PluginSdkTestFakes } from "@get-bb/plugin-sdk/testing/app";
 import { makeProject, makeThread } from "./fixtures";
 import { launcher } from "./launcher/store";
@@ -47,10 +48,17 @@ const THREADS = [
   makeThread({ id: "thr_old", displayTitle: "Old cleanup", updatedAt: 1 }),
 ];
 
-async function renderLauncher(
-  settings: Record<string, boolean> = {},
-  initialState: LauncherState = { pinnedProjectIds: [], usage: {} },
-) {
+interface RenderOptions {
+  settings?: Record<string, boolean>;
+  state?: LauncherState;
+  threads?: PluginSidebarThread[];
+}
+
+async function renderLauncher({
+  settings = {},
+  state: initialState = { pinnedProjectIds: [], usage: {} },
+  threads = THREADS,
+}: RenderOptions = {}) {
   const app = await loadPluginApp(() => import("./app"));
   const overlay = app.appOverlays[0]!;
   let state = initialState;
@@ -83,7 +91,7 @@ async function renderLauncher(
     context: { projectId: "proj_a", threadId: null },
     sidebarThreads: {
       status: "ready",
-      threads: THREADS,
+      threads,
       projects: [makeProject("proj_a", "hss"), makeProject("proj_b", "go-diameter")],
       sections: [],
     },
@@ -118,7 +126,7 @@ describe("launcher", () => {
   });
 
   it("has pins and usage loaded before it opens and keeps them between opens", async () => {
-    const slot = await renderLauncher({}, { pinnedProjectIds: ["proj_b"], usage: {} });
+    const slot = await renderLauncher({ state: { pinnedProjectIds: ["proj_b"], usage: {} } });
     await settle();
     pressModK();
     expect(slot.getByRole("group", { name: "Pinned" }).textContent).toContain("go-diameter");
@@ -130,7 +138,7 @@ describe("launcher", () => {
   });
 
   it("leaves ⌘K to bb when the shortcut setting is off", async () => {
-    const slot = await renderLauncher({ replaceShortcut: false });
+    const slot = await renderLauncher({ settings: { replaceShortcut: false } });
     pressModK();
     expect(slot.queryByRole("dialog")).toBeNull();
   });
@@ -173,6 +181,22 @@ describe("launcher", () => {
       const spawn = slot.inspection.sdkCalls.find((call) => call.method === "threads.spawn");
       expect(spawn?.args[0]).toMatchObject({ projectId: "proj_a", prompt: "add retry to the CER loop" });
     });
+  });
+
+  it("lists a project's latest threads and finds older ones by search", async () => {
+    const threads = Array.from({ length: 120 }, (_, index) =>
+      makeThread({ id: `thr_${index}`, projectId: "proj_b", displayTitle: `Rollout step ${index}`, updatedAt: 1000 - index }),
+    );
+    const slot = await renderLauncher({ threads });
+    pressModK();
+    const input = await slot.findByRole("textbox");
+    fireEvent.change(input, { target: { value: "go-diameter" } });
+    fireEvent.mouseMove(within(slot.getByRole("group", { name: "Projects" })).getByText("go-diameter"));
+    fireEvent.keyDown(input, { key: "Enter" });
+    const latest = await slot.findByRole("group", { name: "Threads · latest 100 of 120" });
+    expect(within(latest).getAllByRole("option")).toHaveLength(100);
+    fireEvent.change(input, { target: { value: "step 119" } });
+    expect(slot.getByRole("option", { selected: true }).textContent).toContain("Rollout step 119");
   });
 
   it("toggles an app setting from the settings page", async () => {

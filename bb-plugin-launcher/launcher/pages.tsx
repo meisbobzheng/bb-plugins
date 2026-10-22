@@ -33,6 +33,8 @@ interface PageProps {
   showPreview: boolean;
 }
 
+const PROJECT_THREAD_LIMIT = 100;
+
 const icon = (Glyph: LucideIcon) => <Glyph className="size-4 text-muted-foreground" aria-hidden />;
 const itemTerms = (item: Item) => item.terms ?? [];
 
@@ -239,6 +241,7 @@ export function ProjectPage({ projectId, query, showPreview }: PageProps & { pro
     const listed = new Set([...attention, ...running].map((thread) => thread.id));
     const pinned = byUpdated.filter((thread) => thread.isPinned && !listed.has(thread.id));
     for (const thread of pinned) listed.add(thread.id);
+    const rest = byUpdated.filter((thread) => !listed.has(thread.id));
     return [
       {
         title: project.name,
@@ -256,7 +259,10 @@ export function ProjectPage({ projectId, query, showPreview }: PageProps & { pro
       { title: "Needs attention", items: attention.map(toThread) },
       { title: "Running", items: running.map(toThread) },
       { title: "Pinned", items: pinned.map(toThread) },
-      { title: "Threads", items: byUpdated.filter((thread) => !listed.has(thread.id)).map(toThread) },
+      {
+        title: rest.length > PROJECT_THREAD_LIMIT ? `Threads · latest ${PROJECT_THREAD_LIMIT} of ${rest.length.toLocaleString()}` : "Threads",
+        items: rest.slice(0, PROJECT_THREAD_LIMIT).map(toThread),
+      },
     ];
   }, [ctx, project, projectId, query]);
   return <Results sections={sections} query={query} showPreview={showPreview} emptyText="Project not found" />;

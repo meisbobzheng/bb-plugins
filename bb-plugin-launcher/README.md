@@ -22,8 +22,8 @@ window for threads, projects, quick prompts, settings, and plugins.
 - **Quick prompt:** type a prompt and pick **Ask in <project>** to start a
   thread there without leaving the launcher (`⌘↵` opens it in the composer
   instead). **Ask in project…** picks another project.
-- **Projects:** `↵` on a project lists its threads. Typing there filters them,
-  or starts a thread in that project.
+- **Projects:** `↵` on a project lists its threads, up to the latest 100.
+  Typing there searches all of them, or starts a thread in that project.
 - **Preview:** the right pane shows the selected thread's project, branch,
   workspace, machine, agent, pull request, and last few messages.
 
