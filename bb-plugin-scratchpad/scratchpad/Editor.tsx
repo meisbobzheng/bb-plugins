@@ -158,6 +158,7 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
   const [editing, setEditing] = useState<EditSession | null>(null);
   const [panning, setPanning] = useState(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
+  const [hovering, setHovering] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -495,6 +496,7 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
     const point = toWorld(event.clientX, event.clientY);
     if (gesture === null) {
       if (polygonDraft !== null) setCursor(point);
+      if (tool === "select") setHovering(topmostAt(elementsRef.current, point, HIT_TOLERANCE / viewRef.current.zoom) !== null);
       return;
     }
     switch (gesture.kind) {
@@ -698,8 +700,13 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
   const single = selected.length === 1 && editing === null ? selected[0]! : null;
   const editingElement = editing === null ? undefined : elementsById.get(editing.id);
   const handleSize = 8 / zoom;
-  const cursorStyle =
-    panning ? "grabbing" : tool === "hand" || spaceHeld ? "grab" : tool === "select" ? "default" : tool === "text" ? "text" : "crosshair";
+  const cursorStyle = panning
+    ? "grabbing"
+    : tool === "hand" || spaceHeld
+      ? "grab"
+      : tool === "select"
+        ? hovering ? "move" : "default"
+        : tool === "text" ? "text" : "crosshair";
 
   return (
     <div
@@ -721,7 +728,10 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onPointerLeave={() => setCursor(null)}
+        onPointerLeave={() => {
+          setCursor(null);
+          setHovering(false);
+        }}
         onDoubleClick={onDoubleClick}
       >
         {zoom >= 0.3 ? (
