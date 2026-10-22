@@ -85,6 +85,15 @@ describe("Library app", () => {
     expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "library", options: { subPath: "lib_1a2b3c4d", replace: true } }]);
   });
 
+  it("shows truncated titles in full on hover, and when an entry last changed", async () => {
+    const app = await load();
+    const entry = { ...HIT, updatedAt: "2026-10-02T10:00:00.000Z", body: "x" } satisfies Entry;
+    const slot = renderSlot(app.navPanels[0]!, { subPath: HIT.id }, { rpc: { search: () => RESULT, entry: () => entry } });
+    expect(await slot.findByText(/^· Updated /)).toBeTruthy();
+    expect(slot.getByText(HIT.title, { selector: "span" }).getAttribute("title")).toBe(HIT.title);
+    expect(slot.getByRole("button", { name: "from “Debug attach”" }).getAttribute("title")).toBe("Debug attach");
+  });
+
   it("filters by tags chosen from a group menu", async () => {
     const app = await load();
     const searches: Array<{ tags: string[] }> = [];

@@ -212,7 +212,9 @@ function ResultRow({ hit, selected, active, onSelect }: { hit: EntryHit; selecte
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: "nearest" });
   }, []);
-  const details = [...hit.tags.slice(0, 4).map(({ tag }) => tag), hit.source.threadTitle, formatDate(hit.updatedAt)].filter((part) => part !== null && part !== "");
+  const details = [...hit.tags.slice(0, 4).map(({ tag }) => tag), hit.source.threadTitle, formatDate(hit.updatedAt)]
+    .filter((part) => part !== null && part !== "")
+    .join(" · ");
   return (
     <li>
       <button
@@ -222,13 +224,15 @@ function ResultRow({ hit, selected, active, onSelect }: { hit: EntryHit; selecte
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
         className={cn(
-          "block w-full cursor-pointer px-3 py-2.5 text-left transition-colors hover:bg-state-hover",
+          "block w-full cursor-pointer px-3 py-2.5 text-left transition-colors hover:bg-state-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
           selected && "bg-state-active hover:bg-state-active",
           active && "ring-1 ring-inset ring-ring",
         )}
       >
         <div className="flex items-start gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{hit.title}</span>
+          <span title={hit.title} className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            {hit.title}
+          </span>
           <KindBadge kind={hit.kind} />
         </div>
         {hit.snippet === "" ? null : (
@@ -236,7 +240,9 @@ function ResultRow({ hit, selected, active, onSelect }: { hit: EntryHit; selecte
             <Highlighted text={hit.snippet} />
           </p>
         )}
-        <p className="mt-1 truncate text-[11px] text-muted-foreground">{details.join(" · ")}</p>
+        <p title={details} className="mt-1 truncate text-[11px] text-muted-foreground">
+          {details}
+        </p>
       </button>
     </li>
   );

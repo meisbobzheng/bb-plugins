@@ -98,12 +98,22 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
           <KindBadge kind={entry.kind} />
           <span title={new Date(entry.createdAt).toLocaleString()}>Saved {formatDate(entry.createdAt)}</span>
           {threadId !== null ? (
-            <button type="button" className="cursor-pointer truncate underline-offset-2 hover:text-foreground hover:underline" onClick={() => navigate.toThread(threadId)}>
+            <button
+              type="button"
+              title={threadTitle ?? undefined}
+              className="max-w-full cursor-pointer truncate underline-offset-2 hover:text-foreground hover:underline"
+              onClick={() => navigate.toThread(threadId)}
+            >
               from “{threadTitle ?? "conversation"}”
             </button>
           ) : threadTitle !== null ? (
-            <span className="truncate">from “{threadTitle}” (deleted)</span>
+            <span title={threadTitle} className="max-w-full truncate">
+              from “{threadTitle}” (deleted)
+            </span>
           ) : null}
+          {entry.updatedAt === entry.createdAt ? null : (
+            <span title={new Date(entry.updatedAt).toLocaleString()}>· Updated {formatDate(entry.updatedAt)}</span>
+          )}
         </div>
         {entry.summary === "" ? null : <p className="text-sm text-muted-foreground">{entry.summary}</p>}
         <TagMenus tags={entry.tags} label="Tags" onPick={onTagClick} />
