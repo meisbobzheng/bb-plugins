@@ -34,8 +34,10 @@ AWS SSO session you already have.
   **Esc** cancels a running query.
 - Results show the type of each column, `NULL` in italics, and the first rows
   up to the cap in the plugin settings (500 by default). Click a cell to see
-  its full value, double-click to copy it. **Export** copies the grid as a
-  Markdown table, CSV, or JSON, or downloads a CSV or JSON file.
+  its full value; the arrow keys move between cells, and double-click or **⌘C**
+  copies one. The last results stay on screen, dimmed, while the next query
+  runs. **Export** copies the grid as a Markdown table, CSV, or JSON, or
+  downloads a CSV or JSON file.
 - **Explain** shows the planner's tree; **Analyze** runs the statement inside a
   rolled-back transaction and shows real timings, with each node's share of
   the time as a bar and rows that are off by more than 10× from the estimate

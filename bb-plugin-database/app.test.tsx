@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { inputOf } from "./components/ConnectionDialog";
+import { columnWidths } from "./components/Results";
 import { resetSession } from "./components/session";
 import type { Connection, HistoryEntry, QueryRun, SchemaSnapshot } from "./contract";
 
@@ -203,6 +204,79 @@ describe("Database page", () => {
     await settle();
     expect(await slot.findByText(/how many subscribers/)).toBeTruthy();
     expect(slot.getByText("Ask")).toBeTruthy();
+  });
+});
+
+describe("results grid", () => {
+  const WIDE: QueryRun = {
+    ...RUN,
+    results: [
+      {
+        columns: [
+          { name: "id", type: "int8", typeId: 20 },
+          { name: "active", type: "bool", typeId: 16 },
+        ],
+        rows: Array.from({ length: 1000 }, (_, index) => [String(index + 1), index % 2 === 0 ? "t" : "f"]),
+        rowCount: 1000,
+        command: "SELECT",
+        truncated: false,
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    resetSession();
+    Object.defineProperty(window, "localStorage", { value: memoryStorage(), configurable: true });
+    window.localStorage.setItem(`database:draft:${CONNECTION.id}`, "select id, active from subscribers");
+  });
+  afterEach(cleanup);
+
+  async function run(rpc: Record<string, (input: unknown) => unknown>) {
+    const app = await load();
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: { ...baseRpc, ...rpc } });
+    await settle();
+    fireEvent.click(await slot.findByRole("button", { name: /^Run/ }));
+    await settle();
+    return slot;
+  }
+
+  it("sizes columns from their longest value up to a cap", () => {
+    const set = { ...RUN.results[0]!, columns: [...RUN.results[0]!.columns, { name: "note", type: "text", typeId: 25 }, { name: "ok", type: "bool", typeId: 16 }], rows: [["7", null, "f"], ["8", "x".repeat(500), "t"]] };
+    expect(columnWidths(set)).toEqual([6, 60, 7]);
+  });
+
+  it("renders only the rows near the viewport", async () => {
+    const slot = await run({ query_run: () => WIDE });
+    const grid = slot.getByRole("region", { name: "Query results" });
+    expect(grid.querySelectorAll("tr[data-row]").length).toBeLessThan(200);
+    expect(grid.querySelector('tr[data-row="999"]')).toBeNull();
+    Object.defineProperty(grid, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(grid, "scrollTop", { value: 21 * 980, configurable: true });
+    fireEvent.scroll(grid);
+    expect(grid.querySelector('tr[data-row="999"]')).not.toBeNull();
+    expect(grid.querySelector('tr[data-row="0"]')).toBeNull();
+  });
+
+  it("moves through cells with the arrow keys and copies one with ⌘C", async () => {
+    const slot = await run({ query_run: () => WIDE });
+    const grid = slot.getByRole("region", { name: "Query results" });
+    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    fireEvent.keyDown(grid, { key: "ArrowRight" });
+    expect(grid.querySelector('tr[data-row="1"] > td[data-column="1"]')?.className).toMatch(/bg-state-active/);
+    fireEvent.keyDown(grid, { key: "c", metaKey: true });
+    await settle();
+    expect(slot.inspection.experimental_clipboardWrites.at(-1)).toMatchObject({ text: "f" });
+  });
+
+  it("keeps the last results on screen while the next query runs", async () => {
+    let calls = 0;
+    const slot = await run({ query_run: () => (++calls === 1 ? RUN : new Promise(() => undefined)) });
+    expect(slot.getByText("60")).toBeTruthy();
+    fireEvent.click(slot.getByRole("button", { name: /^Run/ }));
+    await settle();
+    expect(slot.getByRole("status").textContent).toMatch(/Running/);
+    expect(slot.getByText("60")).toBeTruthy();
   });
 });
 
