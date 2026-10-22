@@ -110,12 +110,40 @@ describe("content script", () => {
     pointer(panel, "pointerdown");
     expect(root.dataset.panelDockResizing).toBe("");
     pointer(panel, "pointermove", { clientY: 600 });
-    expect(root.style.getPropertyValue("--panel-dock-height")).toBe("300px");
+    expect(panel.style.getPropertyValue("--panel-dock-height")).toBe("300px");
+    expect(root.style.getPropertyValue("--panel-dock-height")).toBe("");
     pointer(panel, "lostpointercapture");
 
     expect(root.dataset.panelDockResizing).toBeUndefined();
+    expect(root.style.getPropertyValue("--panel-dock-height")).toBe("300px");
+    expect(panel.style.getPropertyValue("--panel-dock-height")).toBe("");
     expect(localStorage.getItem(`${PLUGIN_ID}:height`)).toBe("300px");
     await mounted.lifecycle.dispose();
+  });
+
+  it("keeps the saved height when the top edge is pressed without a drag", async () => {
+    const panel = renderPanels();
+    localStorage.setItem(`${PLUGIN_ID}:height`, "320px");
+    const mounted = await mount();
+
+    pointer(panel, "pointerdown");
+    pointer(panel, "lostpointercapture");
+
+    expect(root.style.getPropertyValue("--panel-dock-height")).toBe("320px");
+    expect(localStorage.getItem(`${PLUGIN_ID}:height`)).toBe("320px");
+    await mounted.lifecycle.dispose();
+  });
+
+  it("clears a drag in progress on dispose", async () => {
+    const panel = renderPanels();
+    const mounted = await mount();
+
+    pointer(panel, "pointerdown");
+    pointer(panel, "pointermove", { clientY: 600 });
+    await mounted.lifecycle.dispose();
+
+    expect(root.dataset.panelDockResizing).toBeUndefined();
+    expect(panel.style.getPropertyValue("--panel-dock-height")).toBe("");
   });
 
   it("ignores presses inside the panel content", async () => {

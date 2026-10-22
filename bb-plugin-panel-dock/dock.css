@@ -55,8 +55,13 @@ html[data-panel-dock-resizing] {
   cursor: row-resize;
   user-select: none;
 
-  [data-panel]::before {
-    background: var(--ring);
+  [data-panel-resize-handle-id="thread-detail-secondary-panel-handle"]
+    + [data-panel] {
+    transition: none !important;
+
+    &::before {
+      background: var(--ring);
+    }
   }
 }
 

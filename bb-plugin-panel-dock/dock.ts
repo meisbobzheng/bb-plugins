@@ -100,17 +100,18 @@ function startResize(event: PointerEvent, signal: AbortSignal) {
 
   const bottom = panel.parentElement.getBoundingClientRect().bottom;
   const move = (moveEvent: PointerEvent) =>
-    root().style.setProperty(
+    panel.style.setProperty(
       HEIGHT_VAR,
       `${Math.round(bottom - moveEvent.clientY)}px`,
     );
   const end = () => {
     panel.removeEventListener("pointermove", move);
     delete root().dataset.panelDockResizing;
-    localStorage.setItem(
-      storageKey("height"),
-      root().style.getPropertyValue(HEIGHT_VAR),
-    );
+    const height = panel.style.getPropertyValue(HEIGHT_VAR);
+    if (!height) return;
+    panel.style.removeProperty(HEIGHT_VAR);
+    root().style.setProperty(HEIGHT_VAR, height);
+    localStorage.setItem(storageKey("height"), height);
   };
 
   root().dataset.panelDockResizing = "";
@@ -136,5 +137,6 @@ export function mountDock({ pluginId, signal }: PluginContentScriptContext) {
     delete root().dataset.panelDock;
     delete root().dataset.panelDockResizing;
     root().style.removeProperty(HEIGHT_VAR);
+    document.querySelector<HTMLElement>(PANEL)?.style.removeProperty(HEIGHT_VAR);
   };
 }
