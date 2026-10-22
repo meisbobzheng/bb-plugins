@@ -15,8 +15,15 @@ function termScore(term: string, text: string): number | null {
   return Math.max(1, 40 - gaps);
 }
 
+export function queryTerms(query: string): string[] {
+  return query.toLowerCase().split(/\s+/).filter(Boolean);
+}
+
 export function matchScore(query: string, fields: readonly string[]): number | null {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return matchTerms(queryTerms(query), fields);
+}
+
+export function matchTerms(terms: readonly string[], fields: readonly string[]): number | null {
   const texts = fields.map((field) => field.toLowerCase());
   let total = 0;
   for (const term of terms) {

@@ -65,10 +65,14 @@ describe("rootGroups", () => {
   });
 
   it("orders recent threads by frecency and splits pinned projects out", () => {
-    const threads = [makeThread({ id: "t1", updatedAt: 10 }), makeThread({ id: "t2", updatedAt: 1 })];
+    const threads = [
+      makeThread({ id: "t1", updatedAt: 10 }),
+      makeThread({ id: "t2", updatedAt: 1 }),
+      makeThread({ id: "t3", updatedAt: 5 }),
+    ];
     const usage = { [threadKey("t2")]: { count: 3, lastUsedAt: NOW } };
     const groups = rootGroups(threads, projects, ["proj_b"], usage, NOW);
-    expect(groups.recent.map((thread) => thread.id)).toEqual(["t2", "t1"]);
+    expect(groups.recent.map((thread) => thread.id)).toEqual(["t2", "t1", "t3"]);
     expect(groups.pinnedProjects.map((project) => project.id)).toEqual(["proj_b"]);
     expect(groups.projects.map((project) => project.id)).toEqual(["proj_a"]);
   });

@@ -1,6 +1,6 @@
 import type { PluginSidebarProject, PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { frecency, type Usage } from "../model";
-import { matchScore } from "./match";
+import { matchTerms, queryTerms } from "./match";
 
 type Thread = PluginSidebarThread;
 type Project = PluginSidebarProject;
@@ -66,9 +66,10 @@ export function rootGroups(
   );
   const pinnedThreads = take(visible.filter((thread) => thread.isPinned).sort(byPinOrder), 20);
   const recent = take(
-    [...visible].sort(
-      (a, b) => score(threadKey(b.id)) - score(threadKey(a.id)) || b.updatedAt - a.updatedAt,
-    ),
+    visible
+      .map((thread) => ({ thread, score: score(threadKey(thread.id)) }))
+      .sort((a, b) => b.score - a.score || b.thread.updatedAt - a.thread.updatedAt)
+      .map(({ thread }) => thread),
     8,
   );
 
@@ -95,9 +96,10 @@ export function rank<T>(
   now: number,
   limit = 30,
 ): T[] {
+  const terms = queryTerms(query);
   return candidates
     .flatMap((candidate) => {
-      const score = matchScore(query, fields(candidate));
+      const score = terms.length === 0 ? 0 : matchTerms(terms, fields(candidate));
       if (score === null) return [];
       return [{ candidate, score: score + Math.min(frecency(usage[key(candidate)], now) / 20, 40) }];
     })
