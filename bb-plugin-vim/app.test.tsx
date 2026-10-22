@@ -47,6 +47,19 @@ describe("vim overlay", () => {
     expect(document.querySelectorAll("[data-vim-hint]")).toHaveLength(0);
   });
 
+  it("fits the ring around the cursor and hides it when the item goes away", async () => {
+    await renderVim();
+    keydown("h");
+    const ring = document.querySelector<HTMLElement>("[data-vim-ring]")!;
+    expect(ring.style.transform).toBe("translate(-2px, 38px)");
+    expect(ring.style.width).toBe("244px");
+    expect(ring.hidden).toBe(false);
+    const row = document.querySelector<HTMLElement>('[data-sidebar-thread-id="t1"]')!;
+    row.getBoundingClientRect = Element.prototype.getBoundingClientRect;
+    row.remove();
+    await waitFor(() => expect(ring.hidden).toBe(true));
+  });
+
   it("switches threads through bb's navigation", async () => {
     const slot = await renderVim();
     keydown("g");

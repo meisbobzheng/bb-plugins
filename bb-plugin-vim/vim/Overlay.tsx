@@ -4,6 +4,7 @@ import { useBbContext, useBbNavigate, useSettings } from "@get-bb/plugin-sdk/app
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import { mountVim } from "./engine";
 import { Help } from "./Help";
+import { area } from "./layout";
 import { useVimState, type Hint, type VimState } from "./store";
 
 const LAYER = "pointer-events-none fixed z-[2147483647]";
@@ -12,10 +13,14 @@ function Ring({ target }: { target: Element }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let frame = 0;
+    let drawn = "";
     const paint = () => {
       const box = target.getBoundingClientRect();
       const ring = ref.current;
-      if (ring !== null) {
+      const next = `${box.left},${box.top},${box.width},${box.height}`;
+      if (ring !== null && next !== drawn) {
+        drawn = next;
+        ring.hidden = area(box) === 0;
         ring.style.transform = `translate(${box.left - 2}px, ${box.top - 2}px)`;
         ring.style.width = `${box.width + 4}px`;
         ring.style.height = `${box.height + 4}px`;
