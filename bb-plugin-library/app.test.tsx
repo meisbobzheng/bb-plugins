@@ -212,6 +212,50 @@ describe("Library app", () => {
     expect(window.localStorage.getItem("test-plugin:last-entry")).toBe("null");
   });
 
+  it("offers a retry when search fails", async () => {
+    const app = await load();
+    let calls = 0;
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, {
+      rpc: {
+        search: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error("Library is restarting");
+          return RESULT;
+        },
+      },
+    });
+    const alert = await slot.findByRole("alert");
+    expect(alert.textContent).toContain("Could not search the Library.");
+    expect(alert.textContent).toContain("Library is restarting");
+
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await slot.findByText("S6a attach: ULR/ULA")).toBeTruthy();
+  });
+
+  it("keeps an entry that failed to load and retries it", async () => {
+    const id = "lib_0badc0de";
+    window.localStorage.setItem("test-plugin:last-entry", JSON.stringify(id));
+    const app = await load();
+    let calls = 0;
+    const slot = renderSlot(app.navPanels[0]!, { subPath: id }, {
+      rpc: {
+        search: () => RESULT,
+        entry: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error("Library is restarting");
+          return { ...HIT, id, title: "Retried entry", body: "Back again." } satisfies Entry;
+        },
+      },
+    });
+    const alert = await slot.findByRole("alert");
+    expect(alert.textContent).toContain("Could not open this entry.");
+    expect(slot.inspection.navigateCalls).toEqual([]);
+    expect(window.localStorage.getItem("test-plugin:last-entry")).toBe(JSON.stringify(id));
+
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await slot.findByRole("heading", { name: "Retried entry" })).toBeTruthy();
+  });
+
   it("toggles to the last entry, and back when the Library is showing", async () => {
     window.localStorage.setItem("test-plugin:last-entry", JSON.stringify(HIT.id));
     const app = await load();

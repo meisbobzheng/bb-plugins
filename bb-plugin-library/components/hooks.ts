@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
 import type { CatalogTag, Entry, SearchInput, SearchResult, rpcContract } from "../contract";
 import { CHANGED_CHANNEL } from "../library";
@@ -26,9 +26,14 @@ function useLibraryVersion(): number {
   return version;
 }
 
+function useAttempt() {
+  return useReducer((attempt: number) => attempt + 1, 0);
+}
+
 export function useLibrarySearch(input: SearchInput) {
   const rpc = useLibraryRpc();
   const version = useLibraryVersion();
+  const [attempt, nextAttempt] = useAttempt();
   const [result, setResult] = useState<SearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const key = JSON.stringify(input);
@@ -55,9 +60,13 @@ export function useLibrarySearch(input: SearchInput) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [rpc, key, isQueryEmpty, version]);
+  }, [rpc, key, isQueryEmpty, version, attempt]);
 
-  return { result, error };
+  const retry = () => {
+    setError(null);
+    nextAttempt();
+  };
+  return { result, error, retry };
 }
 
 export function useTagCatalog(): ReadonlyMap<string, CatalogTag> {
@@ -84,23 +93,30 @@ export function useTagCatalog(): ReadonlyMap<string, CatalogTag> {
 export function useEntry(id: string) {
   const rpc = useLibraryRpc();
   const version = useLibraryVersion();
-  const [loaded, setLoaded] = useState<{ id: string; entry: Entry | null; error: string | null } | null>(null);
+  const [attempt, nextAttempt] = useAttempt();
+  const [loaded, setLoaded] = useState<{ id: string; entry: Entry | null } | null>(null);
+  const [failed, setFailed] = useState<{ id: string; error: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     rpc.call("entry", { id }).then(
       (entry) => {
-        if (!cancelled) setLoaded({ id, entry, error: null });
+        if (cancelled) return;
+        setLoaded({ id, entry });
+        setFailed(null);
       },
       (cause: unknown) => {
-        if (!cancelled) setLoaded((current) => ({ id, entry: current?.id === id ? current.entry : null, error: errorMessage(cause) }));
+        if (!cancelled) setFailed({ id, error: errorMessage(cause) });
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [rpc, id, version]);
+  }, [rpc, id, version, attempt]);
 
-  const current = loaded?.id === id ? loaded : null;
-  return { entry: current === null ? undefined : current.entry, error: current?.error ?? null };
+  const retry = () => {
+    setFailed(null);
+    nextAttempt();
+  };
+  return { entry: loaded?.id === id ? loaded.entry : undefined, error: failed?.id === id ? failed.error : null, retry };
 }

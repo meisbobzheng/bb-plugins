@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { cn } from "../lib/utils";
 import { cleanTag, termFor } from "../glossary";
@@ -102,6 +103,19 @@ export function EmptyState({ children, className }: { children: ReactNode; class
   return (
     <div role="status" className={cn("rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground", className)}>
       {children}
+    </div>
+  );
+}
+
+export function ErrorState({ message, error, onRetry }: { message: string; error: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="space-y-2 text-sm">
+      <p className="text-destructive">{message}</p>
+      <p className="break-words text-xs text-muted-foreground">{error}</p>
+      <Button size="sm" variant="outline" onClick={onRetry}>
+        <Icon name="RotateCcw" />
+        Try again
+      </Button>
     </div>
   );
 }

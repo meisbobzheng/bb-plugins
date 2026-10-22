@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Icon } from "./ui/icon";
 import type { Entry } from "../contract";
 import { specUrl, specsFor } from "../glossary";
-import { EmptyState, KindBadge, formatDate } from "./bits";
+import { EmptyState, ErrorState, KindBadge, formatDate } from "./bits";
 import { EntryFields, isDraftValid, type Draft } from "./EntryFields";
 import { ExportMenu } from "./ExportMenu";
 import { errorMessage, useEntry, useLibraryRpc } from "./hooks";
@@ -27,7 +27,7 @@ interface EntryViewProps {
 }
 
 export function EntryView({ id, onBack, onDeleted, onTagClick, onInsert, onReady, onMissing }: EntryViewProps) {
-  const { entry, error } = useEntry(id);
+  const { entry, error, retry } = useEntry(id);
   const [editing, setEditing] = useState(false);
   const status = entry === undefined ? "loading" : entry === null ? "missing" : "ready";
   useEffect(() => {
@@ -48,9 +48,7 @@ export function EntryView({ id, onBack, onDeleted, onTagClick, onInsert, onReady
       error === null ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <ErrorState message="Could not open this entry." error={error} onRetry={retry} />
       );
   } else if (entry === null) {
     content = <EmptyState>This entry no longer exists.</EmptyState>;
