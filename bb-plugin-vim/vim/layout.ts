@@ -15,6 +15,10 @@ export function centerY(box: Box): number {
   return box.top + box.height / 2;
 }
 
+export function labelTop(box: Box, height: number, viewport: number): number {
+  return Math.min(Math.max(centerY(box) - height / 2, 0), viewport - height);
+}
+
 export function area(box: Box): number {
   return box.width * box.height;
 }

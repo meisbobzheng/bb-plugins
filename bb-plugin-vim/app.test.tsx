@@ -42,6 +42,9 @@ describe("vim overlay", () => {
     expect(document.querySelector("[data-vim-ring]")).not.toBeNull();
     keydown("f");
     expect(document.querySelectorAll("[data-vim-hint]")).toHaveLength(6);
+    const copy = vim.get().hints!.find((hint) => hint.element.id === "copy")!;
+    const label = document.querySelector<HTMLElement>(`[data-vim-hint="${copy.label}"]`)!;
+    expect([label.style.left, label.style.top]).toEqual(["900px", "104px"]);
     expect(indicator()?.textContent).toBe("HINT");
     keydown("Escape");
     expect(document.querySelectorAll("[data-vim-hint]")).toHaveLength(0);

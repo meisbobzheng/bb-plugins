@@ -4,10 +4,11 @@ import { useBbContext, useBbNavigate, useSettings } from "@get-bb/plugin-sdk/app
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import { mountVim } from "./engine";
 import { Help } from "./Help";
-import { area } from "./layout";
+import { area, labelTop } from "./layout";
 import { useVimState, type Hint, type VimState } from "./store";
 
 const LAYER = "pointer-events-none fixed z-[2147483647]";
+const HINT_HEIGHT = 16;
 
 function Ring({ target }: { target: Element }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -40,7 +41,7 @@ function Hints({ hints, typed }: { hints: readonly Hint[]; typed: string }) {
       <span
         key={hint.label}
         data-vim-hint={hint.label}
-        style={{ left: Math.max(hint.box.left, 0), top: Math.max(hint.box.top, 0) }}
+        style={{ left: Math.max(hint.box.left, 0), top: labelTop(hint.box, HINT_HEIGHT, window.innerHeight) }}
         className={`${LAYER} rounded-sm bg-primary px-1 font-mono text-[11px] font-bold uppercase leading-4 text-primary-foreground shadow-md`}
       >
         <span className="opacity-50">{typed}</span>

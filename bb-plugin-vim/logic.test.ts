@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COMMANDS, keymapFor, resolve } from "./vim/bindings";
 import { hintLabels, typeHint } from "./vim/hints";
 import { formatKeys, keyToken, parseKeys, type KeyLike } from "./vim/keys";
-import { comparePosition, coverage, inViewport, nearestTo } from "./vim/layout";
+import { comparePosition, coverage, inViewport, labelTop, nearestTo } from "./vim/layout";
 
 const key = (value: string, modifiers: Partial<KeyLike> = {}): KeyLike => ({
   key: value,
@@ -128,6 +128,12 @@ describe("layout", () => {
     expect(nearestTo(boxes, 120)).toBe(1);
     expect(nearestTo(boxes, 1000)).toBe(2);
     expect(nearestTo([], 0)).toBe(-1);
+  });
+
+  it("centers a hint label on its target's row, inside the window", () => {
+    expect(labelTop(box(0, 100, 50, 24), 16, 768)).toBe(104);
+    expect(labelTop(box(0, -40, 50, 60), 16, 768)).toBe(0);
+    expect(labelTop(box(0, 750, 50, 60), 16, 768)).toBe(752);
   });
 
   it("knows when a box is on screen", () => {
