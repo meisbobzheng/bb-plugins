@@ -46,7 +46,7 @@ its last item, the open thread, or the item level with where you were.
 In hint mode, type a hint's letters to click it (or, after `F`, to put the
 cursor there). Picking a text field focuses it, and picking a terminal or code
 editor puts the caret in it. `Backspace` undoes a letter; `Esc` or any other
-key cancels.
+key cancels. Buttons that stay invisible until you hover get no hint.
 
 ## Settings
 

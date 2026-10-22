@@ -48,6 +48,8 @@ const DISABLED = ':disabled, [aria-disabled="true"]';
 const CURRENT = '[aria-current]:not([aria-current="false"]), [aria-selected="true"]';
 const POPUP_TRIGGER = '[aria-haspopup]:not([aria-haspopup="false"])';
 const THREAD_ROW = "[data-sidebar-thread-shortcut-target][data-sidebar-thread-id]";
+const RENDERED: CheckVisibilityOptions = { visibilityProperty: true };
+const OPAQUE: CheckVisibilityOptions = { visibilityProperty: true, opacityProperty: true };
 const NON_TEXT_INPUTS = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "range", "color", "hidden"]);
 
 export type Mode = "normal" | "insert" | "passthrough";
@@ -74,8 +76,8 @@ export function eventTarget(event: Event): Element | null {
   return target instanceof Element ? target : null;
 }
 
-function shown(el: Element, box: Box): boolean {
-  return box.width > 0 && box.height > 0 && el.closest(HIDDEN) === null && el.checkVisibility?.({ visibilityProperty: true }) !== false;
+function shown(el: Element, box: Box, visibility: CheckVisibilityOptions = RENDERED): boolean {
+  return box.width > 0 && box.height > 0 && el.closest(HIDDEN) === null && el.checkVisibility?.(visibility) !== false;
 }
 
 export function isRendered(el: Element): boolean {
@@ -186,7 +188,7 @@ export function hintTargets(scope: Element): { element: HTMLElement; box: DOMRec
   return [...scope.querySelectorAll(CLICKABLE)].flatMap((element) => {
     if (!(element instanceof HTMLElement)) return [];
     const box = element.getBoundingClientRect();
-    if (!inViewport(box, view.innerWidth, view.innerHeight) || !shown(element, box) || element.matches(DISABLED)) return [];
+    if (!inViewport(box, view.innerWidth, view.innerHeight) || !shown(element, box, OPAQUE) || element.matches(DISABLED)) return [];
     if (element.parentElement?.closest(EDITOR) != null) return [];
     const key = [box.left, box.top, box.width, box.height].map(Math.round).join(",");
     if (seen.has(key) || !unoccluded(element, box)) return [];

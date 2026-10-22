@@ -275,6 +275,14 @@ describe("hints", () => {
     expect(measured.map((spy) => spy.mock.calls.length)).toEqual(measured.map(() => 1));
   });
 
+  it("skips buttons that stay transparent until hovered", () => {
+    start(`${SHELL}<button id="close" data-box="400,300,20,20">Close</button>`);
+    byId("close").checkVisibility = (options) => options?.opacityProperty !== true;
+    press("f");
+    expect(vim.get().hints!.map((hint) => hint.element.id)).not.toContain("close");
+    expect(vim.get().hints).toHaveLength(6);
+  });
+
   it("focuses a text field picked by hint", () => {
     start(SHELL);
     press("f");
