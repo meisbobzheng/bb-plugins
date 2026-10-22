@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeProject, makeThread } from "./fixtures";
-import { matchScore } from "./launcher/match";
+import { matchRanges, matchScore } from "./launcher/match";
 import { projectKey, rank, rootGroups, threadKey } from "./launcher/rank";
 import { MAX_USAGE_ENTRIES, frecency, recordUsage } from "./model";
 
@@ -25,6 +25,13 @@ describe("matchScore", () => {
 
   it("matches everything for an empty query", () => {
     expect(matchScore("  ", ["anything"])).toBe(0);
+  });
+});
+
+describe("matchRanges", () => {
+  it("merges overlapping substring matches and skips scattered ones", () => {
+    expect(matchRanges(["roll", "rollout", "plan"], "Pinned rollout plan")).toEqual([[7, 14], [15, 19]]);
+    expect(matchRanges(["rp"], "rollout plan")).toEqual([]);
   });
 });
 

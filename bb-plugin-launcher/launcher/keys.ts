@@ -24,6 +24,7 @@ export function matchesShortcut(event: KeyLike, shortcut: Shortcut): boolean {
 }
 
 export const MOD_K: Shortcut = { key: "k", mod: true };
+export const MOD_ENTER: Shortcut = { key: "Enter", mod: true };
 
 const KEY_LABELS: Record<string, string> = {
   enter: "↵",

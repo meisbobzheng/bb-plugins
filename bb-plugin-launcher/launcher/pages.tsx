@@ -327,5 +327,5 @@ export function InputPage({ page, query }: PageProps & { page: Extract<Page, { k
     icon: icon(value === "" ? SlidersHorizontal : Check),
     actions: value === "" ? [] : [{ id: "submit", title: page.submitLabel, icon: Check, run: () => page.submit(value) }],
   };
-  return <Results sections={[{ title: page.title, items: [item] }]} query={query} showPreview={false} />;
+  return <Results sections={[{ title: page.title, items: [item] }]} query={query} showPreview={false} highlight={false} />;
 }

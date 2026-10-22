@@ -10,6 +10,7 @@ import {
   useState,
   type KeyboardEvent,
   type MutableRefObject,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { toast } from "sonner";
@@ -17,7 +18,8 @@ import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport
 import { cn } from "@/lib/utils";
 import { useLauncher } from "./context";
 import { errorMessage } from "./data";
-import { MOD_K, hasMod, matchesShortcut, shortcutLabel } from "./keys";
+import { MOD_ENTER, MOD_K, hasMod, matchesShortcut, shortcutLabel } from "./keys";
+import { matchRanges, queryTerms } from "./match";
 import { PreviewPane } from "./Preview";
 import type { Action, Item, Section } from "./types";
 
@@ -44,6 +46,7 @@ export interface ResultsProps {
   query: string;
   emptyText?: string;
   showPreview: boolean;
+  highlight?: boolean;
 }
 
 function Kbd({ children }: { children: string }) {
@@ -52,6 +55,22 @@ function Kbd({ children }: { children: string }) {
       {children}
     </kbd>
   );
+}
+
+function Highlighted({ text, terms }: { text: string; terms: readonly string[] }) {
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const [start, end] of matchRanges(terms, text)) {
+    parts.push(
+      text.slice(cursor, start),
+      <mark key={start} className="bg-transparent font-semibold text-foreground">
+        {text.slice(start, end)}
+      </mark>,
+    );
+    cursor = end;
+  }
+  parts.push(text.slice(cursor));
+  return <>{parts}</>;
 }
 
 export function useRunAction() {
@@ -73,11 +92,12 @@ interface RowProps {
   item: Item;
   index: number;
   active: boolean;
+  terms: readonly string[];
   onSelect(id: string): void;
   onRun(item: Item, action: Action): void;
 }
 
-const Row = memo(function Row({ id, item, index, active, onSelect, onRun }: RowProps) {
+const Row = memo(function Row({ id, item, index, active, terms, onSelect, onRun }: RowProps) {
   return (
     <div
       id={id}
@@ -93,7 +113,9 @@ const Row = memo(function Row({ id, item, index, active, onSelect, onRun }: RowP
     >
       <span className="flex size-5 shrink-0 items-center justify-center">{item.icon}</span>
       <span className="min-w-0 flex-1 truncate">
-        <span className="text-foreground">{item.title}</span>
+        <span className="text-foreground">
+          {typeof item.title === "string" ? <Highlighted text={item.title} terms={terms} /> : item.title}
+        </span>
         {item.subtitle ? (
           <span className="ml-2 text-xs text-muted-foreground">{item.subtitle}</span>
         ) : null}
@@ -103,13 +125,14 @@ const Row = memo(function Row({ id, item, index, active, onSelect, onRun }: RowP
   );
 });
 
-export function Results({ sections, query, emptyText = "No results", showPreview }: ResultsProps) {
+export function Results({ sections, query, emptyText = "No results", showPreview, highlight = true }: ResultsProps) {
   const ctx = useLauncher();
   const runAction = useRunAction();
   const host = useResultsHost();
   const compact = useIsCompactViewport();
   const items = useMemo(() => sections.flatMap((section) => section.items), [sections]);
   const previewable = useMemo(() => items.some((item) => item.preview !== undefined), [items]);
+  const terms = useMemo(() => (highlight ? queryTerms(query) : []), [highlight, query]);
   const [selection, setSelection] = useState(() => ({ query, id: host.restoreSelection() }));
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -180,6 +203,7 @@ export function Results({ sections, query, emptyText = "No results", showPreview
 
   let position = 0;
   const primary = selected?.actions[0];
+  const secondary = selected?.actions[1];
 
   return (
     <>
@@ -210,6 +234,7 @@ export function Results({ sections, query, emptyText = "No results", showPreview
                         item={item}
                         index={itemIndex}
                         active={itemIndex === index}
+                        terms={terms}
                         onSelect={select}
                         onRun={runAction}
                       />
@@ -237,6 +262,15 @@ export function Results({ sections, query, emptyText = "No results", showPreview
             onClick={() => selected && runAction(selected, primary)}
           >
             {primary.title} <Kbd>↵</Kbd>
+          </button>
+        ) : null}
+        {secondary !== undefined ? (
+          <button
+            type="button"
+            className="hidden items-center gap-1.5 hover:text-foreground sm:flex"
+            onClick={() => selected && runAction(selected, secondary)}
+          >
+            {secondary.title} <Kbd>{shortcutLabel(MOD_ENTER)}</Kbd>
           </button>
         ) : null}
         {selected !== undefined && selected.actions.length > 1 ? (

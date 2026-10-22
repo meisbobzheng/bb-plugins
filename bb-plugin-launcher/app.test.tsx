@@ -195,6 +195,23 @@ describe("launcher", () => {
     expect(slot.queryByRole("dialog")).toBeNull();
   });
 
+  it("offers the secondary action with its shortcut in the footer", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    fireEvent.click(await slot.findByRole("button", { name: "Open in split Ctrl+↵" }));
+    await waitFor(() =>
+      expect(slot.inspection.navigateCalls).toContainEqual({ method: "toThread", threadId: "thr_wait", options: { split: true } }),
+    );
+  });
+
+  it("highlights the part of each title that matches the query", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    fireEvent.change(await slot.findByRole("combobox"), { target: { value: "clean old" } });
+    const marks = [...slot.getByRole("option", { selected: true }).querySelectorAll("mark")];
+    expect(marks.map((mark) => mark.textContent)).toEqual(["Old", "clean"]);
+  });
+
   it("opens the actions panel and pins a thread", async () => {
     const slot = await renderLauncher();
     pressModK();
@@ -243,8 +260,7 @@ describe("launcher", () => {
     pressModK();
     const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "streamer" } });
-    await slot.findByText("Streamer mode");
-    fireEvent.mouseMove(slot.getByText("Streamer mode"));
+    fireEvent.mouseMove(await slot.findByRole("option", { name: /Streamer mode/ }));
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => {
       const update = slot.inspection.sdkCalls.find((call) => call.method === "system.updateGeneralSettings");
@@ -307,7 +323,7 @@ describe("launcher", () => {
     pressModK();
     const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "plugins" } });
-    fireEvent.mouseMove(await slot.findByText("Plugins…"));
+    fireEvent.mouseMove(within(await slot.findByRole("group", { name: "Commands" })).getByRole("option"));
     fireEvent.keyDown(input, { key: "Enter" });
     await slot.findByText("Plugins", { selector: "span" });
     expect(callCount(slot.inspection.sdkCalls, "plugins.list")).toBe(1);
