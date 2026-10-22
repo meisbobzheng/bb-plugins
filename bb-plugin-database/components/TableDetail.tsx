@@ -8,11 +8,13 @@ export function TableDetail({ table, onPreview, onClose }: { table: TableInfo; o
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
-        <span className="font-mono font-semibold">{qualifiedName(table.schema, table.name)}</span>
-        <span className="text-muted-foreground">{table.kind}</span>
-        {table.estimatedRows === null ? null : <span className="text-muted-foreground">~{formatCount(table.estimatedRows, "row")}</span>}
+        <span className="min-w-0 truncate font-mono font-semibold" title={qualifiedName(table.schema, table.name)}>
+          {qualifiedName(table.schema, table.name)}
+        </span>
+        <span className="shrink-0 text-muted-foreground">{table.kind}</span>
+        {table.estimatedRows === null ? null : <span className="shrink-0 text-muted-foreground">~{formatCount(table.estimatedRows, "row")}</span>}
         <span className="flex-1" />
-        <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-xs" onClick={onPreview}>
+        <Button size="sm" variant="ghost" className="h-6 shrink-0 gap-1 px-2 text-xs" onClick={onPreview}>
           <Icon name="Play" className="size-3" />
           Preview 100 rows
         </Button>

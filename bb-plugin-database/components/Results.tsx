@@ -17,6 +17,7 @@ export interface ResultsProps {
   running: boolean;
   connectionName: string;
   onCancel(): void;
+  onRetry(): void;
 }
 
 interface Cell {
@@ -238,7 +239,7 @@ function Grid({ set, durationMs, connectionName }: { set: ResultSet; durationMs:
   );
 }
 
-export function Results({ run, sql, running, connectionName, onCancel }: ResultsProps) {
+export function Results({ run, sql, running, connectionName, onCancel, onRetry }: ResultsProps) {
   const elapsed = useElapsed(running);
   const label = `Running…${elapsed < 1_000 ? "" : ` ${Math.floor(elapsed / 1_000)} s`}`;
   const previous = run !== null && run.error === null && run.results.length > 0 ? run : null;
@@ -283,7 +284,7 @@ export function Results({ run, sql, running, connectionName, onCancel }: Results
       </div>
     );
   }
-  if (run.error !== null) return <ErrorPanel error={run.error} sql={sql} />;
+  if (run.error !== null) return <ErrorPanel error={run.error} sql={sql} onRetry={onRetry} />;
   if (run.results.length === 0) {
     return (
       <div className="p-3">

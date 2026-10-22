@@ -124,7 +124,9 @@ export function positionToLine(sql: string, position: number | null): string | n
   return `line ${line}, column ${column}`;
 }
 
-export function ErrorPanel({ error, sql }: { error: QueryError; sql: string }) {
+const RETRYABLE: ReadonlySet<QueryError["kind"]> = new Set(["auth", "connection", "timeout"]);
+
+export function ErrorPanel({ error, sql, onRetry }: { error: QueryError; sql: string; onRetry?(): void }) {
   const where = positionToLine(sql, error.position);
   return (
     <div role="alert" className="m-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
@@ -137,6 +139,12 @@ export function ErrorPanel({ error, sql }: { error: QueryError; sql: string }) {
       <p className="mt-1 whitespace-pre-wrap break-words font-mono text-xs">{error.message}</p>
       {error.detail === null ? null : <p className="mt-1 text-xs text-muted-foreground">{error.detail}</p>}
       {error.hint === null ? null : <p className="mt-1 text-xs text-muted-foreground">Hint: {error.hint}</p>}
+      {onRetry === undefined || !RETRYABLE.has(error.kind) ? null : (
+        <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={onRetry}>
+          <Icon name="RotateCcw" className="size-3.5" />
+          Try again
+        </Button>
+      )}
     </div>
   );
 }

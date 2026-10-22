@@ -286,6 +286,21 @@ describe("results grid", () => {
     expect(slot.getByRole("status").textContent).toMatch(/Running/);
     expect(slot.getByText("60")).toBeTruthy();
   });
+
+  it("retries a query that could not reach the server", async () => {
+    const offline: QueryRun = {
+      ...RUN,
+      results: [],
+      error: { kind: "connection", message: "Connection terminated due to connection timeout", code: null, position: null, detail: null, hint: "Check that 127.0.0.1:5432 is reachable from the bb server." },
+    };
+    let calls = 0;
+    const slot = await run({ query_run: () => (++calls === 1 ? offline : RUN) });
+    expect(slot.getByRole("alert").textContent).toMatch(/Could not connect.*is reachable/);
+    fireEvent.click(slot.getByRole("button", { name: /Try again/ }));
+    await settle();
+    expect(slot.getByText("60")).toBeTruthy();
+    expect(slot.inspection.rpcCalls.filter((call) => call.method === "query_run").map((call) => (call.input as { sql: string }).sql)).toEqual(["select id, active from subscribers", "select id, active from subscribers"]);
+  });
 });
 
 describe("connection form", () => {

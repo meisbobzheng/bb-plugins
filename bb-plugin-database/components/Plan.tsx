@@ -41,6 +41,7 @@ export function rowEstimateRatio(node: PlanNode): number | null {
 }
 
 const CONDITION_KEYS = ["Index Cond", "Recheck Cond", "Hash Cond", "Merge Cond", "Join Filter", "Filter", "Sort Key", "Group Key", "One-Time Filter"] as const;
+const LEGEND = "Bars show each node's own share of execution time; amber rows are off by more than 10× from the estimate.";
 
 function title(node: PlanNode): string {
   const type = str(node, "Node Type") ?? "Node";
@@ -152,7 +153,9 @@ export function PlanView({ result, sql }: { result: ExplainResult; sql: string }
         {planning === null ? null : <span>planning {formatMs(planning)}</span>}
         {execution === null ? <span>estimated costs only; run Analyze for timings</span> : <span>execution {formatMs(execution)}</span>}
         <span className="flex-1" />
-        <span>Bars show each node's own share of execution time; amber rows are off by more than 10× from the estimate.</span>
+        <span className="min-w-0 truncate" title={LEGEND}>
+          {LEGEND}
+        </span>
       </footer>
     </div>
   );

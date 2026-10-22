@@ -8,7 +8,7 @@ import { qualifiedName } from "../sql";
 import { EmptyState, Hint, IconButton, Kbd, Spinner } from "./bits";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { Editor, type EditorHandle } from "./Editor";
-import { errorMessage, useDbRpc, useLocalDraft, useSchema, useSessionSync, useStatus } from "./hooks";
+import { errorMessage, refreshSession, useDbRpc, useLocalDraft, useSchema, useSessionSync, useStatus } from "./hooks";
 import { PlanView } from "./Plan";
 import { editorRequests } from "./requests";
 import { Results } from "./Results";
@@ -332,7 +332,7 @@ function Workbench({ connection }: { connection: Connection }) {
           ) : view.kind === "table" ? (
             <TableDetail table={view.table} onPreview={() => preview(view.table)} onClose={() => setView({ kind: "results" })} />
           ) : (
-            <Results run={run} sql={ranSql} running={busy} connectionName={connection.name} onCancel={cancel} />
+            <Results run={run} sql={ranSql} running={busy} connectionName={connection.name} onCancel={cancel} onRetry={() => void execute(ranSql)} />
           )}
         </section>
       </div>
@@ -362,6 +362,7 @@ function NoConnections() {
 }
 
 export function DatabasePage(_props: PluginNavPanelProps) {
+  const rpc = useDbRpc();
   const session = useSessionSync();
   const connection = activeConnection(session);
   if (!session.loaded) {
@@ -373,9 +374,13 @@ export function DatabasePage(_props: PluginNavPanelProps) {
   }
   if (session.error !== null && session.connections.length === 0) {
     return (
-      <p role="alert" className="m-4 text-sm text-destructive">
-        {session.error}
-      </p>
+      <div role="alert" className="m-4 text-sm">
+        <p className="text-destructive">Could not load connections: {session.error}</p>
+        <Button size="sm" variant="outline" className="mt-2" onClick={() => void refreshSession(rpc)}>
+          <Icon name="RotateCcw" className="size-3.5" />
+          Try again
+        </Button>
+      </div>
     );
   }
   if (connection === null) return <NoConnections />;
