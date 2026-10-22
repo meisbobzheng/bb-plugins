@@ -35,6 +35,23 @@ export async function mintRdsToken({ host, port, region, user, profile }: TokenR
   return signer.getAuthToken();
 }
 
+export const TOKEN_REUSE_MS = 10 * 60_000;
+
+export function createTokenCache(mint: (request: TokenRequest) => Promise<string> = mintRdsToken, now: () => number = Date.now) {
+  const tokens = new Map<string, { mintedAt: number; token: Promise<string> }>();
+  return (request: TokenRequest): Promise<string> => {
+    const key = JSON.stringify([request.host, request.port, request.region, request.user, request.profile]);
+    const cached = tokens.get(key);
+    if (cached !== undefined && now() - cached.mintedAt < TOKEN_REUSE_MS) return cached.token;
+    const entry = { mintedAt: now(), token: mint(request) };
+    tokens.set(key, entry);
+    entry.token.catch(() => {
+      if (tokens.get(key) === entry) tokens.delete(key);
+    });
+    return entry.token;
+  };
+}
+
 export class AuthError extends Error {
   constructor(
     message: string,

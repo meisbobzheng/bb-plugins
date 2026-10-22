@@ -1,4 +1,4 @@
-import { authError, isCredentialError, listAwsProfiles, mintRdsToken } from "./auth.js";
+import { authError, createTokenCache, isCredentialError, listAwsProfiles } from "./auth.js";
 import { createAsker, extractSql, schemaText, type Asker } from "./ask.js";
 import type { ChangedKind } from "./channel.js";
 import type {
@@ -76,10 +76,11 @@ export function createService(deps: ServiceDeps) {
     return profileCache.profiles;
   };
 
+  const rdsToken = createTokenCache();
   const engine = new Engine({
     async password(connection) {
       if (connection.auth.kind === "rds-iam") {
-        return mintRdsToken({ host: connection.host, port: connection.port, region: connection.auth.region, user: connection.userFollowsDatabase ? connection.database : connection.user, profile: connection.auth.profile });
+        return rdsToken({ host: connection.host, port: connection.port, region: connection.auth.region, user: connection.userFollowsDatabase ? connection.database : connection.user, profile: connection.auth.profile });
       }
       const password = transientPasswords.get(connection.id) ?? store.password(connection.id);
       if (password === null) throw new ServiceError("No password is saved for this connection.", "Edit the connection and enter its password.");

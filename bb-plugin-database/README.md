@@ -10,9 +10,10 @@ AWS SSO session you already have.
 
 - Open **Database** in the sidebar and click **Add connection**. For an RDS
   cluster choose **RDS IAM token (AWS SSO)**, pick the AWS profile from
-  `~/.aws/config`, and leave TLS on. A short-lived IAM token is minted for every
-  new connection, so there is no password to store. When the SSO session has
-  expired, the error tells you the exact `aws sso login` command to run.
+  `~/.aws/config`, and leave TLS on. A short-lived IAM token is minted when a
+  connection opens and reused for ten minutes, so there is no password to
+  store. When the SSO session has expired, the error tells you the exact
+  `aws sso login` command to run.
 - Turn on **Role follows database** for nucleus-style clusters, where the
   database, role, and schema share one name. Switching databases in the header
   then switches the role too.
@@ -86,7 +87,8 @@ Connections, history, and saved queries live in this plugin's SQLite database
 on the bb server. Queries go through a small `pg` pool per connection with all
 values fetched as text. Single `SELECT`s run through a server-side cursor so a
 query over a large table fetches only the rows shown. RDS IAM tokens come from
-`@aws-sdk/rds-signer` with credentials resolved from the chosen SSO profile.
+`@aws-sdk/rds-signer` with credentials resolved from the chosen SSO profile;
+each token opens new connections for ten minutes of its fifteen-minute life.
 Plain-language requests run `claude -p` with tools disabled and a system prompt
 that asks for one SQL statement.
 

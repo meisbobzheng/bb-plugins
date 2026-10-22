@@ -2,9 +2,9 @@ A Postgres GUI in your sidebar, with the AWS login you already have.
 
 ## What you get
 
-- **Connections** to RDS clusters through your AWS SSO profile, with a fresh
-  IAM token for every session and a clear `aws sso login` hint when it has
-  expired, or to any Postgres with a password.
+- **Connections** to RDS clusters through your AWS SSO profile, with
+  short-lived IAM tokens instead of a password and a clear `aws sso login` hint
+  when the session has expired, or to any Postgres with a password.
 - A **schema browser**, a **SQL editor** that completes your tables and
   columns, and a **results grid** with cell inspection and export to Markdown,
   CSV, or JSON.
