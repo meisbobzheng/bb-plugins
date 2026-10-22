@@ -326,7 +326,7 @@ function Workbench({ connection }: { connection: Connection }) {
             {connection.name} · <span className="font-mono">{connection.database}</span> · {connection.allowWrites ? "writes on" : "read-only"}
           </span>
         </div>
-        <section className="min-h-0 flex-1">
+        <section data-vim-pane="" className="min-h-0 flex-1">
           {view.kind === "plan" ? (
             <PlanView result={view.plan} sql={view.sql} />
           ) : view.kind === "table" ? (

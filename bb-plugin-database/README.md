@@ -42,6 +42,8 @@ AWS SSO session you already have.
   rolled-back transaction and shows real timings, with each node's share of
   the time as a bar and rows that are off by more than 10× from the estimate
   in amber.
+- With the Vim plugin, `j`/`k` walk the schema tree, history, and saved
+  queries, and `h`/`l` move between the schema and the results.
 
 **Ask in plain English**
 

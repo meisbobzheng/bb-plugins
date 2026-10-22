@@ -48,6 +48,7 @@ function TableRow({ table, open, onToggle, onPreview, onDescribe, onInsert }: { 
           type="button"
           onClick={onToggle}
           onDoubleClick={onPreview}
+          data-vim-item=""
           aria-expanded={open}
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded text-left outline-none focus-visible:ring-1 focus-visible:ring-ring"
           title={table.comment ?? `${table.kind}: ${qualifiedName(table.schema, table.name)}`}
@@ -72,6 +73,7 @@ function TableRow({ table, open, onToggle, onPreview, onDescribe, onInsert }: { 
             <li key={column.name}>
               <button
                 type="button"
+                data-vim-item=""
                 onClick={() => onInsert(quoteIdentifier(column.name))}
                 className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left font-mono text-[11px] outline-none hover:bg-state-hover focus-visible:ring-1 focus-visible:ring-ring"
                 title={[column.comment, column.default === null ? null : `default ${column.default}`, column.nullable ? "nullable" : "not null"].filter((part) => part !== null).join(" · ")}

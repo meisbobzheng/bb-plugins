@@ -19,7 +19,7 @@ export function HistoryRow({ entry, showConnection }: { entry: HistoryEntry; sho
   return (
     <li className="group border-b border-border">
       <div className="flex items-start gap-2 px-3 py-2 hover:bg-state-hover">
-        <button type="button" onClick={() => load(false)} className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-1 focus-visible:ring-ring" title="Load into the editor">
+        <button type="button" data-vim-item="" onClick={() => load(false)} className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-1 focus-visible:ring-ring" title="Load into the editor">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
             <span title={entry.startedAt}>{relativeTime(entry.startedAt)}</span>
             <SourceBadge source={entry.source} />

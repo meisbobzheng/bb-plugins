@@ -30,7 +30,7 @@ function SavedRow({ saved, scoped, onEdit, onDelete }: { saved: SavedQuery; scop
       onBlur={(event) => (event.currentTarget.contains(event.relatedTarget) ? undefined : setConfirm(false))}
     >
       <div className="flex items-start gap-2 px-3 py-2 hover:bg-state-hover">
-        <button type="button" onClick={() => load(false)} className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-1 focus-visible:ring-ring" title="Load into the editor">
+        <button type="button" data-vim-item="" onClick={() => load(false)} className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-1 focus-visible:ring-ring" title="Load into the editor">
           <div className="flex items-center gap-2 text-xs">
             <Icon name={scoped ? "Star" : "Globe"} className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate font-medium" title={saved.name}>

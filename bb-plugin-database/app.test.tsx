@@ -202,8 +202,16 @@ describe("Database page", () => {
     const tab = app.navPanels[0]!.fixedTabs!.find((candidate) => candidate.id === "history")!;
     const slot = renderSlot(tab, { subPath: "" }, { rpc: baseRpc });
     await settle();
-    expect(await slot.findByText(/how many subscribers/)).toBeTruthy();
+    expect((await slot.findByText(/how many subscribers/)).closest("[data-vim-item]")).not.toBeNull();
     expect(slot.getByText("Ask")).toBeTruthy();
+  });
+
+  it("lets Vim walk the schema tree and move to the results pane", async () => {
+    const app = await load();
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: baseRpc });
+    await settle();
+    expect((await slot.findByText("subscribers")).closest("[data-vim-item]")).not.toBeNull();
+    expect(slot.getByText(/Run a query with/).closest("[data-vim-pane]")).not.toBeNull();
   });
 });
 
