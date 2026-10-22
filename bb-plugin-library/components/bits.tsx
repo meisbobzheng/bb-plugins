@@ -133,6 +133,8 @@ export function ErrorState({ message, error, onRetry }: { message: string; error
 }
 
 const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+const thisYear = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const otherYear = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
 
 export function formatDate(iso: string, now = Date.now()): string {
   const date = new Date(iso);
@@ -142,8 +144,7 @@ export function formatDate(iso: string, now = Date.now()): string {
   if (Math.abs(hours) < 24) return relative.format(hours, "hour");
   const days = Math.round(hours / 24);
   if (Math.abs(days) < 7) return relative.format(days, "day");
-  const sameYear = date.getFullYear() === new Date(now).getFullYear();
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+  return (date.getFullYear() === new Date(now).getFullYear() ? thisYear : otherYear).format(date);
 }
 
 export function KindPicker({ value, onChange }: { value: Kind; onChange: (kind: Kind) => void }) {

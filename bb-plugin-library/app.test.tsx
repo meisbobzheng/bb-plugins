@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { formatDate } from "./components/bits";
 import { toggleRequests } from "./components/requests";
 import { markLibraryVisible } from "./components/session";
 import type { Entry, EntryHit, SearchResult } from "./contract";
@@ -344,6 +345,16 @@ describe("Library app", () => {
     expect(back).toHaveBeenCalledOnce();
     expect(overlay.inspection.navigateCalls).toHaveLength(1);
     back.mockRestore();
+  });
+
+  describe("formatDate", () => {
+    it("shows older dates as a short date, with the year only when it differs", () => {
+      const now = Date.parse("2026-10-22T12:00:00.000Z");
+      const short = (iso: string, year: boolean) =>
+        new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", ...(year ? { year: "numeric" } : {}) });
+      expect(formatDate("2026-03-05T12:00:00.000Z", now)).toBe(short("2026-03-05T12:00:00.000Z", false));
+      expect(formatDate("2025-03-05T12:00:00.000Z", now)).toBe(short("2025-03-05T12:00:00.000Z", true));
+    });
   });
 
   describe("export", () => {
