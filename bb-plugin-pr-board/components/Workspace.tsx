@@ -2,14 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { experimental_useAppPanel, useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type {
+  ConversationComment,
   Definition,
   DefinitionResult,
   Finding,
   PullDetail,
   PullFile,
   ReviewEvent,
+  ReviewComment,
   ReviewState,
-  ReviewThread,
   rpcContract,
 } from "../contract";
 import type { DiffStyle } from "../highlight";
@@ -49,6 +50,26 @@ const DIFF_STYLE_OPTIONS: ReadonlyArray<{ id: DiffStylePreference; label: string
 ];
 const DIFF_STYLES = DIFF_STYLE_OPTIONS.map((option) => option.id);
 const lastPaths = new Map<string, string>();
+
+interface Pending {
+  of: PullDetail;
+  resolved: ReadonlyMap<string, boolean>;
+  replies: ReadonlyMap<string, readonly ReviewComment[]>;
+  comments: readonly ConversationComment[];
+}
+
+function withPending(detail: PullDetail, pending: Pending | null): PullDetail {
+  if (pending?.of !== detail) return detail;
+  return {
+    ...detail,
+    threads: detail.threads.map((thread) => ({
+      ...thread,
+      isResolved: pending.resolved.get(thread.id) ?? thread.isResolved,
+      comments: [...thread.comments, ...(pending.replies.get(thread.id) ?? [])],
+    })),
+    conversation: [...detail.conversation, ...pending.comments],
+  };
+}
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
@@ -168,10 +189,7 @@ function Workspace({
   const [composer, setComposer] = useState<Composer | null>(null);
   const [picker, setPicker] = useState<{ result: DefinitionResult; sha: string } | null>(null);
   const [viewed, setViewed] = useState<ReadonlyMap<string, boolean>>(new Map());
-  const [resolutions, setResolutions] = useState<{ of: readonly ReviewThread[]; resolved: ReadonlyMap<string, boolean> }>(() => ({
-    of: detail.threads,
-    resolved: new Map(),
-  }));
+  const [pending, setPending] = useState<Pending | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitAddressOpen, setSubmitAddressOpen] = useState(false);
   const [running, setRunning] = useState(false);
@@ -183,13 +201,17 @@ function Workspace({
     () => detail.files.map((file) => ({ ...file, viewed: viewed.get(file.path) ?? file.viewed })),
     [detail.files, viewed],
   );
-  const threads = useMemo(
-    () =>
-      resolutions.of !== detail.threads || resolutions.resolved.size === 0
-        ? detail.threads
-        : detail.threads.map((thread) => ({ ...thread, isResolved: resolutions.resolved.get(thread.id) ?? thread.isResolved })),
-    [detail.threads, resolutions],
-  );
+  const shown = useMemo(() => withPending(detail, pending), [detail, pending]);
+  const addPending = (change: (base: Pending) => Pending) =>
+    setPending((previous) => change(previous?.of === detail ? previous : { of: detail, resolved: new Map(), replies: new Map(), comments: [] }));
+  const mine = (body: string) => ({
+    id: `pending:${nextSeq()}`,
+    author: { login: detail.viewer, avatarUrl: null },
+    isBot: false,
+    body,
+    createdAt: new Date().toISOString(),
+    url: detail.url,
+  });
   const firstPath = files[0]?.path;
   const current = useMemo(
     (): Location | null => location ?? (firstPath === undefined ? null : { kind: "diff", path: firstPath, focus: null }),
@@ -352,14 +374,16 @@ function Workspace({
     },
     async reply(commentId, body) {
       await rpc.call("reply", { ...pull, commentId, body });
+      const thread = detail.threads.find((candidate) => candidate.comments[0]?.databaseId === commentId);
+      if (thread !== undefined) {
+        const reply = { ...mine(body), databaseId: 0 };
+        addPending((base) => ({ ...base, replies: new Map(base.replies).set(thread.id, [...(base.replies.get(thread.id) ?? []), reply]) }));
+      }
       refreshDetail();
     },
     async resolveThread(threadId, resolved) {
       await rpc.call("resolveThread", { ...pull, threadId, resolved });
-      setResolutions((previous) => ({
-        of: detail.threads,
-        resolved: new Map(previous.of === detail.threads ? previous.resolved : []).set(threadId, resolved),
-      }));
+      addPending((base) => ({ ...base, resolved: new Map(base.resolved).set(threadId, resolved) }));
       refreshDetail();
     },
     async dismissFinding(id, dismissed) {
@@ -436,6 +460,8 @@ function Workspace({
     resolveThread: actions.resolveThread,
     async postConversation(body) {
       await rpc.call("postConversationComment", { ...pull, body });
+      const comment = { ...mine(body), kind: "comment" as const };
+      addPending((base) => ({ ...base, comments: [...base.comments, comment] }));
       toast.success("Comment posted");
       refreshDetail();
     },
@@ -503,9 +529,9 @@ function Workspace({
     return {
       findings: review.findings.filter((finding) => !finding.dismissed && matches(finding.path)),
       drafts: review.drafts.filter((draft) => draft.path === path),
-      threads: threads.filter((thread) => thread.path === path),
+      threads: shown.threads.filter((thread) => thread.path === path),
     };
-  }, [currentFile?.path, currentFile?.previousPath, threads, review.drafts, review.findings]);
+  }, [currentFile?.path, currentFile?.previousPath, shown.threads, review.drafts, review.findings]);
 
   const fullFile = currentFile !== null && fullFiles.has(currentFile.path);
   const showFullFile = () => {
@@ -520,8 +546,8 @@ function Workspace({
       selectedPath={currentFile?.path ?? null}
       findings={review.findings}
       drafts={review.drafts}
-      threads={threads}
-      conversation={detail.conversation}
+      threads={shown.threads}
+      conversation={shown.conversation}
       viewer={detail.viewer}
       awaitingReply={detail.awaitingReply}
       suggestions={review.suggestions}
@@ -686,7 +712,7 @@ function Workspace({
             {commentsVisited ? (
               <div className={current?.kind === "comments" ? undefined : "hidden"}>
                 <CommentsView
-                  detail={threads === detail.threads ? detail : { ...detail, threads }}
+                  detail={shown}
                   review={review}
                   focus={current?.kind === "comments" && current.commentId !== null ? { commentId: current.commentId, seq: current.seq } : null}
                   actions={commentActions}

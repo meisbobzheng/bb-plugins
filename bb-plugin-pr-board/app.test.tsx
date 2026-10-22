@@ -593,7 +593,7 @@ describe("comments", () => {
     await waitFor(() => expect(calls("addressComments")).toEqual([{ repo: "acme/app", number: 9 }]));
   });
 
-  it("shows a resolved thread as resolved as soon as GitHub takes it, before the PR reloads", async () => {
+  it("shows a reply, a resolve, and a new comment as soon as GitHub takes them, before the PR reloads", async () => {
     let loads = 0;
     const slot = renderSlot(
       boardPanel(),
@@ -601,17 +601,29 @@ describe("comments", () => {
       {
         rpc: workspaceRpc(SUGGESTED, {
           pull: () => (loads++ === 0 ? { ...COMMENTED, number: 18 } : new Promise<PullDetail>(() => {})),
+          reply: () => ({}),
           resolveThread: () => ({}),
+          postConversationComment: () => ({}),
         }),
       },
     );
     fireEvent.click(await slot.findByRole("tab", { name: "Comments 2" }));
-    const card = (await slot.findAllByText("Rename b")).map((text) => text.closest("article")).find((article) => article !== null) as HTMLElement;
-    fireEvent.click(within(card).getByRole("button", { name: "Resolve" }));
-    expect(await within(card).findByRole("button", { name: "Unresolve" })).toBeTruthy();
-    expect(within(card).getByText("resolved")).toBeTruthy();
+    const card = (text: string) => slot.getAllByText(text).map((element) => element.closest("article")).find((article) => article !== null) as HTMLElement;
+    await slot.findAllByText("Rename b");
+    const thread = card("Rename b");
+    fireEvent.change(within(thread).getByRole("textbox", { name: "Reply" }), { target: { value: "Renamed to c." } });
+    fireEvent.click(within(thread).getByRole("button", { name: "Reply" }));
+    expect(await within(thread).findByText("Renamed to c.")).toBeTruthy();
+    fireEvent.click(within(thread).getByRole("button", { name: "Resolve" }));
+    expect(await within(thread).findByRole("button", { name: "Unresolve" })).toBeTruthy();
+    expect(within(thread).getByText("resolved")).toBeTruthy();
     expect(slot.getByRole("tab", { name: "Comments 1" })).toBeTruthy();
-    expect(loads).toBe(2);
+
+    const conversation = card("Please add docs");
+    fireEvent.change(within(conversation).getByRole("textbox", { name: "Comment" }), { target: { value: "Docs added." } });
+    fireEvent.click(within(conversation).getByRole("button", { name: "Comment" }));
+    expect(await slot.findByText("Docs added.")).toBeTruthy();
+    await waitFor(() => expect(loads).toBe(4));
   });
 
   it("stacks the review and address buttons and confirms Submit Address before sending it", async () => {
