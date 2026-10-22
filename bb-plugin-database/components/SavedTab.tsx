@@ -24,19 +24,25 @@ function SavedRow({ saved, scoped, onEdit, onDelete }: { saved: SavedQuery; scop
     if (!editorRequests.emit({ sql: saved.sql, run })) toast.error("Open the Database page to load a query.");
   };
   return (
-    <li className="group border-b border-border">
+    <li
+      className="group border-b border-border"
+      onMouseLeave={() => setConfirm(false)}
+      onBlur={(event) => (event.currentTarget.contains(event.relatedTarget) ? undefined : setConfirm(false))}
+    >
       <div className="flex items-start gap-2 px-3 py-2 hover:bg-state-hover">
-        <button type="button" onClick={() => load(false)} className="min-w-0 flex-1 text-left" title="Load into the editor">
+        <button type="button" onClick={() => load(false)} className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-1 focus-visible:ring-ring" title="Load into the editor">
           <div className="flex items-center gap-2 text-xs">
             <Icon name={scoped ? "Star" : "Globe"} className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="truncate font-medium">{saved.name}</span>
+            <span className="truncate font-medium" title={saved.name}>
+              {saved.name}
+            </span>
             <span className="ml-auto shrink-0 text-[11px] text-muted-foreground" title={saved.updatedAt}>
               {relativeTime(saved.updatedAt)}
             </span>
           </div>
           <pre className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">{saved.sql}</pre>
         </button>
-        <span className="hidden shrink-0 flex-col gap-0.5 group-hover:flex">
+        <span className="hidden shrink-0 flex-col gap-0.5 group-focus-within:flex group-hover:flex">
           <IconButton label="Run" icon="Play" onClick={() => load(true)} className="h-6 w-6 px-0" />
           <IconButton label="Rename or update" icon="Edit" onClick={onEdit} className="h-6 w-6 px-0" />
           <IconButton label={confirm ? "Confirm delete" : "Delete"} icon={confirm ? "Check" : "Trash2"} onClick={() => (confirm ? onDelete() : setConfirm(true))} className={confirm ? "h-6 w-6 px-0 text-destructive" : "h-6 w-6 px-0"} />
@@ -92,7 +98,14 @@ export function SavedTab(_props: PluginNavPanelProps) {
       <div className="flex items-center gap-1 border-b border-border p-2">
         <div className="relative min-w-0 flex-1">
           <Icon name="Search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search saved queries" aria-label="Search saved queries" className="h-7 pl-7 text-xs" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => (event.key === "Escape" && query !== "" ? setQuery("") : undefined)}
+            placeholder="Search saved queries"
+            aria-label="Search saved queries"
+            className="h-7 pl-7 text-xs"
+          />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">

@@ -19,7 +19,7 @@ export function HistoryRow({ entry, showConnection }: { entry: HistoryEntry; sho
   return (
     <li className="group border-b border-border">
       <div className="flex items-start gap-2 px-3 py-2 hover:bg-state-hover">
-        <button type="button" onClick={() => load(false)} className="min-w-0 flex-1 text-left" title="Load into the editor">
+        <button type="button" onClick={() => load(false)} className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-1 focus-visible:ring-ring" title="Load into the editor">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
             <span title={entry.startedAt}>{relativeTime(entry.startedAt)}</span>
             <SourceBadge source={entry.source} />
@@ -35,8 +35,8 @@ export function HistoryRow({ entry, showConnection }: { entry: HistoryEntry; sho
                 {formatMs(entry.durationMs)}
               </span>
             ) : (
-              <span className="text-destructive" title={entry.error}>
-                error
+              <span className="min-w-0 max-w-full truncate text-destructive" title={entry.error}>
+                {entry.error}
               </span>
             )}
           </div>
@@ -47,7 +47,7 @@ export function HistoryRow({ entry, showConnection }: { entry: HistoryEntry; sho
           )}
           <pre className={cn("mt-0.5 line-clamp-3 whitespace-pre-wrap break-words font-mono text-[11px]", entry.error !== null && "opacity-70")}>{entry.sql}</pre>
         </button>
-        <span className="hidden shrink-0 flex-col gap-0.5 group-hover:flex">
+        <span className="hidden shrink-0 flex-col gap-0.5 group-focus-within:flex group-hover:flex">
           <IconButton label="Run again" icon="Play" onClick={() => load(true)} className="h-6 w-6 px-0" />
           <IconButton label="Copy SQL" icon="Copy" onClick={() => void copyToClipboard({ text: entry.sql }).then((ok) => (ok ? toast.success("Copied SQL") : toast.error("Could not copy")))} className="h-6 w-6 px-0" />
         </span>
@@ -108,7 +108,14 @@ export function HistoryTab(_props: PluginNavPanelProps) {
       <div className="flex items-center gap-1 border-b border-border p-2">
         <div className="relative min-w-0 flex-1">
           <Icon name="Search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history" aria-label="Search history" className="h-7 pl-7 text-xs" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => (event.key === "Escape" && query !== "" ? setQuery("") : undefined)}
+            placeholder="Search history"
+            aria-label="Search history"
+            className="h-7 pl-7 text-xs"
+          />
         </div>
         <IconButton label={all ? "Showing every connection" : "Showing the active connection"} icon={all ? "Globe" : "database/database"} pressed={all} onClick={() => setAll((value) => !value)} />
         <IconButton label="Clear history" icon="Trash2" onClick={() => setConfirmClear(true)} disabled={entries === null || entries.length === 0} />

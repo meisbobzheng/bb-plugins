@@ -137,6 +137,18 @@ export function useStatus(): Status | null {
   return status;
 }
 
+export function useElapsed(active: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    setElapsed(0);
+    if (!active) return;
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed(Date.now() - started), 1_000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return elapsed;
+}
+
 export function useLocalDraft(key: string): [string, (value: string) => void] {
   const storageKey = `database:draft:${key}`;
   const [value, setValue] = useState(() => {

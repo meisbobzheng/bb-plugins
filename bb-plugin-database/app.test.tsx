@@ -168,6 +168,34 @@ describe("Database page", () => {
     }
   });
 
+  it("explains a schema that failed to load and retries it", async () => {
+    const app = await load();
+    let attempts = 0;
+    const schema_get = () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("Connection terminated due to connection timeout");
+      return SNAPSHOT;
+    };
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: { ...baseRpc, schema_get } });
+    await settle();
+    expect((await slot.findByRole("alert")).textContent).toMatch(/Could not load the schema.*connection timeout/);
+    fireEvent.click(slot.getByRole("button", { name: /Try again/ }));
+    await settle();
+    expect(await slot.findByText("subscribers")).toBeTruthy();
+    expect(slot.inspection.rpcCalls.filter((call) => call.method === "schema_get").at(-1)?.input).toMatchObject({ refresh: true });
+  });
+
+  it("clears the schema filter with Escape", async () => {
+    const app = await load();
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: baseRpc });
+    await settle();
+    const filter = await slot.findByRole("textbox", { name: "Filter tables" });
+    fireEvent.change(filter, { target: { value: "nothing-matches" } });
+    expect(slot.getByText("No tables match.")).toBeTruthy();
+    fireEvent.keyDown(filter, { key: "Escape" });
+    expect(slot.getByText("subscribers")).toBeTruthy();
+  });
+
   it("lists history in its fixed tab", async () => {
     const app = await load();
     const tab = app.navPanels[0]!.fixedTabs!.find((candidate) => candidate.id === "history")!;
