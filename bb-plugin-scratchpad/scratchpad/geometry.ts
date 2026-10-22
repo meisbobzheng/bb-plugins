@@ -39,9 +39,21 @@ export function wrapLines(text: string, maxWidth: number, size: number): string[
   return lines;
 }
 
-export function noteLines(note: Extract<Element, { type: "note" }>): string[] {
-  return wrapLines(note.text, Math.max(note.w - NOTE_PADDING * 2, 1), NOTE_FONT_SIZE);
+function memoize<E extends Element, T>(compute: (element: E) => T): (element: E) => T {
+  const cache = new WeakMap<E, T>();
+  return (element) => {
+    let value = cache.get(element);
+    if (value === undefined) {
+      value = compute(element);
+      cache.set(element, value);
+    }
+    return value;
+  };
 }
+
+export const noteLines = memoize((note: Extract<Element, { type: "note" }>): string[] =>
+  wrapLines(note.text, Math.max(note.w - NOTE_PADDING * 2, 1), NOTE_FONT_SIZE),
+);
 
 export function noteHeight(note: Extract<Element, { type: "note" }>): number {
   const content = noteLines(note).length * NOTE_FONT_SIZE * LINE_HEIGHT;
@@ -93,7 +105,7 @@ export function shapePoints(kind: ShapeKind, { x, y, w, h }: Box): Point[] {
   }
 }
 
-export function elementBox(element: Element): Box {
+export const elementBox = memoize((element: Element): Box => {
   switch (element.type) {
     case "pen":
     case "line":
@@ -106,7 +118,7 @@ export function elementBox(element: Element): Box {
     case "text":
       return textBox(element);
   }
-}
+});
 
 function distanceToSegment([px, py]: Point, [ax, ay]: Point, [bx, by]: Point): number {
   const dx = bx - ax;
@@ -148,6 +160,8 @@ function insideBox([px, py]: Point, box: Box, tolerance = 0): boolean {
 }
 
 export function hitTest(element: Element, point: Point, tolerance: number): boolean {
+  const reach = tolerance + ("width" in element ? element.width / 2 : 0);
+  if (!insideBox(point, elementBox(element), reach)) return false;
   switch (element.type) {
     case "pen":
     case "line":
