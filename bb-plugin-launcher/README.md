@@ -16,6 +16,9 @@ window for threads, projects, quick prompts, settings, and plugins.
 - **Search:** typing searches thread titles, projects, branches, commands,
   settings, and plugins. Once the query is three characters or longer, the
   Messages section shows threads whose messages match.
+- **Plugin results:** plugins that publish a `launcher.search` RPC add their
+  own sections, such as Spotify playlists and songs. `↵` runs the first action
+  and `⌘K` lists the rest; see [Plugin results](#plugin-results).
 - **Quick prompt:** type a prompt and pick **Ask in <project>** to start a
   thread there without leaving the launcher (`⌘↵` opens it in the composer
   instead). **Ask in project…** picks another project.
@@ -51,6 +54,19 @@ window for threads, projects, quick prompts, settings, and plugins.
   disable, or reload it, and to edit its boolean, select, project, string,
   and number settings. Secret settings open the plugin's settings page.
 
+## Plugin results
+
+Any plugin can add results by registering two RPC methods with
+`experimental_discoverable: true`. The launcher finds them with
+`sdk.plugins.experimental_discoverRpc({ method: "launcher.search" })`.
+
+- `launcher.search` takes `{ query }` and returns `{ items }`. Each item has
+  `id`, `title`, `subtitle` (or null), `section`, `actions` (`[{ id, title }]`,
+  at least one), and `keywords`. Sections show at most eight items.
+- `launcher.run` takes `{ itemId, actionId }` and returns
+  `{ message, navigate }`. A `message` shows as a toast; a `navigate` path opens
+  in bb.
+
 ## Settings
 
 | Setting | Default | Effect |
@@ -64,7 +80,7 @@ window for threads, projects, quick prompts, settings, and plugins.
 - `model.ts`: shared state types and the frecency score
 - `app.tsx`: registers the overlay and the "Launcher: open" command
 - `launcher/`: the window (`Launcher.tsx`), results list (`Results.tsx`),
-  preview pane, pages, and ranking
+  preview pane, pages, ranking, and plugin result sources (`sources.tsx`)
 
 ## Develop
 

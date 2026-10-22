@@ -24,6 +24,7 @@ import { shortcutLabel } from "./keys";
 import { pluginItem, pluginKey, pluginTerms, usePlugins } from "./plugins";
 import { commandKey, isRunning, needsAttention, projectKey, rank, rootGroups, threadKey, visibleThreads } from "./rank";
 import { Results } from "./Results";
+import { useSourceSections } from "./sources";
 import { generalToggleItems, settingLinkItems } from "./settings";
 import type { Action, Item, Page, Section } from "./types";
 
@@ -169,6 +170,7 @@ export function RootPage({ query, showPreview }: PageProps) {
   const ctx = useLauncher();
   const plugins = usePlugins();
   const hits = useMessageSearch(query);
+  const sources = useSourceSections(query, plugins.data);
   const sections = useMemo((): Section[] => {
     const toThread = (thread: PluginSidebarThread) => threadItem(thread, ctx);
     const toProject = (project: PluginSidebarProject) => projectItem(project, ctx);
@@ -191,6 +193,7 @@ export function RootPage({ query, showPreview }: PageProps) {
       { title: "Threads", items: rankThreads(ctx, visibleThreads(ctx.threads), query).map(toThread) },
       { title: "Projects", items: rankProjects(ctx, query).slice(0, 8).map(toProject) },
       { title: "Commands", items: rankItems(commands) },
+      ...sources,
       { title: "Settings", items: rankItems([...generalToggleItems(ctx), ...settingLinkItems(ctx)], 6) },
       {
         title: "Plugins",
@@ -201,7 +204,7 @@ export function RootPage({ query, showPreview }: PageProps) {
       { title: "Ask an agent", items: quickPromptItems(ctx, query.trim()) },
       { title: "Messages", items: hits.map((hit) => messageItem(ctx, hit)) },
     ];
-  }, [ctx, query, plugins.data, plugins.reload, hits]);
+  }, [ctx, query, plugins.data, plugins.reload, hits, sources]);
   return <Results sections={sections} query={query} showPreview={showPreview} />;
 }
 

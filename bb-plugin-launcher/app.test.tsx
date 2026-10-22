@@ -56,7 +56,18 @@ async function renderLauncher(settings: Record<string, boolean> = {}) {
       config: async () => ({ generalSettings: GENERAL }),
       updateGeneralSettings: async () => ({}),
     },
-    plugins: { list: async () => ({ plugins: [] }) },
+    plugins: {
+      list: async () => ({ plugins: [] }),
+      experimental_discoverRpc: async () => [{ pluginId: "spotify", method: "launcher.search", displayName: "Spotify", methodDescription: null, registrationDescription: null, inputSchema: {}, outputSchema: {} }],
+      callRpc: async ({ method, input }: { method: string; input: { query?: string } }) =>
+        method === "launcher.search"
+          ? {
+              items: (input.query ?? "").includes("deep")
+                ? [{ id: "pl:spotify:playlist:p1", title: "Deep Work", subtitle: "Playlist · 42 songs", section: "Spotify playlists", actions: [{ id: "play", title: "Play" }], keywords: [] }]
+                : [],
+            }
+          : { message: "Playing Deep Work", navigate: null },
+    },
     threads: {
       search: async () => ({ active: { results: [], total: 0 }, archived: { results: [], total: 0 } }),
       conversationOutline: async () => ({ items: [{ id: "m1", role: "user", preview: "Please check the CER", attachmentSummary: null }], maxSeq: 1 }),
@@ -158,6 +169,22 @@ describe("launcher", () => {
       const update = slot.inspection.sdkCalls.find((call) => call.method === "system.updateGeneralSettings");
       expect(update?.args[0]).toMatchObject({ streamerMode: true, showGitChanges: true });
     });
+  });
+
+  it("lists results from plugins that publish launcher.search and runs their action", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    const input = await slot.findByRole("textbox");
+    fireEvent.change(input, { target: { value: "deep" } });
+    const group = await slot.findByRole("group", { name: "Spotify playlists" });
+    expect(group.textContent).toContain("Deep Work");
+    fireEvent.mouseMove(slot.getByText("Deep Work"));
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => {
+      const run = slot.inspection.sdkCalls.find((call) => call.method === "plugins.callRpc" && (call.args[0] as { method: string }).method === "launcher.run");
+      expect(run?.args[0]).toMatchObject({ pluginId: "spotify", input: { itemId: "pl:spotify:playlist:p1", actionId: "play" } });
+    });
+    await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
   });
 
   it("goes back with Escape before closing", async () => {
