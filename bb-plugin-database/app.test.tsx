@@ -140,6 +140,34 @@ describe("Database page", () => {
     expect(again.getByText("1 row")).toBeTruthy();
   });
 
+  it("hides the schema pane on request and remembers it", async () => {
+    const app = await load();
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: baseRpc });
+    await settle();
+    expect((await slot.findByText("subscribers")).closest("aside")?.className).not.toMatch(/\bhidden\b/);
+    fireEvent.click(slot.getByRole("button", { name: "Hide schema" }));
+    expect(slot.getByText("subscribers").closest("aside")?.className).toMatch(/\bhidden\b/);
+    expect(window.localStorage.getItem("database:schema-open")).toBe("0");
+    cleanup();
+    resetSession();
+    const again = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: baseRpc });
+    await settle();
+    expect(await again.findByRole("button", { name: "Show schema" })).toBeTruthy();
+  });
+
+  it("starts with the schema pane hidden when the page is narrow", async () => {
+    const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 480 } as DOMRect);
+    try {
+      const app = await load();
+      const slot = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: baseRpc });
+      await settle();
+      fireEvent.click(await slot.findByRole("button", { name: "Show schema" }));
+      expect(slot.getByText("subscribers").closest("aside")?.className).not.toMatch(/\bhidden\b/);
+    } finally {
+      measure.mockRestore();
+    }
+  });
+
   it("lists history in its fixed tab", async () => {
     const app = await load();
     const tab = app.navPanels[0]!.fixedTabs!.find((candidate) => candidate.id === "history")!;

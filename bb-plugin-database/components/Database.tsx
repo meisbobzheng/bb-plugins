@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { experimental_useAppPanel as useAppPanel, type PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { AskResult, Connection, ExplainResult, QueryRun, TableInfo } from "../contract";
 import { cn } from "../lib/utils";
 import { HISTORY_TAB, SAVED_TAB } from "../panel";
 import { qualifiedName } from "../sql";
-import { EmptyState, IconButton, Kbd, Spinner } from "./bits";
+import { EmptyState, Hint, IconButton, Kbd, Spinner } from "./bits";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { Editor, type EditorHandle } from "./Editor";
 import { errorMessage, useDbRpc, useLocalDraft, useSchema, useSessionSync, useStatus } from "./hooks";
@@ -19,22 +19,62 @@ import { TableDetail } from "./TableDetail";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { Input } from "./ui/input";
+import { useWidth } from "./use-width";
 
 const EDITOR_HEIGHT_KEY = "database:editor-height";
+const SCHEMA_WIDTH_KEY = "database:schema-width";
+const SCHEMA_OPEN_KEY = "database:schema-open";
 const MIN_EDITOR = 96;
 const MIN_RESULTS = 160;
+const MIN_SCHEMA = 180;
+const MAX_SCHEMA = 480;
+const SCHEMA_AUTO_WIDTH = 720;
 
 function newQueryId(): string {
   return `qry_${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
 }
 
-function readEditorHeight(): number {
+function readStored(key: string): string | null {
   try {
-    const stored = Number(window.localStorage.getItem(EDITOR_HEIGHT_KEY));
-    return Number.isFinite(stored) && stored >= MIN_EDITOR ? stored : 220;
+    return window.localStorage.getItem(key);
   } catch {
-    return 220;
+    return null;
   }
+}
+
+function writeStored(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    return;
+  }
+}
+
+function storedSize(key: string, fallback: number, min: number): number {
+  const stored = Number(readStored(key));
+  return Number.isFinite(stored) && stored >= min ? stored : fallback;
+}
+
+function storedFlag(key: string): boolean | null {
+  const stored = readStored(key);
+  return stored === null ? null : stored === "1";
+}
+
+function drag(event: ReactPointerEvent<HTMLElement>, onMove: (dx: number, dy: number) => void, onEnd: () => void): void {
+  event.preventDefault();
+  const { clientX, clientY } = event;
+  const move = (next: PointerEvent) => onMove(next.clientX - clientX, next.clientY - clientY);
+  const end = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    onEnd();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+}
+
+function ToolLabel({ children }: { children: ReactNode }) {
+  return <span className="hidden @md/toolbar:inline">{children}</span>;
 }
 
 type View = { kind: "results" } | { kind: "plan"; plan: ExplainResult; sql: string } | { kind: "table"; table: TableInfo };
@@ -60,8 +100,12 @@ function Workbench({ connection }: { connection: Connection }) {
   const [view, setView] = useState<View>({ kind: "results" });
   const [ask, setAsk] = useState<AskState>({ prompt: "", busy: false, result: null, error: null });
   const [saveOpen, setSaveOpen] = useState(false);
-  const [editorHeight, setEditorHeight] = useState(readEditorHeight);
+  const [editorHeight, setEditorHeight] = useState(() => storedSize(EDITOR_HEIGHT_KEY, 220, MIN_EDITOR));
+  const [schemaWidth, setSchemaWidth] = useState(() => storedSize(SCHEMA_WIDTH_KEY, 256, MIN_SCHEMA));
+  const [schemaPinned, setSchemaPinned] = useState(() => storedFlag(SCHEMA_OPEN_KEY));
+  const [rootRef, rootWidth] = useWidth<HTMLDivElement>();
   const column = useRef<HTMLDivElement>(null);
+  const schemaOpen = schemaPinned ?? (rootWidth === null || rootWidth >= SCHEMA_AUTO_WIDTH);
 
   const execute = useCallback(
     async (text?: string) => {
@@ -159,37 +203,42 @@ function Workbench({ connection }: { connection: Connection }) {
     void execute(text);
   };
 
-  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const startY = event.clientY;
-    const startHeight = editorHeight;
+  const resizeEditor = (event: ReactPointerEvent<HTMLDivElement>) => {
     const available = column.current?.clientHeight ?? 800;
-    const onMove = (move: PointerEvent) => {
-      const next = Math.min(Math.max(MIN_EDITOR, startHeight + move.clientY - startY), Math.max(MIN_EDITOR, available - MIN_RESULTS));
-      setEditorHeight(next);
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      setEditorHeight((height) => {
-        try {
-          window.localStorage.setItem(EDITOR_HEIGHT_KEY, String(height));
-        } catch {
-          return height;
-        }
-        return height;
-      });
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    let next = editorHeight;
+    drag(
+      event,
+      (_dx, dy) => {
+        next = Math.min(Math.max(MIN_EDITOR, editorHeight + dy), Math.max(MIN_EDITOR, available - MIN_RESULTS));
+        setEditorHeight(next);
+      },
+      () => writeStored(EDITOR_HEIGHT_KEY, String(next)),
+    );
+  };
+
+  const resizeSchema = (event: ReactPointerEvent<HTMLDivElement>) => {
+    let next = schemaWidth;
+    drag(
+      event,
+      (dx) => {
+        next = Math.min(Math.max(MIN_SCHEMA, schemaWidth + dx), MAX_SCHEMA);
+        setSchemaWidth(next);
+      },
+      () => writeStored(SCHEMA_WIDTH_KEY, String(next)),
+    );
+  };
+
+  const toggleSchema = () => {
+    setSchemaPinned(!schemaOpen);
+    writeStored(SCHEMA_OPEN_KEY, schemaOpen ? "0" : "1");
   };
 
   const busy = runningId !== null;
   const claudeMissing = status !== null && !status.claude.available;
 
   return (
-    <div className="flex h-full min-h-0">
-      <aside className="hidden w-64 shrink-0 border-r border-border md:block">
+    <div ref={rootRef} className="flex h-full min-h-0">
+      <aside style={{ width: schemaWidth }} className={cn("relative max-w-[50%] shrink-0 border-r border-border", !schemaOpen && "hidden")}>
         <SchemaBrowser
           snapshot={schema.snapshot}
           loading={schema.loading}
@@ -199,6 +248,7 @@ function Workbench({ connection }: { connection: Connection }) {
           onDescribe={(table) => setView({ kind: "table", table })}
           onInsert={(text) => editor.current?.insert(text)}
         />
+        <div role="separator" aria-orientation="vertical" aria-label="Resize schema" onPointerDown={resizeSchema} className="absolute inset-y-0 -right-0.5 z-10 w-1 cursor-col-resize hover:bg-ring" />
       </aside>
       <div ref={column} className="flex min-w-0 flex-1 flex-col">
         <form onSubmit={askNow} className="flex flex-col gap-1 border-b border-border px-3 py-2">
@@ -207,17 +257,24 @@ function Workbench({ connection }: { connection: Connection }) {
             <Input
               value={ask.prompt}
               onChange={(event) => setAsk((current) => ({ ...current, prompt: event.target.value }))}
-              placeholder={claudeMissing ? `claude CLI not found at “${status?.claude.path}”; set its path in the plugin settings` : "Describe what you want to see, e.g. “active subscribers per plan, most popular first”"}
+              onKeyDown={(event) => (event.key === "Escape" && ask.prompt !== "" ? setAsk((current) => ({ ...current, prompt: "" })) : undefined)}
+              placeholder={claudeMissing ? `claude CLI not found at “${status?.claude.path}”; set its path in the plugin settings` : "What do you want to see?"}
+              title={claudeMissing ? undefined : "Describe the data in plain English, e.g. “active subscribers per plan, most popular first”"}
               aria-label="Describe the query in plain language"
               disabled={ask.busy || claudeMissing}
-              className="h-8 text-sm"
+              className="h-8 min-w-0 text-sm"
             />
-            <Button type="submit" size="sm" className="h-8" disabled={ask.busy || claudeMissing || ask.prompt.trim() === ""}>
+            <Button type="submit" size="sm" className="h-8 shrink-0" disabled={ask.busy || claudeMissing || ask.prompt.trim() === ""}>
               {ask.busy ? <Spinner /> : <Icon name="AiContentGenerator01" className="size-3.5" />}
               Ask
             </Button>
           </div>
-          {ask.result === null ? null : (
+          {ask.busy ? (
+            <p role="status" className="pl-6 text-xs text-muted-foreground">
+              Writing SQL for “{ask.prompt.trim()}”…
+            </p>
+          ) : null}
+          {ask.result === null || ask.busy ? null : (
             <p className="pl-6 text-xs text-muted-foreground">
               {ask.result.explanation === "" ? "Generated SQL is in the editor." : ask.result.explanation}
               <span className="ml-2 opacity-70">
@@ -237,32 +294,35 @@ function Workbench({ connection }: { connection: Connection }) {
         <section style={{ height: editorHeight }} className="shrink-0">
           <Editor ref={editor} value={sql} onChange={setSql} snapshot={schema.snapshot} onRun={() => void execute()} onExplain={() => void explain(false)} />
         </section>
-        <div role="separator" aria-orientation="horizontal" aria-label="Resize editor" onPointerDown={startResize} className="h-1 shrink-0 cursor-row-resize bg-border hover:bg-ring" />
-        <div className="flex items-center gap-1 border-b border-border px-2 py-1">
-          <Button size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => (busy ? cancel() : void execute())} disabled={!busy && sql.trim() === ""}>
-            <Icon name={busy ? "Square" : "Play"} className="size-3.5" />
-            {busy ? "Cancel" : "Run"}
-            <Kbd>{busy ? "Esc" : "⌘↵"}</Kbd>
-          </Button>
+        <div role="separator" aria-orientation="horizontal" aria-label="Resize editor" onPointerDown={resizeEditor} className="h-1 shrink-0 cursor-row-resize bg-border hover:bg-ring" />
+        <div className="@container/toolbar flex items-center gap-1 border-b border-border px-2 py-1">
+          <IconButton label={schemaOpen ? "Hide schema" : "Show schema"} icon="PanelLeft" pressed={schemaOpen} onClick={toggleSchema} className="w-7 px-0" />
+          <Hint label={busy ? "Cancel the query (Esc)" : "Run the selection or the whole editor (⌘↵)"}>
+            <Button size="sm" className="h-7 shrink-0 gap-1.5 px-2.5 text-xs" onClick={() => (busy ? cancel() : void execute())} disabled={!busy && sql.trim() === ""}>
+              <Icon name={busy ? "Square" : "Play"} className="size-3.5" />
+              {busy ? "Cancel" : "Run"}
+              <Kbd className="hidden @md/toolbar:inline">{busy ? "Esc" : "⌘↵"}</Kbd>
+            </Button>
+          </Hint>
           <IconButton label="Explain (⇧⌘↵)" icon="Workflow" onClick={() => void explain(false)} disabled={busy || explaining || sql.trim() === ""}>
-            Explain
+            <ToolLabel>Explain</ToolLabel>
           </IconButton>
           <IconButton label="Explain analyze: runs the statement and shows real timings" icon="ChartColumn" onClick={() => void explain(true)} disabled={busy || explaining || sql.trim() === ""}>
-            Analyze
+            <ToolLabel>Analyze</ToolLabel>
           </IconButton>
-          <span className="mx-1 h-4 w-px bg-border" />
+          <span className="mx-1 h-4 w-px shrink-0 bg-border" />
           <IconButton label="Save query" icon="Star" onClick={() => setSaveOpen(true)} disabled={sql.trim() === ""}>
-            Save
+            <ToolLabel>Save</ToolLabel>
           </IconButton>
           <IconButton label="Open history" icon="Clock" onClick={() => appPanel.openFixedTab({ surface: { kind: "current" }, tab: HISTORY_TAB })} />
           <IconButton label="Open saved queries" icon="ListView" onClick={() => appPanel.openFixedTab({ surface: { kind: "current" }, tab: SAVED_TAB })} />
           <span className="flex-1" />
           {view.kind === "results" ? null : (
             <IconButton label="Back to results" icon="GridView" onClick={() => setView({ kind: "results" })}>
-              Results
+              <ToolLabel>Results</ToolLabel>
             </IconButton>
           )}
-          <span className={cn("truncate text-xs text-muted-foreground", connection.allowWrites && "text-amber-600 dark:text-amber-400")} title={`${connection.host}:${connection.port}`}>
+          <span className={cn("hidden min-w-0 truncate text-xs text-muted-foreground @2xl/toolbar:block", connection.allowWrites && "text-amber-600 dark:text-amber-400")} title={`${connection.host}:${connection.port}`}>
             {connection.name} · <span className="font-mono">{connection.database}</span> · {connection.allowWrites ? "writes on" : "read-only"}
           </span>
         </div>

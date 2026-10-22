@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { HistorySource, QueryError } from "../contract";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 export function EmptyState({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -16,8 +17,8 @@ export function Spinner({ className }: { className?: string }) {
   return <Icon name="Spinner" className={cn("size-4 animate-spin", className)} aria-hidden />;
 }
 
-export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="rounded border border-border bg-muted px-1 font-sans text-[10px] text-muted-foreground">{children}</kbd>;
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return <kbd className={cn("rounded border border-border bg-muted px-1 font-sans text-[10px] text-muted-foreground", className)}>{children}</kbd>;
 }
 
 export function formatMs(ms: number): string {
@@ -86,18 +87,23 @@ export function IconButton({
   children?: ReactNode;
 }) {
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      className={cn("h-7 gap-1.5 px-2 text-xs", className)}
-      aria-label={label}
-      aria-pressed={pressed}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      <Icon name={icon} className="size-3.5" />
-      {children}
-    </Button>
+    <Hint label={label}>
+      <Button size="sm" variant="ghost" className={cn("h-7 gap-1.5 px-2 text-xs", className)} aria-label={label} aria-pressed={pressed} disabled={disabled} onClick={onClick}>
+        <Icon name={icon} className="size-3.5" />
+        {children}
+      </Button>
+    </Hint>
+  );
+}
+
+export function Hint({ label, children }: { label: string; children: ReactElement }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
