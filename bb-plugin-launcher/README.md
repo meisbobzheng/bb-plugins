@@ -25,7 +25,8 @@ window for threads, projects, quick prompts, settings, and plugins.
 - **Projects:** `↵` on a project lists its threads, up to the latest 100.
   Typing there searches all of them, or starts a thread in that project.
 - **Preview:** the right pane shows the selected thread's project, branch,
-  workspace, machine, agent, pull request, and last few messages.
+  workspace, machine, agent, pull request, and last few messages. Other
+  results show their title and description there.
 
 ## Keys
 
