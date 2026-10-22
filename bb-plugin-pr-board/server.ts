@@ -43,6 +43,7 @@ const SKILL_NAME = "pr-board";
 const LIST_TTL_MS = 50_000;
 const DETAIL_REFRESH_MS = 15 * 60_000;
 const ARCHIVE_SCHEDULE = "*/15 * * * *";
+const OFFLINE = /error connecting to /;
 const THREAD_EVENTS = ["thread.active", "thread.idle", "thread.failed", "thread.archived", "thread.unarchived", "thread.deleted"] as const;
 const PULL_TTL_MS = 50_000;
 const VIEWER_TTL_MS = 60 * 60_000;
@@ -477,12 +478,21 @@ export function createPlugin(deps: PluginDeps) {
       }
     }
 
+    const archiveFailures = new Map<string, string>();
     async function archiveFinishedReviews(): Promise<void> {
       const tracked = store.trackedPulls();
       for (const repo of new Set(tracked.map((pull) => pull.repo))) {
         const pulls = tracked.filter((pull) => pull.repo === repo);
-        await archiveFinishedReviewsIn(repo, pulls).catch((error: unknown) =>
-          bb.log.warn(`could not check ${repo} for merged or closed PRs: ${errorMessage(error)}`),
+        await archiveFinishedReviewsIn(repo, pulls).then(
+          () => archiveFailures.delete(repo),
+          (error: unknown) => {
+            const message = errorMessage(error);
+            if (archiveFailures.get(repo) === message) return;
+            archiveFailures.set(repo, message);
+            const line = `could not check ${repo} for merged or closed PRs: ${message}`;
+            if (OFFLINE.test(message)) bb.log.info(line);
+            else bb.log.warn(line);
+          },
         );
       }
     }

@@ -626,6 +626,32 @@ describe("archiving finished reviews", () => {
     }
   });
 
+  it("logs a failed check once until a check succeeds, as a note when GitHub is unreachable", async () => {
+    const { harness, runner, advance } = await reviewed();
+    const failWith = (message: string) =>
+      runner.run.mockImplementation(async () => {
+        throw new Error(message);
+      });
+    const check = async () => {
+      advance(15 * 60_000);
+      await harness.behavior.runSchedule("archive-finished-reviews");
+    };
+    const logged = () => harness.inspection.logEntries.filter((entry) => entry.message.startsWith("could not check acme/app")).map((entry) => entry.level);
+    failWith("gh api graphql: error connecting to api.github.com");
+    await check();
+    await check();
+    expect(logged()).toEqual(["info"]);
+    failWith("gh api graphql: HTTP 401: Bad credentials");
+    await check();
+    await check();
+    expect(logged()).toEqual(["info", "warn"]);
+    runner.run.mockReset();
+    await check();
+    failWith("gh api graphql: HTTP 401: Bad credentials");
+    await check();
+    expect(logged()).toEqual(["info", "warn", "warn"]);
+  });
+
   it("skips a repository whose open list could not be read", async () => {
     const { harness, runner, advance } = await reviewed();
     runner.run.mockImplementation(async () => {
