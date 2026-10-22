@@ -76,7 +76,7 @@ function Node({ node, depth, total }: { node: PlanNode; depth: number; total: nu
   return (
     <li>
       <div className="group relative flex items-start gap-1 py-1 pr-3 text-xs hover:bg-state-hover" style={{ paddingLeft: `${depth * 16 + 8}px` }}>
-        {share === null ? null : <span aria-hidden className="absolute inset-y-0 left-0 bg-amber-500/10" style={{ width: `${Math.round(share * 100)}%` }} />}
+        {share === null ? null : <span aria-hidden className="absolute inset-y-0 left-0 bg-warning/10" style={{ width: `${Math.round(share * 100)}%` }} />}
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
@@ -98,7 +98,7 @@ function Node({ node, depth, total }: { node: PlanNode; depth: number; total: nu
                 {share === null ? null : <span className="ml-1">({Math.round(share * 100)}%)</span>}
               </span>
             )}
-            <span className={cn("tabular-nums", misestimate ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")} title="Rows: estimated → actual">
+            <span className={cn("tabular-nums", misestimate ? "text-warning-text" : "text-muted-foreground")} title="Rows: estimated → actual">
               rows {num(node, "Plan Rows")?.toLocaleString()}
               {actualRows === null ? null : ` → ${actualRows.toLocaleString()}`}
               {(num(node, "Actual Loops") ?? 1) > 1 ? ` ×${num(node, "Actual Loops")}` : null}

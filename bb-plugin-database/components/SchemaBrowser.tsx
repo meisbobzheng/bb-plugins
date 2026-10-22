@@ -76,7 +76,7 @@ function TableRow({ table, open, onToggle, onPreview, onDescribe, onInsert }: { 
                 className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left font-mono text-[11px] outline-none hover:bg-state-hover focus-visible:ring-1 focus-visible:ring-ring"
                 title={[column.comment, column.default === null ? null : `default ${column.default}`, column.nullable ? "nullable" : "not null"].filter((part) => part !== null).join(" · ")}
               >
-                {column.primaryKey ? <Icon name="database/key" className="size-3 shrink-0 text-amber-600 dark:text-amber-400" /> : <span className="size-3 shrink-0" />}
+                {column.primaryKey ? <Icon name="database/key" className="size-3 shrink-0 text-attention" /> : <span className="size-3 shrink-0" />}
                 <span className="truncate">{column.name}</span>
                 <span className="ml-auto shrink-0 text-muted-foreground">
                   {prettyType(column.type)}
@@ -142,8 +142,8 @@ export function SchemaBrowser({ snapshot, loading, error, onRefresh, onPreview, 
             {waited < SLOW_MS ? null : <span>Still waiting for the server after {Math.round(waited / 1000)} s.</span>}
           </div>
         ) : error !== null && snapshot === null ? (
-          <div role="alert" className="m-2 rounded-md border border-red-500/40 bg-red-500/10 p-2 text-xs">
-            <p className="font-medium text-red-700 dark:text-red-300">Could not load the schema</p>
+          <div role="alert" className="m-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">
+            <p className="font-medium text-destructive-text">Could not load the schema</p>
             <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{error}</p>
             <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={onRefresh}>
               <Icon name="RotateCcw" className="size-3.5" />

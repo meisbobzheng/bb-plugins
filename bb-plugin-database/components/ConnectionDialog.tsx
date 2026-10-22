@@ -248,11 +248,11 @@ export function ConnectionDialog({ open, connection, onClose, onSaved }: Connect
             </p>
           )}
           {test === null ? null : test.ok ? (
-            <p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">
+            <p role="status" className="text-sm text-success">
               Connected to {test.database} as {test.user} on PostgreSQL {test.serverVersion} in {Math.round(test.latencyMs)} ms.
             </p>
           ) : (
-            <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 p-2 text-sm">
+            <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm">
               <p className="break-words font-mono text-xs">{test.error.message}</p>
               {test.error.hint === null ? null : <p className="mt-1 text-xs text-muted-foreground">{test.error.hint}</p>}
             </div>

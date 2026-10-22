@@ -37,7 +37,7 @@ export function TableDetail({ table, onPreview, onClose }: { table: TableInfo; o
               <tr key={column.name} className="hover:bg-state-hover">
                 <td className="border-b border-border px-2 py-1">
                   <span className="inline-flex items-center gap-1">
-                    {column.primaryKey ? <Icon name="database/key" className="size-3 text-amber-600 dark:text-amber-400" /> : null}
+                    {column.primaryKey ? <Icon name="database/key" className="size-3 text-attention" /> : null}
                     {column.name}
                   </span>
                 </td>

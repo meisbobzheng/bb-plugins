@@ -105,7 +105,7 @@ export function DatabaseHeader(_props: PluginNavPanelProps) {
           </Select>
           <label className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border px-2 text-xs" title="Statements run in a read-only session until writes are enabled">
             <Switch checked={connection.allowWrites} onCheckedChange={(checked) => (checked ? setConfirmWrites(true) : void setWrites(false))} aria-label="Allow writes" className="scale-75" />
-            {connection.allowWrites ? <span className="font-medium text-amber-600 dark:text-amber-400">Writes on</span> : <span className="text-muted-foreground">Read-only</span>}
+            {connection.allowWrites ? <span className="font-medium text-warning-text">Writes on</span> : <span className="text-muted-foreground">Read-only</span>}
           </label>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

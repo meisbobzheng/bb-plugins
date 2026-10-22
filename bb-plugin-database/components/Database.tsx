@@ -282,7 +282,7 @@ function Workbench({ connection }: { connection: Connection }) {
                 {ask.result.costUsd === null ? "" : ` · $${ask.result.costUsd.toFixed(3)}`}
                 {ask.result.attempts > 1 ? ` · fixed after ${ask.result.attempts} attempts` : ""}
               </span>
-              {ask.result.readOnly ? null : <span className="ml-2 text-amber-600 dark:text-amber-400">This statement changes data, so it was not run. Review it, enable writes, and run it yourself.</span>}
+              {ask.result.readOnly ? null : <span className="ml-2 text-warning-text">This statement changes data, so it was not run. Review it, enable writes, and run it yourself.</span>}
             </p>
           )}
           {ask.error === null ? null : (
@@ -322,7 +322,7 @@ function Workbench({ connection }: { connection: Connection }) {
               <ToolLabel>Results</ToolLabel>
             </IconButton>
           )}
-          <span className={cn("hidden min-w-0 truncate text-xs text-muted-foreground @2xl/toolbar:block", connection.allowWrites && "text-amber-600 dark:text-amber-400")} title={`${connection.host}:${connection.port}`}>
+          <span className={cn("hidden min-w-0 truncate text-xs text-muted-foreground @2xl/toolbar:block", connection.allowWrites && "text-warning-text")} title={`${connection.host}:${connection.port}`}>
             {connection.name} · <span className="font-mono">{connection.database}</span> · {connection.allowWrites ? "writes on" : "read-only"}
           </span>
         </div>

@@ -127,8 +127,8 @@ export function positionToLine(sql: string, position: number | null): string | n
 export function ErrorPanel({ error, sql }: { error: QueryError; sql: string }) {
   const where = positionToLine(sql, error.position);
   return (
-    <div role="alert" className="m-3 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">
-      <div className="flex items-center gap-2 font-medium text-red-700 dark:text-red-300">
+    <div role="alert" className="m-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+      <div className="flex items-center gap-2 font-medium text-destructive-text">
         <Icon name="AlertCircle" className="size-4" aria-hidden />
         {ERROR_TITLES[error.kind]}
         {error.code === null ? null : <span className="font-mono text-xs font-normal text-muted-foreground">{error.code}</span>}

@@ -214,7 +214,7 @@ function Grid({ set, durationMs, connectionName }: { set: ResultSet; durationMs:
       <footer className="flex items-center gap-3 border-t border-border px-3 py-1 text-xs text-muted-foreground">
         <span>
           {formatCount(set.rows.length, "row")}
-          {set.truncated ? <span className="ml-1 text-amber-600 dark:text-amber-400">(first {set.rows.length}; add a LIMIT or raise the row cap in settings)</span> : null}
+          {set.truncated ? <span className="ml-1 text-warning-text">(first {set.rows.length}; add a LIMIT or raise the row cap in settings)</span> : null}
         </span>
         <span>·</span>
         <span>{formatMs(durationMs)}</span>
