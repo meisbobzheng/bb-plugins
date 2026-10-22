@@ -89,13 +89,15 @@ describe("resolve", () => {
 });
 
 describe("hints", () => {
-  it("uses the fewest characters and varies the first one", () => {
-    expect(hintLabels(3, "ab")).toEqual(["aa", "ba", "ab"]);
+  it("gives as many hints as it can one letter, and never starts a label with another", () => {
+    expect(hintLabels(3, "ab")).toEqual(["b", "aa", "ab"]);
     expect(hintLabels(2, "abc")).toEqual(["a", "b"]);
     expect(hintLabels(0)).toEqual([]);
+    expect(hintLabels(20).filter((label) => label.length === 1)).toHaveLength(13);
     const labels = hintLabels(200);
     expect(new Set(labels).size).toBe(200);
-    expect(labels.every((label) => label.length === 3)).toBe(true);
+    expect(labels.filter((label) => label.length === 2)).toHaveLength(195);
+    expect(labels.filter((label) => labels.some((other) => other !== label && other.startsWith(label)))).toEqual([]);
   });
 
   it("narrows by typed characters and picks a unique match", () => {
