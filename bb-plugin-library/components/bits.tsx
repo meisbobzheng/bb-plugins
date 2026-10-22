@@ -1,6 +1,7 @@
 import {
   Fragment,
   forwardRef,
+  useEffect,
   useId,
   useRef,
   useState,
@@ -27,6 +28,8 @@ import {
   type TagRef,
 } from "../library";
 import { useTagCatalog } from "./hooks";
+
+const LOADING_DELAY_MS = 200;
 
 export function KindBadge({ kind, className }: { kind: Kind; className?: string }) {
   return (
@@ -105,6 +108,15 @@ export function EmptyState({ children, className }: { children: ReactNode; class
       {children}
     </div>
   );
+}
+
+export function Loading({ className }: { className?: string }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(true), LOADING_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  return shown ? <p className={cn("text-sm text-muted-foreground", className)}>Loading…</p> : null;
 }
 
 export function ErrorState({ message, error, onRetry }: { message: string; error: string; onRetry: () => void }) {

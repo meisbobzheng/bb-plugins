@@ -14,7 +14,7 @@ import { cn } from "../lib/utils";
 import type { Entry, EntryHit, SearchResult } from "../contract";
 import { KINDS, KIND_LABELS, LIBRARY_PANEL, LIMITS, type Kind } from "../library";
 import { normalizeTagNames } from "../glossary";
-import { EmptyState, ErrorState, Highlighted, KindBadge, TagChip, formatDate } from "./bits";
+import { EmptyState, ErrorState, Highlighted, KindBadge, Loading, TagChip, formatDate } from "./bits";
 import { EntryView, entryReference } from "./EntryView";
 import { useLibrarySearch } from "./hooks";
 import {
@@ -125,7 +125,7 @@ export function LibraryBrowser({ filters, onFiltersChange, selectedId, onSelect,
             <ErrorState message="Could not search the Library." error={error} onRetry={retry} />
           </div>
         ) : result === null ? (
-          <p className="p-3 text-sm text-muted-foreground">Loading…</p>
+          <Loading className="p-3" />
         ) : result.total === 0 ? (
           <div className="p-3">
             {hasFilters ? (

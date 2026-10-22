@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Icon } from "./ui/icon";
 import type { Entry } from "../contract";
 import { specUrl, specsFor } from "../glossary";
-import { EmptyState, ErrorState, KindBadge, formatDate } from "./bits";
+import { EmptyState, ErrorState, KindBadge, Loading, formatDate } from "./bits";
 import { EntryFields, isDraftValid, type Draft } from "./EntryFields";
 import { ExportMenu } from "./ExportMenu";
 import { errorMessage, useEntry, useLibraryRpc } from "./hooks";
@@ -46,7 +46,7 @@ export function EntryView({ id, onBack, onDeleted, onTagClick, onInsert, onReady
   if (entry === undefined) {
     content =
       error === null ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <Loading />
       ) : (
         <ErrorState message="Could not open this entry." error={error} onRetry={retry} />
       );

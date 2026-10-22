@@ -229,6 +229,13 @@ describe("Library app", () => {
     scrolled.mockRestore();
   });
 
+  it("says it is loading only when an entry takes a moment", async () => {
+    const app = await load();
+    const slot = renderSlot(app.navPanels[0]!, { subPath: "lib_10adab1e" }, { rpc: { search: () => RESULT, entry: () => new Promise<never>(() => {}) } });
+    expect(slot.queryByText("Loading…")).toBeNull();
+    expect(await slot.findByText("Loading…")).toBeTruthy();
+  });
+
   it("forgets a remembered entry that was deleted", async () => {
     window.localStorage.setItem("test-plugin:last-entry", JSON.stringify("lib_deadbeef"));
     const app = await load();
