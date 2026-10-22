@@ -167,7 +167,8 @@ function EntryReader({ entry, onEdit, onDeleted, onTagClick, onInsert }: EntryRe
 
 function EntryEditor({ entry, onDone }: { entry: Entry; onDone: () => void }) {
   const rpc = useLibraryRpc();
-  const [draft, setDraft] = useState<Draft>({ title: entry.title, kind: entry.kind, summary: entry.summary, body: entry.body, tags: entry.tags });
+  const [saved] = useState<Draft>({ title: entry.title, kind: entry.kind, summary: entry.summary, body: entry.body, tags: entry.tags });
+  const [draft, setDraft] = useState(saved);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canSave = isDraftValid(draft) && !saving;
@@ -186,7 +187,7 @@ function EntryEditor({ entry, onDone }: { entry: Entry; onDone: () => void }) {
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape") onDone();
+    if (event.key === "Escape" && draft === saved) onDone();
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
     event.preventDefault();
     void save();

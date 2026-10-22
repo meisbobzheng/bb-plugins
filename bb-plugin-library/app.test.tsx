@@ -273,6 +273,23 @@ describe("Library app", () => {
     expect(await slot.findByRole("heading", { name: "Retried entry" })).toBeTruthy();
   });
 
+  it("closes the editor with Escape only while nothing has changed", async () => {
+    const app = await load();
+    const slot = renderSlot(app.navPanels[0]!, { subPath: HIT.id }, { rpc: { search: () => RESULT, entry: () => ({ ...HIT, body: "x" }) satisfies Entry } });
+    fireEvent.click(await slot.findByRole("button", { name: "Edit" }));
+    fireEvent.keyDown(slot.getByLabelText("Title"), { key: "Escape" });
+    expect(await slot.findByRole("heading", { name: HIT.title })).toBeTruthy();
+
+    fireEvent.click(slot.getByRole("button", { name: "Edit" }));
+    const title = slot.getByLabelText("Title");
+    fireEvent.change(title, { target: { value: "S6a attach, revised" } });
+    fireEvent.keyDown(title, { key: "Escape" });
+    expect((slot.getByLabelText("Title") as HTMLInputElement).value).toBe("S6a attach, revised");
+
+    fireEvent.click(slot.getByRole("button", { name: "Cancel" }));
+    expect(await slot.findByRole("heading", { name: HIT.title })).toBeTruthy();
+  });
+
   it("toggles to the last entry, and back when the Library is showing", async () => {
     window.localStorage.setItem("test-plugin:last-entry", JSON.stringify(HIT.id));
     const app = await load();
