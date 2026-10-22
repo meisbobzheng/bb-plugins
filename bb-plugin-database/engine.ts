@@ -147,8 +147,10 @@ export class Engine {
     return entry.typeNames;
   }
 
-  private async failure(error: unknown, connection: Connection, cancelled: boolean): Promise<QueryError> {
-    return (await this.deps.authError(error, connection)) ?? describeError(error, cancelled);
+  async failure(error: unknown, connection: Connection, cancelled = false): Promise<QueryError> {
+    const described = (await this.deps.authError(error, connection)) ?? describeError(error, cancelled);
+    if (described.kind !== "connection" || described.hint !== null) return described;
+    return { ...described, hint: `Check that ${connection.host}:${connection.port} is reachable from the bb server, for example that your VPN is connected, then try again.` };
   }
 
   private async withClient<T>(connection: Connection, options: Pick<RunOptions, "readOnly" | "timeoutMs">, work: (client: PoolClient, entry: PoolEntry) => Promise<T>): Promise<T> {

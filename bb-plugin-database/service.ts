@@ -159,10 +159,21 @@ export function createService(deps: ServiceDeps) {
     return result;
   }
 
+  const failed = (connection: Connection) => async (error: unknown): Promise<never> => {
+    if (error instanceof ServiceError) throw error;
+    const described = await engine.failure(error, connection);
+    throw new ServiceError(described.message, described.hint);
+  };
+
+  async function schema(connection: Connection, refresh: boolean): Promise<SchemaSnapshot> {
+    return engine.schema(connection, refresh, await timeoutMs()).catch(failed(connection));
+  }
+
   return {
     engine,
     resolve,
     run,
+    schema,
     async connections() {
       return { connections: store.listConnections(), activeId: await store.activeId() };
     },
@@ -211,10 +222,7 @@ export function createService(deps: ServiceDeps) {
       return connection;
     },
     async databases(connection: Connection): Promise<string[]> {
-      return engine.databases(connection, await timeoutMs());
-    },
-    async schema(connection: Connection, refresh: boolean): Promise<SchemaSnapshot> {
-      return engine.schema(connection, refresh, await timeoutMs());
+      return engine.databases(connection, await timeoutMs()).catch(failed(connection));
     },
     async explain(connection: Connection, sql: string, analyze: boolean): Promise<ExplainResult> {
       return engine.explain(connection, sql, analyze, { readOnly: !connection.allowWrites, timeoutMs: await timeoutMs() });
@@ -222,13 +230,12 @@ export function createService(deps: ServiceDeps) {
     cancel: (queryId: string) => engine.cancel(queryId),
     async ask(connection: Connection, prompt: string, currentSql: string | null, execute: boolean): Promise<AskResult> {
       await settings();
-      const snapshot = await engine.schema(connection, false, await timeoutMs());
-      const schema = schemaText(snapshot, prompt);
+      const tables = schemaText(await schema(connection, false), prompt);
       let previous: { sql: string; error: string } | null = null;
       let costUsd: number | null = null;
       let model = settingsCache.askModel;
       for (let attempt = 1; ; attempt += 1) {
-        const completion = await asker.complete({ database: connection.database, prompt, currentSql, previous }, schema);
+        const completion = await asker.complete({ database: connection.database, prompt, currentSql, previous }, tables);
         costUsd = completion.costUsd === null ? costUsd : (costUsd ?? 0) + completion.costUsd;
         model = completion.model;
         const { sql, explanation } = extractSql(completion.text);

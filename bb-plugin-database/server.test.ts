@@ -49,7 +49,16 @@ describe.skipIf(target === null)("Database plugin against a live PostgreSQL", ()
   it("reports an unreachable host as a connection error", async () => {
     const result = (await harness.behavior.callRpc("connections_test", input({ port: 1 }))) as TestResult;
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.kind).toBe("connection");
+    if (!result.ok) expect(result.error).toMatchObject({ kind: "connection", hint: expect.stringContaining("is reachable") });
+  });
+
+  it("explains why the schema of an unreachable connection did not load", async () => {
+    const offline = (await harness.behavior.callRpc("connections_save", input({ name: "offline", port: 1 }))) as Connection;
+    try {
+      await expect(harness.behavior.callRpc("schema_get", { connectionId: offline.id, refresh: false })).rejects.toThrow(/127\.0\.0\.1:1 is reachable/);
+    } finally {
+      await harness.behavior.callRpc("connections_delete", { id: offline.id });
+    }
   });
 
   it("runs a select through a cursor and caps the rows", async () => {
