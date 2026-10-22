@@ -232,6 +232,27 @@ export function fitToBox(element: Element, from: Box, to: Box): Element {
   }
 }
 
+export function simplify(points: readonly Point[], tolerance: number): Point[] {
+  const keep = points.map((_, index) => index === 0 || index === points.length - 1);
+  const spans: [number, number][] = [[0, points.length - 1]];
+  for (let span = spans.pop(); span !== undefined; span = spans.pop()) {
+    const [start, end] = span;
+    let farthest = -1;
+    let distance = tolerance;
+    for (let index = start + 1; index < end; index += 1) {
+      const offset = distanceToSegment(points[index]!, points[start]!, points[end]!);
+      if (offset > distance) {
+        farthest = index;
+        distance = offset;
+      }
+    }
+    if (farthest === -1) continue;
+    keep[farthest] = true;
+    spans.push([start, farthest], [farthest, end]);
+  }
+  return points.filter((_, index) => keep[index]);
+}
+
 export function snapAngle([x1, y1]: Point, [x2, y2]: Point): Point {
   const angle = Math.round(Math.atan2(y2 - y1, x2 - x1) / (Math.PI / 4)) * (Math.PI / 4);
   const length = Math.hypot(x2 - x1, y2 - y1);

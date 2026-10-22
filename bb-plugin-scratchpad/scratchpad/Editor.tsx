@@ -27,6 +27,7 @@ import {
   intersectsBox,
   normalizeBox,
   round,
+  simplify,
   snapAngle,
   translate,
   unionBoxes,
@@ -48,6 +49,7 @@ import { useHistory } from "./useHistory";
 const CLIENT_ID = Math.random().toString(36).slice(2, 12);
 const SAVE_DELAY_MS = 700;
 const HIT_TOLERANCE = 6;
+const PEN_TOLERANCE = 0.75;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 8;
 const GRID = 24;
@@ -577,6 +579,11 @@ export function Editor({ board }: { board: Board }) {
     if (gesture.kind === "draw") {
       const drawn = elementsRef.current.find((element) => element.id === gesture.id);
       const zoom = viewRef.current.zoom;
+      if (drawn?.type === "pen") {
+        updateElement(gesture.id, (element) =>
+          element.type === "pen" ? { ...element, points: simplify(element.points, PEN_TOLERANCE / zoom) } : element,
+        );
+      }
       if (drawn?.type === "line") {
         const [[x1, y1], [x2, y2]] = drawn.points;
         if (Math.hypot(x2 - x1, y2 - y1) < 3 / zoom) {
