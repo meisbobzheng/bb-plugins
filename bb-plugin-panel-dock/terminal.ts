@@ -41,10 +41,10 @@ export async function toggleFloatingTerminal(threadId: string) {
   if (floatingThreadId() !== null) return endFloat();
   const surface = surfaces.get(threadId);
   if (!surface) return;
-  startFloat(threadId);
+  const float = startFloat(threadId);
   try {
     await showFloatingTerminal(surface, threadId);
-    settleFloat();
+    settleFloat(float);
   } catch (error) {
     endFloat();
     reportError(error);

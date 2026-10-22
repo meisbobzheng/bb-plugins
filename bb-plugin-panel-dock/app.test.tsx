@@ -213,6 +213,13 @@ describe("header menu", () => {
 
 describe("floating terminal", () => {
   const toggle = (threadId: string) => act(() => toggleFloatingTerminal(threadId));
+  const nextFrame = () => act(() => new Promise(requestAnimationFrame));
+
+  function renderTerminal(panel: HTMLElement) {
+    panel.querySelector("aside")!.innerHTML =
+      "<section data-app-terminal><textarea></textarea></section>";
+    return panel.querySelector("textarea")!;
+  }
 
   it("floats a terminal from the header menu and puts the panel away again", async () => {
     const mounted = await mount();
@@ -253,6 +260,45 @@ describe("floating terminal", () => {
 
     expect(root.dataset.panelFloat).toBeUndefined();
     expect(hide.click).not.toHaveBeenCalled();
+  });
+
+  it("puts the panel away when toggled off while its terminal opens", async () => {
+    renderMenu("thr_quick");
+    let hide!: ReturnType<typeof panelToggle>;
+
+    await act(async () => {
+      const opening = toggleFloatingTerminal("thr_quick");
+      void toggleFloatingTerminal("thr_quick");
+      hide = panelToggle("Hide");
+      await opening;
+    });
+
+    expect(root.dataset.panelFloat).toBeUndefined();
+    expect(hide.click).toHaveBeenCalledOnce();
+  });
+
+  it("focuses the floating terminal once it renders", async () => {
+    const panel = renderPanels();
+    renderMenu("thr_focus");
+
+    await toggle("thr_focus");
+    const input = renderTerminal(panel);
+    await nextFrame();
+
+    expect(document.activeElement).toBe(input);
+    await toggle("thr_focus");
+  });
+
+  it("stops reaching for the terminal once the float ends", async () => {
+    const panel = renderPanels();
+    renderMenu("thr_unfocus");
+
+    await toggle("thr_unfocus");
+    await toggle("thr_unfocus");
+    const input = renderTerminal(panel);
+    await nextFrame();
+
+    expect(document.activeElement).not.toBe(input);
   });
 
   it("stops floating when the panel is closed some other way", async () => {

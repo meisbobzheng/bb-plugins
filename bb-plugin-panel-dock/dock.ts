@@ -59,16 +59,21 @@ export function startFloat(threadId: string) {
     returnFocus: document.activeElement,
   };
   root().dataset.panelFloat = "";
+  return float;
 }
 
-export function settleFloat() {
+export function settleFloat(started: Float) {
+  if (float !== started) {
+    if (!float && !started.wasOpen) clickPanelToggle("Hide");
+    return;
+  }
   const aside = document.querySelector(`${PANEL} > aside`);
-  if (!float || !aside) return;
-  float.observer = new MutationObserver(() => {
+  if (!aside) return;
+  started.observer = new MutationObserver(() => {
     if (aside.getAttribute("aria-hidden") === "true") endFloat({ hide: false });
   });
-  float.observer.observe(aside, { attributeFilter: ["aria-hidden"] });
-  focusWhenReady(`${PANEL} [data-app-terminal] textarea`);
+  started.observer.observe(aside, { attributeFilter: ["aria-hidden"] });
+  focusTerminal(started);
 }
 
 export function endFloat({ hide = true } = {}) {
@@ -83,11 +88,14 @@ export function endFloat({ hide = true } = {}) {
   }
 }
 
-function focusWhenReady(selector: string, frames = 60) {
-  const target = document.querySelector<HTMLElement>(selector);
+function focusTerminal(started: Float, frames = 60) {
+  if (float !== started) return;
+  const target = document.querySelector<HTMLElement>(
+    `${PANEL} [data-app-terminal] textarea`,
+  );
   if (target) target.focus();
   else if (frames > 0) {
-    requestAnimationFrame(() => focusWhenReady(selector, frames - 1));
+    requestAnimationFrame(() => focusTerminal(started, frames - 1));
   }
 }
 
