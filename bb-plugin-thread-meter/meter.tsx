@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -141,7 +141,7 @@ function PlanSection({ plan }: { plan: PlanUsage }) {
   );
 }
 
-export function ThreadMeterView({ context, spend, plan }: MeterData) {
+export const ThreadMeterView = memo(function ThreadMeterView({ context, spend, plan }: MeterData) {
   if (!context && !spend?.turns && !plan?.windows.length) return null;
   const contextPercent = context ? percentOf(context.usedTokens, context.modelContextWindow) : null;
   const planPercent = plan?.windows.length
@@ -176,4 +176,4 @@ export function ThreadMeterView({ context, spend, plan }: MeterData) {
       </PopoverContent>
     </Popover>
   );
-}
+});
