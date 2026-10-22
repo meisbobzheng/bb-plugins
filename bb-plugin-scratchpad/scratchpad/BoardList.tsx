@@ -106,11 +106,19 @@ export function BoardList({
                 />
               </div>
             ) : confirmingId === board.id ? (
-              <div className="flex items-center gap-1 rounded-md bg-state-hover px-2 py-1.5 text-xs">
+              <div
+                className="flex items-center gap-1 rounded-md bg-state-hover px-2 py-1.5 text-xs"
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape") return;
+                  event.preventDefault();
+                  setConfirmingId(null);
+                }}
+              >
                 <span className="min-w-0 flex-1 truncate">Delete?</span>
                 <button
                   type="button"
-                  className="rounded px-1.5 py-0.5 font-medium text-destructive hover:bg-destructive/10"
+                  aria-label={`Delete ${board.name}`}
+                  className="rounded px-1.5 py-0.5 font-medium text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   onClick={() => {
                     setConfirmingId(null);
                     onDelete(board.id);
@@ -120,7 +128,8 @@ export function BoardList({
                 </button>
                 <button
                   type="button"
-                  className="rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
+                  autoFocus
+                  className="rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   onClick={() => setConfirmingId(null)}
                 >
                   Cancel
@@ -130,11 +139,12 @@ export function BoardList({
               <>
                 <button
                   type="button"
+                  title={board.name}
                   aria-current={board.id === activeId ? "true" : undefined}
                   onClick={() => onSelect(board.id)}
                   onDoubleClick={() => onRenameStart(board.id)}
                   className={cn(
-                    "flex w-full flex-col items-start rounded-md px-2 py-1.5 pr-14 text-left hover:bg-state-hover",
+                    "flex w-full flex-col items-start rounded-md px-2 py-1.5 pr-14 text-left hover:bg-state-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     board.id === activeId && "bg-state-active",
                   )}
                 >

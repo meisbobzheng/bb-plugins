@@ -278,7 +278,7 @@ function ScratchpadWindow({ open, pluginId }: { open: boolean; pluginId: string 
           ) : (
             <span
               data-board-title=""
-              title="Double-click to rename"
+              title={activeBoard === null ? undefined : `${activeBoard.name} — double-click to rename`}
               className="block truncate text-sm font-medium"
               onDoubleClick={() => setRenamingTitle(activeBoard !== null)}
             >

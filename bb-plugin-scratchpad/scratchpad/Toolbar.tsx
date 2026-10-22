@@ -84,7 +84,7 @@ export function ToolbarButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40",
         active && "bg-state-active text-foreground",
         className,
       )}
@@ -156,7 +156,7 @@ export const Toolbar = memo(function Toolbar({
       {STROKE_WIDTHS.map((width, index) => (
         <ToolbarButton
           key={width}
-          label={["Small", "Medium", "Large"][index]!}
+          label={`Size: ${["small", "medium", "large"][index]}`}
           active={style.size === index}
           onClick={() => onStyle({ size: index as Style["size"] })}
         >
