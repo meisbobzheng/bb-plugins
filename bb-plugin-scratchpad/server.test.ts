@@ -55,6 +55,11 @@ describe("scratchpad server", () => {
         clientId: "c1",
       }),
     ).rejects.toThrow();
+    await expect(
+      call("board_save", { id: board.id, elements, snapshot: "data:image/jpeg;base64,", clientId: "c1" }),
+    ).rejects.toThrow();
+    await expect(call("board_rename", { id: board.id, name: "   " })).rejects.toThrow();
+    await expect(call("board_get", { id: "" })).rejects.toThrow();
   });
 
   it("renames and deletes boards", async () => {

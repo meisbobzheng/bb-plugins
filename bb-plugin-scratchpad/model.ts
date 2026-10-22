@@ -1,21 +1,21 @@
-import { z } from "zod";
+import * as z from "zod/mini";
 import { COLORS, SHAPE_KINDS } from "./constants.js";
 
 export type Color = (typeof COLORS)[number];
 export type ShapeKind = (typeof SHAPE_KINDS)[number];
 
-const coordinate = z.number().min(-1e7).max(1e7);
+const coordinate = z.number().check(z.gte(-1e7), z.lte(1e7));
 const point = z.tuple([coordinate, coordinate]);
-const size = z.number().min(0).max(1e6);
+const size = z.number().check(z.gte(0), z.lte(1e6));
 const color = z.enum(COLORS);
-const strokeWidth = z.number().min(0.5).max(48);
-const id = z.string().min(1).max(64);
-const text = z.string().max(20_000);
+const strokeWidth = z.number().check(z.gte(0.5), z.lte(48));
+const id = z.string().check(z.minLength(1), z.maxLength(64));
+const text = z.string().check(z.maxLength(20_000));
 
 const penSchema = z.object({
   id,
   type: z.literal("pen"),
-  points: z.array(point).min(1).max(20_000),
+  points: z.array(point).check(z.minLength(1), z.maxLength(20_000)),
   color,
   width: strokeWidth,
 });
@@ -42,7 +42,7 @@ const shapeSchema = z.object({
 const polygonSchema = z.object({
   id,
   type: z.literal("polygon"),
-  points: z.array(point).min(3).max(2_000),
+  points: z.array(point).check(z.minLength(3), z.maxLength(2_000)),
   color,
   width: strokeWidth,
   fill: z.boolean(),
@@ -54,7 +54,7 @@ const textSchema = z.object({
   y: coordinate,
   text,
   color,
-  size: z.number().min(6).max(400),
+  size: z.number().check(z.gte(6), z.lte(400)),
 });
 const noteSchema = z.object({
   id,
@@ -75,7 +75,7 @@ export const elementSchema = z.discriminatedUnion("type", [
   textSchema,
   noteSchema,
 ]);
-export const elementsSchema = z.array(elementSchema).max(10_000);
+export const elementsSchema = z.array(elementSchema).check(z.maxLength(10_000));
 
 export type Point = z.infer<typeof point>;
 export type Element = z.infer<typeof elementSchema>;
@@ -89,9 +89,9 @@ export const boardSummarySchema = z.object({
 });
 export type BoardSummary = z.infer<typeof boardSummarySchema>;
 
-export const boardSchema = boardSummarySchema.extend({
+export const boardSchema = z.extend(boardSummarySchema, {
   elements: elementsSchema,
 });
 export type Board = z.infer<typeof boardSchema>;
 
-export const boardNameSchema = z.string().trim().min(1).max(120);
+export const boardNameSchema = z.string().check(z.trim(), z.minLength(1), z.maxLength(120));

@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
-import { z } from "zod";
+import * as z from "zod/mini";
 import { BOARDS_CHANGED, type BoardsChangedSignal } from "./constants.js";
 import {
   boardNameSchema,
@@ -17,7 +17,7 @@ import {
 import { summarizeBoard } from "./summary.js";
 
 const PNG_DATA_URL = "data:image/png;base64,";
-const boardId = z.object({ id: z.string().min(1).max(64) });
+const boardId = z.object({ id: z.string().check(z.minLength(1), z.maxLength(64)) });
 
 export const rpcContract = defineRpcContract({
   boards_list: {
@@ -26,14 +26,14 @@ export const rpcContract = defineRpcContract({
   },
   board_get: {
     input: boardId,
-    output: z.object({ board: boardSchema.nullable() }),
+    output: z.object({ board: z.nullable(boardSchema) }),
   },
   board_create: {
     input: z.object({ name: boardNameSchema }),
     output: boardSummarySchema,
   },
   board_rename: {
-    input: boardId.extend({ name: boardNameSchema }),
+    input: z.extend(boardId, { name: boardNameSchema }),
     output: boardSummarySchema,
   },
   board_delete: {
@@ -41,14 +41,12 @@ export const rpcContract = defineRpcContract({
     output: z.object({ deleted: z.boolean() }),
   },
   board_save: {
-    input: boardId.extend({
+    input: z.extend(boardId, {
       elements: elementsSchema,
-      snapshot: z
-        .string()
-        .max(12_000_000)
-        .refine((value) => value.startsWith(PNG_DATA_URL), "Expected a PNG data URL")
-        .nullable(),
-      clientId: z.string().max(64),
+      snapshot: z.nullable(
+        z.string().check(z.maxLength(12_000_000), z.startsWith(PNG_DATA_URL, "Expected a PNG data URL")),
+      ),
+      clientId: z.string().check(z.maxLength(64)),
     }),
     output: z.object({ updatedAt: z.string() }),
   },
