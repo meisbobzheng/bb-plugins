@@ -19,6 +19,21 @@ export function queryTerms(query: string): string[] {
   return query.toLowerCase().split(/\s+/).filter(Boolean);
 }
 
+export function matchTerms(terms: readonly string[], fields: readonly string[]): number | null {
+  const texts = fields.map((field) => field.toLowerCase());
+  let total = 0;
+  for (const term of terms) {
+    let best: number | null = null;
+    texts.forEach((text, index) => {
+      const score = termScore(term, text);
+      if (score !== null && (best === null || score - index * 5 > best)) best = score - index * 5;
+    });
+    if (best === null) return null;
+    total += best;
+  }
+  return total;
+}
+
 export function matchScore(query: string, fields: readonly string[]): number | null {
   return matchTerms(queryTerms(query), fields);
 }
@@ -39,19 +54,4 @@ export function matchRanges(terms: readonly string[], text: string): Array<[numb
     else merged.push([start, end]);
   }
   return merged;
-}
-
-export function matchTerms(terms: readonly string[], fields: readonly string[]): number | null {
-  const texts = fields.map((field) => field.toLowerCase());
-  let total = 0;
-  for (const term of terms) {
-    let best: number | null = null;
-    texts.forEach((text, index) => {
-      const score = termScore(term, text);
-      if (score !== null && (best === null || score - index * 5 > best)) best = score - index * 5;
-    });
-    if (best === null) return null;
-    total += best;
-  }
-  return total;
 }
