@@ -12,9 +12,10 @@ field. `Esc` (also `Ctrl+[` on macOS) leaves a text field and returns to
 normal mode, unless the field used `Esc` itself, for example to close a
 mention menu. Terminals and code editors keep `Esc`.
 
-The mode shows in the bottom-right corner: `NORMAL`, `INSERT`, `HINT`, or
-`PASS` (a terminal or editor has every key), followed by any keys waiting
-for the rest of a sequence. `?` lists every key.
+The mode shows in the bottom-right corner: `NORMAL`, `INSERT`, `HINT`,
+`PASS` (a terminal or editor has every key), or `PAUSED`, followed by any keys
+waiting for the rest of a sequence or the hint letters typed so far. `?` lists
+every key.
 
 ## Keys
 

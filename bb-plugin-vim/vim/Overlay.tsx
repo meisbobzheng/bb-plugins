@@ -57,13 +57,14 @@ function modeLabel(state: VimState): string {
 }
 
 function ModeIndicator({ state }: { state: VimState }) {
+  const keys = state.hints === null ? state.pending : state.typed;
   return (
     <div
       data-vim-mode=""
       className={`${LAYER} bottom-1.5 right-2 rounded bg-muted/90 px-1.5 font-mono text-[10px] font-semibold leading-4 tracking-wide text-muted-foreground`}
     >
       {modeLabel(state)}
-      {state.pending === "" ? null : <span className="ml-1.5 text-foreground">{state.pending}</span>}
+      {keys === "" ? null : <span className="ml-1.5 text-foreground">{keys}</span>}
     </div>
   );
 }

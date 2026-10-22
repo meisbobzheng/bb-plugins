@@ -50,6 +50,14 @@ describe("vim overlay", () => {
     expect(document.querySelectorAll("[data-vim-hint]")).toHaveLength(0);
   });
 
+  it("shows the hint letters typed so far", async () => {
+    await renderVim();
+    stage(Array.from({ length: 14 }, (_, index) => `<button data-box="${300 + index * 30},300,20,20">${index}</button>`).join(""));
+    keydown("f");
+    keydown("s");
+    expect(indicator()?.textContent).toBe("HINTs");
+  });
+
   it("fits the ring around the cursor and hides it when the item goes away", async () => {
     await renderVim();
     keydown("h");
