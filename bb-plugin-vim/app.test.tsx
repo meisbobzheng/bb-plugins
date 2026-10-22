@@ -95,6 +95,7 @@ describe("vim overlay", () => {
     const dialog = await slot.findByRole("dialog", { name: "Vim keys" });
     expect(dialog.textContent).toContain("Click anything on screen by its hint");
     expect(dialog.textContent).toContain("gT");
+    expect(dialog.textContent).toContain("Backspace undoes a letter");
   });
 
   it("does nothing when turned off in settings", async () => {

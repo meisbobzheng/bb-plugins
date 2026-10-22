@@ -43,7 +43,7 @@ export function Help({ open }: { open: boolean }) {
             ))}
             <p className="mt-3 text-xs text-muted-foreground">
               Keys work whenever you are not typing. Lists like the sidebar, the Library, and PR Board columns move a cursor;
-              everything else scrolls.
+              everything else scrolls. While hints show, Backspace undoes a letter and Esc cancels.
             </p>
           </div>
         </Dialog.Content>
