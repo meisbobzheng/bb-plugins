@@ -230,6 +230,40 @@ describe("board", () => {
     expect(slot.getByRole("status").textContent).toContain("Updating");
   });
 
+  it("shows GitHub errors with a retry that checks GitHub again", async () => {
+    const errors = [
+      { repo: "acme/app", message: "gh api graphql: error connecting to api.github.com\ncheck your internet connection" },
+      { repo: "acme/app", message: "HTTP 502" },
+    ];
+    const slot = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => ({ ...BOARD, errors }) } });
+    const alert = await slot.findByRole("alert");
+    expect(within(alert).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "acme/app: gh api graphql: error connecting to api.github.com\ncheck your internet connection",
+      "acme/app: HTTP 502",
+    ]);
+    expect(slot.getByText("Needs eyes")).toBeTruthy();
+    await waitFor(() => expect(within(alert).getByRole("button", { name: "Retry" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(slot.inspection.rpcCalls.filter((call) => call.method === "board").at(-1)?.input).toEqual({ repo: "acme/app", refresh: true }),
+    );
+  });
+
+  it("clears the filter with Escape or its clear button", async () => {
+    const slot = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => BOARD } });
+    await slot.findByText("Needs eyes");
+    const filter = slot.getByRole("textbox", { name: "Filter pull requests" }) as HTMLInputElement;
+    fireEvent.change(filter, { target: { value: "approved" } });
+    expect(slot.queryByText("Needs eyes")).toBeNull();
+    fireEvent.keyDown(filter, { key: "Escape" });
+    expect(filter.value).toBe("");
+    expect(slot.getByText("Needs eyes")).toBeTruthy();
+    fireEvent.change(filter, { target: { value: "draft" } });
+    fireEvent.click(slot.getByRole("button", { name: "Clear the filter" }));
+    expect(filter.value).toBe("");
+    expect(slot.queryByRole("button", { name: "Clear the filter" })).toBeNull();
+  });
+
   it("lays the columns out as rows and remembers the choice", async () => {
     const slot = renderSlot(boardPanel(), { subPath: "" }, { rpc: { board: () => BOARD } });
     await slot.findByText("Needs eyes");

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFakePluginHost, makePluginAgentConfigurationContext, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
+import type { Board } from "./contract";
 import type { RunOptions } from "./github";
 import { FINDINGS_TOOL, REVIEW_SKILL, SUGGESTIONS_TOOL, askMessage, createPlugin, parsePullArgument, reviewMessage, summaryPrompt } from "./server";
 
@@ -191,7 +192,7 @@ describe("board", () => {
     clock = Date.parse("2026-10-14T12:00:00Z");
   });
   const board = (harness: Harness, refresh = false, repo: string | null = null) =>
-    harness.behavior.callRpc("board", { repo, refresh }) as Promise<{ repo: string; repos: string[]; cards: Array<{ number: number; checks: string; unansweredComments: number }> }>;
+    harness.behavior.callRpc("board", { repo, refresh }) as Promise<Board>;
   const since = (runner: Runner, start: number) => {
     const variables = runner.graphqlVariables().slice(start);
     return {
@@ -266,6 +267,19 @@ describe("board", () => {
     start = runner.graphqlVariables().length;
     await board(harness);
     expect(since(runner, start)).toEqual({ lists: ["acme/app"], ids: ["PR_1", "PR_2", "PR_3"] });
+  });
+
+  it("keeps the last board and the time GitHub was last read when a check fails", async () => {
+    const { harness, runner } = setup({ now: () => clock });
+    const first = await board(harness);
+    clock += 61_000;
+    runner.run.mockImplementation(async () => {
+      throw new Error("gh api graphql: error connecting to api.github.com");
+    });
+    const failed = await board(harness);
+    expect(failed.fetchedAt).toBe(first.fetchedAt);
+    expect(failed.cards).toHaveLength(3);
+    expect(failed.errors).toEqual([{ repo: "acme/app", message: "gh api graphql: error connecting to api.github.com" }]);
   });
 
   it("checks again right away and refetches a PR after you act on it from PR Board", async () => {

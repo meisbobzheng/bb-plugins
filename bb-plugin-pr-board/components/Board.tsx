@@ -553,10 +553,27 @@ export function BoardView() {
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && query.length > 0) {
+                event.stopPropagation();
+                setQuery("");
+              }
+            }}
             placeholder="Filter by title, author, branch, #"
             aria-label="Filter pull requests"
-            className="h-8 pl-8 text-sm"
+            className="h-8 pl-8 pr-8 text-sm"
           />
+          {query.length === 0 ? null : (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              title="Clear the filter (Esc)"
+              aria-label="Clear the filter"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <Icon name="X" className="size-3.5" />
+            </button>
+          )}
         </div>
         <Segmented label="Scope" value={scope} options={SCOPES} onChange={setScope} />
         <Segmented label="Layout" value={layout} options={LAYOUTS} onChange={setLayout} />
@@ -576,17 +593,36 @@ export function BoardView() {
         <span className="ml-auto flex items-center gap-2">
           <span className="hidden text-xs text-muted-foreground sm:inline">as {viewer}</span>
           <UpdatedIndicator fetchedAt={board.value.fetchedAt} refreshing={board.refreshing} error={board.error} onRetry={refresh} />
-          <Button size="sm" variant="outline" onClick={refresh} disabled={board.refreshing}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={refresh}
+            disabled={board.refreshing}
+            title="Check GitHub now and fetch every pull request's details again"
+          >
             <Icon name="ArrowReloadHorizontal" className="size-3.5" />
             Refresh
           </Button>
         </span>
       </div>
-      {errors.map((error) => (
-        <p key={error.repo} className="shrink-0 px-5 pt-2 text-sm text-destructive">
-          {error.repo}: {error.message}
-        </p>
-      ))}
+      {errors.length === 0 ? null : (
+        <div
+          role="alert"
+          className="mx-4 mt-2.5 flex shrink-0 items-start gap-2 rounded-md border border-surface-destructive-border bg-surface-destructive px-3 py-2 text-sm md:mx-5"
+        >
+          <Icon name="AlertTriangle" className="mt-0.5 size-3.5 shrink-0 text-destructive-text" aria-hidden />
+          <ul className="min-w-0 flex-1 space-y-1 text-destructive-text">
+            {errors.map((error, index) => (
+              <li key={index} className="whitespace-pre-line break-words">
+                {error.repo}: {error.message}
+              </li>
+            ))}
+          </ul>
+          <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={refresh} disabled={board.refreshing}>
+            Retry
+          </Button>
+        </div>
+      )}
       {repo === null ? (
         <p className="p-5 text-sm text-muted-foreground">No repository yet. Choose Add repository… in the menu and enter an owner/repo.</p>
       ) : (

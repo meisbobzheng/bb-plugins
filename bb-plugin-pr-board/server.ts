@@ -281,6 +281,7 @@ export function createPlugin(deps: PluginDeps) {
     interface Listing {
       pulls: ListedPull[];
       error: string | null;
+      readAt: number;
     }
     const listings = new Map<string, Cached<Listing>>();
     const snapshots = new Map<string, Cached<PullSnapshot>>();
@@ -293,8 +294,8 @@ export function createPlugin(deps: PluginDeps) {
       const startedAt = deps.now();
       const generation = invalidations;
       const value = await github.listPulls(repo).then(
-        (pulls): Listing => ({ pulls, error: null }),
-        (error: unknown): Listing => ({ pulls: previous?.value.pulls ?? [], error: errorMessage(error) }),
+        (pulls): Listing => ({ pulls, error: null, readAt: startedAt }),
+        (error: unknown): Listing => ({ pulls: previous?.value.pulls ?? [], error: errorMessage(error), readAt: previous?.value.readAt ?? startedAt }),
       );
       const result = { value, at: startedAt };
       listings.set(repo, generation === invalidations ? result : { ...result, at: Number.NEGATIVE_INFINITY });
@@ -524,7 +525,7 @@ export function createPlugin(deps: PluginDeps) {
           if (listing.value.error !== null) errors.push({ repo, message: listing.value.error });
           const details = await boardSnapshots(repo, listing.value.pulls, refresh);
           errors.push(...details.errors);
-          return { pulls: details.pulls, at: listing.at };
+          return { pulls: details.pulls, at: listing.value.readAt };
         }),
       );
       const pulls = listed.flatMap((entry) => entry.pulls);

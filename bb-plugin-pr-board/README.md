@@ -42,7 +42,7 @@ Approvals and dismissed reviews do not wait for a reply. On PRs you did not open
 conversations you posted in count. Comments from bots, GitHub Actions, and
 Copilot do not count.
 Filter by text, or by **Requested** (review requested from you or one of your
-teams, until you review) and **Mine**.
+teams, until you review) and **Mine**. Escape or the × clears the text filter.
 
 **Columns** lays the groups out side by side; **Rows** stacks them, each a grid
 of cards that wraps to the page width, so the page scrolls down. Rows is the
@@ -58,7 +58,8 @@ in this client's local storage.
 The last board loads at once, including after a restart, and updates in the
 background: the toolbar shows **Updating…** while it fetches and **Updated
 <time>** after, where the time is when the server last read GitHub. It returns to
-where you scrolled.
+where you scrolled. When GitHub cannot be read, the board keeps the PRs it last
+read and shows the error above them with **Retry**.
 
 To stay within GitHub's API limit (5,000 GraphQL points an hour, shared with
 everything else that uses your `gh` login), the board refreshes cheaply:
