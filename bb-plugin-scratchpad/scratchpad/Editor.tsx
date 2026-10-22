@@ -273,7 +273,7 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
     setSelection(new Set([session.id]));
   }, []);
 
-  const finishEditing = useCallback(() => {
+  const finishEditing = useCallback((refocus = true) => {
     const session = editingRef.current;
     if (session === null) return;
     editingRef.current = null;
@@ -288,7 +288,7 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
       replace((current) => current.filter((candidate) => candidate.id !== session.id));
     }
     commit(session.before);
-    containerRef.current?.focus({ preventScroll: true });
+    if (refocus) containerRef.current?.focus({ preventScroll: true });
   }, [replace, commit]);
 
   const finishPolygon = useCallback(() => {
@@ -856,7 +856,7 @@ export const Editor = memo(function Editor({ board }: { board: Board }) {
               element.type === "text" || element.type === "note" ? { ...element, text } : element,
             );
           }}
-          onBlur={finishEditing}
+          onBlur={(event) => finishEditing(event.relatedTarget === null)}
           onKeyDown={(event) => {
             event.stopPropagation();
             if (event.key === "Escape" || (event.key === "Enter" && (event.metaKey || event.ctrlKey))) {
