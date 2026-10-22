@@ -92,6 +92,7 @@ export function Results({ sections, query, emptyText = "No results", showPreview
   const keyHandler = useContext(KeyHandlerContext);
   const compact = useIsCompactViewport();
   const items = useMemo(() => sections.flatMap((section) => section.items), [sections]);
+  const previewable = useMemo(() => items.some((item) => item.preview !== undefined), [items]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -182,10 +183,10 @@ export function Results({ sections, query, emptyText = "No results", showPreview
             )
           )}
         </div>
-        {showPreview && !compact && selected?.preview !== undefined ? (
-          <div className="hidden w-[42%] shrink-0 overflow-y-auto border-l border-border md:block">
-            <PreviewPane preview={selected.preview} />
-          </div>
+        {showPreview && !compact && previewable && selected !== undefined ? (
+          <aside aria-label="Preview" className="hidden w-[42%] shrink-0 overflow-y-auto border-l border-border md:block">
+            <PreviewPane item={selected} />
+          </aside>
         ) : null}
       </div>
       <div className="flex h-10 shrink-0 items-center justify-end gap-4 border-t border-border px-3 text-xs text-muted-foreground">

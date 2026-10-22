@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import type { PluginSidebarPullRequest, PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { loadPluginApp, renderSlot, type PluginSdkTestFakes } from "@get-bb/plugin-sdk/testing/app";
 import { makeProject, makeThread } from "./fixtures";
 import { launcher } from "./launcher/store";
@@ -48,16 +48,25 @@ const THREADS = [
   makeThread({ id: "thr_old", displayTitle: "Old cleanup", updatedAt: 1 }),
 ];
 
+const CER_OUTLINE = {
+  items: [{ id: "m1", role: "user", preview: "Please check the CER", attachmentSummary: null }],
+  maxSeq: 1,
+};
+
 interface RenderOptions {
   settings?: Record<string, boolean>;
   state?: LauncherState;
   threads?: PluginSidebarThread[];
+  outline?: (threadId: string) => Promise<unknown>;
+  pullRequests?: Record<string, PluginSidebarPullRequest>;
 }
 
 async function renderLauncher({
   settings = {},
   state: initialState = { pinnedProjectIds: [], usage: {} },
   threads = THREADS,
+  outline = async () => CER_OUTLINE,
+  pullRequests,
 }: RenderOptions = {}) {
   const app = await loadPluginApp(() => import("./app"));
   const overlay = app.appOverlays[0]!;
@@ -81,7 +90,7 @@ async function renderLauncher({
     },
     threads: {
       search: async () => ({ active: { results: [], total: 0 }, archived: { results: [], total: 0 } }),
-      conversationOutline: async () => ({ items: [{ id: "m1", role: "user", preview: "Please check the CER", attachmentSummary: null }], maxSeq: 1 }),
+      conversationOutline: ({ threadId }: { threadId: string }) => outline(threadId),
       pin: async () => ({}),
       spawn: async () => ({ id: "thr_new" }),
     },
@@ -95,6 +104,7 @@ async function renderLauncher({
       projects: [makeProject("proj_a", "hss"), makeProject("proj_b", "go-diameter")],
       sections: [],
     },
+    sidebarPullRequests: pullRequests,
     sdk,
     rpc: {
       state_get: () => state,
@@ -109,7 +119,7 @@ async function renderLauncher({
 }
 
 const pressModK = () => fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+const wait = (ms = 0) => act(() => new Promise((resolve) => setTimeout(resolve, ms)));
 const callCount = (calls: readonly { method: string }[], method: string) =>
   calls.filter((call) => call.method === method).length;
 
@@ -127,7 +137,7 @@ describe("launcher", () => {
 
   it("has pins and usage loaded before it opens and keeps them between opens", async () => {
     const slot = await renderLauncher({ state: { pinnedProjectIds: ["proj_b"], usage: {} } });
-    await settle();
+    await wait();
     pressModK();
     expect(slot.getByRole("group", { name: "Pinned" }).textContent).toContain("go-diameter");
     act(() => launcher.close());
@@ -135,6 +145,35 @@ describe("launcher", () => {
     await slot.findByRole("dialog");
     expect(callCount(slot.inspection.rpcCalls, "state_get")).toBe(1);
     expect(callCount(slot.inspection.sdkCalls, "system.config")).toBe(3);
+  });
+
+  it("previews only the selected thread's own messages and pull request", async () => {
+    const pullRequest = { number: 12, title: "Handle CER retries" } as PluginSidebarPullRequest;
+    const slot = await renderLauncher({
+      outline: (threadId) =>
+        threadId === "thr_wait" ? Promise.resolve(CER_OUTLINE) : threadId === "thr_old" ? Promise.reject(new Error("offline")) : new Promise(() => {}),
+      pullRequests: { thr_wait: pullRequest },
+    });
+    pressModK();
+    const preview = await slot.findByRole("complementary", { name: "Preview" });
+    await within(preview).findByText("Please check the CER");
+    expect(preview.textContent).toContain("#12 Handle CER retries");
+    fireEvent.keyDown(slot.getByRole("textbox"), { key: "ArrowDown" });
+    await wait(200);
+    expect(preview.textContent).toContain("Pinned rollout plan");
+    expect(preview.textContent).toContain("Loading conversation…");
+    expect(preview.textContent).not.toContain("Please check the CER");
+    expect(preview.textContent).not.toContain("Handle CER retries");
+    fireEvent.keyDown(slot.getByRole("textbox"), { key: "ArrowDown" });
+    await within(preview).findByText("Could not load messages.");
+  });
+
+  it("keeps the preview pane open on results without a preview", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    await slot.findByRole("dialog");
+    fireEvent.mouseMove(slot.getByText("Settings…"));
+    expect(within(slot.getByRole("complementary", { name: "Preview" })).getByText("Settings…")).toBeTruthy();
   });
 
   it("leaves ⌘K to bb when the shortcut setting is off", async () => {

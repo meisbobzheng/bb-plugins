@@ -9,9 +9,10 @@ import { useAsync, useDebounced, type OutlineItem } from "./data";
 import { ProjectIcon, ThreadIcon, relativeTime } from "./items";
 import { PluginIcon, pluginStatusLabel } from "./plugins";
 import { isRunning, needsAttention, visibleThreads } from "./rank";
-import type { Preview } from "./types";
+import type { Item } from "./types";
 
 const OUTLINE_LIMIT = 6;
+const SETTLE_MS = 120;
 const outlineCache = new Map<string, readonly OutlineItem[]>();
 
 function Facts({ rows }: { rows: ReadonlyArray<readonly [string, ReactNode]> }) {
@@ -21,7 +22,9 @@ function Facts({ rows }: { rows: ReadonlyArray<readonly [string, ReactNode]> }) 
         value === null || value === undefined || value === "" ? null : (
           <div key={label} className="contents">
             <dt className="text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 truncate text-foreground">{value}</dd>
+            <dd className="min-w-0 truncate text-foreground" title={typeof value === "string" ? value : undefined}>
+              {value}
+            </dd>
           </div>
         ),
       )}
@@ -41,24 +44,26 @@ function Heading({ icon, title, detail }: { icon: ReactNode; title: ReactNode; d
   );
 }
 
-function useOutline(threadId: string): readonly OutlineItem[] | undefined {
+function Conversation({ threadId, settled }: { threadId: string; settled: boolean }) {
   const { sdk } = useLauncher();
-  const settledId = useDebounced(threadId, 120);
-  const { data } = useAsync(
+  const { data, error } = useAsync(
     async (signal) => {
-      const { items } = await sdk.threads.conversationOutline({ threadId: settledId, signal });
+      if (!settled) return undefined;
+      const { items } = await sdk.threads.conversationOutline({ threadId, signal });
       const recent = items.slice(-OUTLINE_LIMIT);
-      outlineCache.set(settledId, recent);
+      outlineCache.set(threadId, recent);
       return recent;
     },
-    [sdk, settledId],
+    [sdk, threadId, settled],
   );
-  return outlineCache.get(threadId) ?? (settledId === threadId ? data : undefined);
-}
-
-function Conversation({ threadId }: { threadId: string }) {
-  const outline = useOutline(threadId);
-  if (outline === undefined) return <p className="text-xs text-muted-foreground">Loading conversation…</p>;
+  const outline = data ?? outlineCache.get(threadId);
+  if (outline === undefined) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        {error === null ? "Loading conversation…" : "Could not load messages."}
+      </p>
+    );
+  }
   if (outline.length === 0) return <p className="text-xs text-muted-foreground">No messages yet.</p>;
   return (
     <ol className="space-y-2.5">
@@ -76,7 +81,9 @@ function Conversation({ threadId }: { threadId: string }) {
 
 function ThreadPreview({ threadId }: { threadId: string }) {
   const ctx = useLauncher();
-  const { pullRequest } = useSidebarThreadPullRequest(threadId);
+  const settledId = useDebounced(threadId, SETTLE_MS);
+  const settled = settledId === threadId;
+  const { pullRequest } = useSidebarThreadPullRequest(settledId);
   const thread = ctx.threads.find((candidate) => candidate.id === threadId);
   if (thread === undefined) return null;
   const environment = thread.environment;
@@ -94,13 +101,13 @@ function ThreadPreview({ threadId }: { threadId: string }) {
           ["Workspace", environment?.isWorktree ? `${environment.name ?? "worktree"} (worktree)` : environment?.name],
           ["Machine", thread.host?.name],
           ["Agent", ctx.providers.get(thread.providerId)?.displayName ?? thread.providerId],
-          ["Pull request", pullRequest ? `#${pullRequest.number} ${pullRequest.title}` : null],
+          ["Pull request", settled && pullRequest ? `#${pullRequest.number} ${pullRequest.title}` : null],
           ["Updated", `${relativeTime(thread.updatedAt, ctx.now)} ago`],
           ["Created", new Date(thread.createdAt).toLocaleString()],
         ]}
       />
       <div className="border-t border-border pt-3">
-        <Conversation threadId={thread.id} />
+        <Conversation key={thread.id} threadId={thread.id} settled={settled} />
       </div>
     </div>
   );
@@ -142,7 +149,15 @@ function ProjectPreview({ projectId }: { projectId: string }) {
   );
 }
 
-export function PreviewPane({ preview }: { preview: Preview }) {
+export function PreviewPane({ item }: { item: Item }) {
+  const { preview } = item;
+  if (preview === undefined) {
+    return (
+      <div className="p-4">
+        <Heading icon={item.icon} title={item.title} detail={item.subtitle} />
+      </div>
+    );
+  }
   switch (preview.kind) {
     case "thread":
       return <ThreadPreview threadId={preview.threadId} />;
