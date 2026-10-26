@@ -99,6 +99,11 @@ Every look also takes `space` (play or pause), `+`/`-` (volume), and `,`/`.`
 (seek 10 seconds). Switch looks and palettes from the page header or the plugin
 settings. The visualizers are animated from the song's position, not its audio.
 
+Console fits short or narrow windows: below 720px tall or 900px wide it trades
+the spectrum for a compact now-playing strip with clickable controls, moves Up
+Next into a `6` tab when its column doesn't fit, and under 620px wide shows a
+single pane with a `1` playlists tab.
+
 ## Settings
 
 | Setting | Default | What it does |

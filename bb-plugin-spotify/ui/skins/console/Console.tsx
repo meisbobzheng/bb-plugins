@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Playlist, SearchResult, Track } from "../../../contract";
 import { artists, clock, daysAgo, hours, playlistLength } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
@@ -10,8 +10,31 @@ import "./console.css";
 
 type Focus = "playlists" | "bottom";
 type Message = { text: string; bad: boolean } | null;
+type Layout = "full" | "wide" | "split" | "stack";
 
-const TABS: Tab[] = ["tracks", "stats", "history", "search"];
+const TABS: Tab[] = ["tracks", "stats", "history", "search", "upnext"];
+const TAB_LABELS: Record<Tab, string> = { tracks: "tracks", stats: "stats", history: "history", search: "search", upnext: "up next" };
+
+function layoutFor({ width, height }: { width: number; height: number }): Layout {
+  if (width === 0) return "full";
+  if (width < 620) return "stack";
+  if (width >= 900 && height >= 720) return "full";
+  return width >= 1100 ? "wide" : "split";
+}
+
+function useSize(ref: React.RefObject<HTMLElement | null>): { width: number; height: number } {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    const measure = () => setSize((value) => (value.width === element.clientWidth && value.height === element.clientHeight ? value : { width: element.clientWidth, height: element.clientHeight }));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return size;
+}
 
 function tagFor(reason: string | null, vibe: boolean): string | null {
   if (reason === null) return null;
@@ -32,8 +55,22 @@ function Pane({ title, keyHint, extra, focused, className, children }: { title: 
   );
 }
 
-function PlaylistsPane({ props, focused, cursor, filter, onPick }: { props: SkinProps; focused: boolean; cursor: number; filter: string | null; onPick(index: number): void }) {
+type PlaylistsProps = { props: SkinProps; focused: boolean; cursor: number; filter: string | null; onPick(index: number): void };
+
+function PlaylistsPane(playlists: PlaylistsProps) {
+  return (
+    <Pane title="playlists" keyHint="1" focused={playlists.focused} className="c-side">
+      <PlaylistsBody {...playlists} />
+    </Pane>
+  );
+}
+
+function PlaylistsBody({ props, focused, cursor, filter, onPick }: PlaylistsProps) {
   const { data } = props;
+  const ul = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    ul.current?.querySelector(".c-cur")?.scrollIntoView({ block: "nearest" });
+  }, [cursor, focused]);
   const list = visiblePlaylists(data.playlists, filter);
   const library = list.filter((entry) => entry.readable);
   const followed = list.filter((entry) => !entry.readable);
@@ -50,19 +87,19 @@ function PlaylistsPane({ props, focused, cursor, filter, onPick }: { props: Skin
     );
   };
   return (
-    <Pane title="playlists" keyHint="1" focused={focused}>
+    <>
       <div className="c-filter">
         / <span className={filter === null ? "c-f" : ""}>{filter ?? "filter…"}</span>
         {filter !== null ? <span className="c-caret">▏</span> : null}
       </div>
       {data.playlists === null ? <div className="c-d">loading…</div> : null}
-      <ul className="c-list">
+      <ul ref={ul} className="c-list">
         {library.length > 0 ? <li className="c-hdr">── library</li> : null}
         {library.map(row)}
         {followed.length > 0 ? <li className="c-hdr">── followed · play only</li> : null}
         {followed.map(row)}
       </ul>
-    </Pane>
+    </>
   );
 }
 
@@ -73,23 +110,109 @@ function visiblePlaylists(playlists: Playlist[] | null, filter: string | null): 
   return [...matched.filter((entry) => entry.readable), ...matched.filter((entry) => !entry.readable)];
 }
 
+function DeviceTag({ player }: { player: SkinProps["data"]["player"] }) {
+  return player.device ? <span className="c-g"> ● {player.device.name.toLowerCase()}</span> : <span className="c-r"> ○ no device</span>;
+}
+
+function contextLine(data: SkinProps["data"]): string {
+  const { track, context } = data.player;
+  if (track === null) return "nothing playing";
+  const index = (data.selection.tracks ?? []).findIndex((entry) => entry.id === track.id);
+  return `${index >= 0 ? `track ${String(index + 1).padStart(2, "0")}/${data.selection.tracks!.length} · ` : ""}${(context?.name ?? context?.kind ?? "single").toLowerCase()}`;
+}
+
+function artistLine(player: SkinProps["data"]["player"]): string {
+  if (player.track !== null) return artists(player.track);
+  return player.status === "no-device" ? "no spotify device · press o to open the app" : "press space to play";
+}
+
+function useTicking(player: SkinProps["data"]["player"]): void {
+  const [, tick] = useState(0);
+  useFrame(() => tick((value) => value + 1), player.isPlaying, 2);
+}
+
+function Times({ data, flags = true }: { data: SkinProps["data"]; flags?: boolean }) {
+  const { player } = data;
+  const smart = data.session !== null && player.track !== null && data.session.tracks.some((entry) => entry.track.id === player.track!.id);
+  return (
+    <div className="c-times">
+      <span>
+        {clock(progressAt(player, Date.now()))} <span className="c-f">/</span> {clock(player.track?.durationMs ?? 0)}
+      </span>
+      {flags ? (
+        <span>
+          {smart ? "⇄ smart" : player.shuffle ? "⇄ on" : "⇄ off"} · ↻ {player.repeat === "off" ? "off" : player.repeat === "track" ? "one" : "all"} · vol {player.device?.volumePercent ?? "–"}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function Transport({ data, actions }: { data: SkinProps["data"]; actions: SkinProps["actions"] }) {
+  const { isPlaying, liked } = data.player;
+  return (
+    <span className="c-transport" onMouseDown={(event) => event.preventDefault()}>
+      <button type="button" className="c-btn" onClick={actions.previous} aria-label="Previous song" title="Previous song (h)">
+        ◂◂
+      </button>
+      <button type="button" className="c-btn c-btn-main" onClick={actions.toggle} aria-label={isPlaying ? "Pause" : "Play"} title="Play or pause (space)">
+        {isPlaying ? "❚❚" : "▶"}
+      </button>
+      <button type="button" className="c-btn" onClick={actions.next} aria-label="Next song" title="Next song (l)">
+        ▸▸
+      </button>
+      <button type="button" className={`c-btn ${liked ? "c-y" : ""}`} onClick={actions.like} aria-pressed={Boolean(liked)} aria-label="Save to Liked Songs" title="Save to Liked Songs (f)">
+        {liked ? "♥" : "♡"}
+      </button>
+    </span>
+  );
+}
+
+function NowStrip({ props, tight }: { props: SkinProps; tight: boolean }) {
+  const { data, actions } = props;
+  const { player } = data;
+  const track = player.track;
+  useTicking(player);
+  return (
+    <Pane title="now playing" className="c-strip" extra={<DeviceTag player={player} />}>
+      <div className="c-np">
+        {tight ? null : <AsciiCover player={player} demo={data.demo} cols={14} rows={7} />}
+        <div className="c-meta">
+          <div className="c-head">
+            <span className="c-trunc">
+              <b className="c-title">{track?.name ?? "—"}</b> <span className="c-artist">{artistLine(player)}</span>
+            </span>
+            <Transport data={data} actions={actions} />
+          </div>
+          {tight ? null : (
+            <div className="c-d c-trunc">
+              {contextLine(data)}
+              {track === null ? "" : ` · ${track.album.name.toLowerCase()}${track.album.year === null ? "" : ` (${track.album.year})`}`}
+            </div>
+          )}
+          <div className="c-seek">
+            <BrailleProgress player={player} onSeek={actions.seek} />
+            <Times data={data} flags={!tight} />
+          </div>
+        </div>
+      </div>
+    </Pane>
+  );
+}
+
 function NowPlaying({ props }: { props: SkinProps }) {
   const { data, actions } = props;
   const { player } = data;
   const track = player.track;
-  const [, tick] = useState(0);
-  useFrame(() => tick((value) => value + 1), player.isPlaying, 2);
-  const position = progressAt(player, Date.now());
-  const index = track === null ? -1 : (data.selection.tracks ?? []).findIndex((entry) => entry.id === track.id);
-  const volume = player.device?.volumePercent;
+  useTicking(player);
   return (
-    <Pane title="now playing" keyHint="2" extra={player.device ? <span className="c-g"> ● {player.device.name.toLowerCase()}</span> : <span className="c-r"> ○ no device</span>}>
+    <Pane title="now playing" extra={<DeviceTag player={player} />}>
       <div className="c-np">
         <AsciiCover player={player} demo={data.demo} />
         <div className="c-meta">
-          <div className="c-d">{track === null ? "nothing playing" : `${index >= 0 ? `track ${String(index + 1).padStart(2, "0")}/${data.selection.tracks!.length} · ` : ""}${(player.context?.name ?? player.context?.kind ?? "single").toLowerCase()}`}</div>
+          <div className="c-d">{contextLine(data)}</div>
           <div className="c-title">{track?.name ?? "—"}</div>
-          <div className="c-artist">{track !== null ? artists(track) : player.status === "no-device" ? "no spotify device · press o to open the app" : "press space to play"}</div>
+          <div className="c-artist">{artistLine(player)}</div>
           {track === null ? null : (
             <table className="c-kv">
               <tbody>
@@ -114,15 +237,7 @@ function NowPlaying({ props }: { props: SkinProps }) {
             </table>
           )}
           <BrailleProgress player={player} onSeek={actions.seek} />
-          <div className="c-times">
-            <span>
-              {clock(position)} <span className="c-f">/</span> {clock(track?.durationMs ?? 0)}
-            </span>
-            <span>
-              {data.session !== null && player.track !== null && data.session.tracks.some((entry) => entry.track.id === player.track!.id) ? "⇄ smart" : player.shuffle ? "⇄ on" : "⇄ off"} · ↻{" "}
-              {player.repeat === "off" ? "off" : player.repeat === "track" ? "one" : "all"} · vol {volume ?? "–"}
-            </span>
-          </div>
+          <Times data={data} />
         </div>
       </div>
     </Pane>
@@ -130,12 +245,20 @@ function NowPlaying({ props }: { props: SkinProps }) {
 }
 
 function UpNext({ props }: { props: SkinProps }) {
+  return (
+    <Pane title="up next" className="c-side" extra={<span className="c-y"> smart shuffle</span>}>
+      <UpNextBody props={props} limit={6} />
+    </Pane>
+  );
+}
+
+function UpNextBody({ props, limit }: { props: SkinProps; limit?: number }) {
   const { data } = props;
-  const upcoming = upNext(data).slice(0, 6);
+  const upcoming = upNext(data).slice(0, limit);
   const vibe = data.session?.options.vibe != null;
   const options = data.session?.options ?? data.shuffleOptions;
   return (
-    <Pane title="up next" keyHint="3" extra={<span className="c-y"> smart shuffle</span>}>
+    <>
       <div className="c-cmd">
         <span className="c-y">:shuffle</span> {describeOptions(options) || <span className="c-d">plain</span>}
         {data.shuffling ? <span className="c-g"> · shuffling…</span> : null}
@@ -163,35 +286,35 @@ function UpNext({ props }: { props: SkinProps }) {
         {data.session !== null ? `${data.session.tracks.length} in session · ${data.session.dropped} skip-prone dropped · ` : ""}
         <span className="c-y">R</span> reshuffle · <span className="c-y">e</span> edit
       </div>
-    </Pane>
+    </>
   );
 }
 
-function TracksTable({ props, tracks, cursor, focused, onPick, emptyText }: { props: SkinProps; tracks: Track[]; cursor: number; focused: boolean; onPick(index: number): void; emptyText: string }) {
+function TracksTable({ props, tracks, cursor, focused, album, share, onPick, emptyText }: { props: SkinProps; tracks: Track[]; cursor: number; focused: boolean; album: boolean; share: boolean; onPick(index: number): void; emptyText: string }) {
   const current = props.data.player.track?.id;
   const list = useRef<HTMLTableSectionElement>(null);
   useEffect(() => {
     list.current?.querySelector(".c-cur")?.scrollIntoView({ block: "nearest" });
-  }, [cursor]);
+  }, [cursor, album]);
   if (tracks.length === 0) return <div className="c-d c-empty">{emptyText}</div>;
   return (
     <table className="c-tl">
       <colgroup>
         <col style={{ width: 38 }} />
         <col />
-        <col style={{ width: "22%" }} />
-        <col style={{ width: "24%" }} />
+        <col style={{ width: album ? "22%" : "34%" }} />
+        {album ? <col style={{ width: "24%" }} /> : null}
         <col style={{ width: 60 }} />
-        <col style={{ width: 230 }} />
+        {share ? <col style={{ width: 230 }} /> : null}
       </colgroup>
       <thead>
         <tr>
           <th>#</th>
           <th>title</th>
           <th>artist</th>
-          <th>album</th>
+          {album ? <th>album</th> : null}
           <th>time</th>
-          <th>share</th>
+          {share ? <th>share</th> : null}
         </tr>
       </thead>
       <tbody ref={list}>
@@ -200,9 +323,9 @@ function TracksTable({ props, tracks, cursor, focused, onPick, emptyText }: { pr
             <td className="c-n">{track.id === current ? "▶" : String(index + 1).padStart(2, "0")}</td>
             <td>{track.name}</td>
             <td>{artists(track)}</td>
-            <td>{track.album.name}</td>
+            {album ? <td>{track.album.name}</td> : null}
             <td className="c-n">{clock(track.durationMs)}</td>
-            <td className="c-hint">{index === cursor && focused ? "yy link · @ thread · C card · q queue" : ""}</td>
+            {share ? <td className="c-hint">{index === cursor && focused ? "yy link · @ thread · C card · q queue" : ""}</td> : null}
           </tr>
         ))}
       </tbody>
@@ -278,10 +401,13 @@ function ConsolePage(props: SkinProps) {
   const [search, setSearch] = useState<SearchResult | null>(null);
   const [help, setHelp] = useState(false);
   const lastY = useRef(0);
+  const layout = layoutFor(useSize(root));
+  const tabs = layout === "full" || layout === "wide" ? TABS.filter((name) => name !== "upnext") : TABS;
+  const shown = tabs.includes(tab) ? tab : "tracks";
 
   const playlists = useMemo(() => visiblePlaylists(data.playlists, filter), [data.playlists, filter]);
   const bottomTracks: Track[] =
-    tab === "tracks" ? (data.selection.tracks ?? []) : tab === "history" ? data.recent.map((play) => play.track) : tab === "search" ? (search?.tracks ?? []) : [];
+    shown === "tracks" ? (data.selection.tracks ?? []) : shown === "history" ? data.recent.map((play) => play.track) : shown === "search" ? (search?.tracks ?? []) : [];
   const cursorTrack = focus === "bottom" ? bottomTracks[cursor.bottom] : undefined;
   const subject = cursorTrack ?? data.player.track ?? null;
 
@@ -304,6 +430,7 @@ function ConsolePage(props: SkinProps) {
     setCursor((value) => ({ ...value, playlists: index, bottom: 0 }));
     actions.select(playlist.id);
     setTab("tracks");
+    if (layout === "stack") setFocus("bottom");
     if (!playlist.readable) say(`${playlist.name.toLowerCase()} · spotify only lists playlists you own · p plays it`);
   };
 
@@ -311,7 +438,7 @@ function ConsolePage(props: SkinProps) {
     const track = bottomTracks[index];
     if (track === undefined) return;
     setCursor((value) => ({ ...value, bottom: index }));
-    if (tab === "tracks" && data.selection.playlist !== null) actions.playPlaylist(data.selection.playlist, track);
+    if (shown === "tracks" && data.selection.playlist !== null) actions.playPlaylist(data.selection.playlist, track);
     else actions.playTrack(track);
     say(`playing ${track.name.toLowerCase()}`);
   };
@@ -506,15 +633,19 @@ function ConsolePage(props: SkinProps) {
         case "3":
         case "4":
         case "5":
-          setTab(TABS[Number(event.key) - 2]!);
+        case "6": {
+          const next = tabs[Number(event.key) - 2];
+          if (next === undefined) return false;
+          setTab(next);
           setFocus("bottom");
           setCursor((value) => ({ ...value, bottom: 0 }));
           return true;
+        }
         default:
           return false;
       }
     },
-    [help, filter, data, actions, focus, cursor, playlists, bottomTracks, subject, cursorTrack],
+    [help, filter, data, actions, focus, cursor, playlists, bottomTracks, subject, cursorTrack, tabs, layout],
   );
   useKeys(root, onKey);
 
@@ -525,69 +656,112 @@ function ConsolePage(props: SkinProps) {
   const ghost = command === null ? null : complete(command);
   const mode = command !== null ? "COMMAND" : filter !== null ? "FILTER" : "NORMAL";
   const volume = data.player.device?.volumePercent ?? 0;
+  const full = layout === "full";
+  const stack = layout === "stack";
+  const listing = stack && focus === "playlists";
+  const pickTab = (name: Tab) => (setTab(name), setFocus("bottom"));
+  const playlistsProps: PlaylistsProps = { props, focused: focus === "playlists", cursor: cursor.playlists, filter, onPick: (index) => (setFocus("playlists"), pickPlaylist(index)) };
 
   return (
-    <div ref={root} tabIndex={0} className={`sp-console c-${palette}`} onMouseDown={(event) => !isTyping(event.target) && event.currentTarget.focus({ preventScroll: true })}>
+    <div ref={root} tabIndex={0} data-layout={layout} className={`sp-console c-${palette}${full ? "" : " c-compact"}`} onMouseDown={(event) => !isTyping(event.target) && event.currentTarget.focus({ preventScroll: true })}>
       <div className="c-grid">
-        <PlaylistsPane props={props} focused={focus === "playlists"} cursor={cursor.playlists} filter={filter} onPick={(index) => (setFocus("playlists"), pickPlaylist(index))} />
-        <NowPlaying props={props} />
-        <UpNext props={props} />
-        <Pane title="spectrum" keyHint="v" className="c-wide" extra={<span className="c-d"> · {visualizer}</span>}>
-          <Spectrum player={data.player} mode={visualizer} />
-        </Pane>
+        {full ? (
+          <>
+            <PlaylistsPane {...playlistsProps} />
+            <NowPlaying props={props} />
+            <UpNext props={props} />
+            <Pane title="spectrum" keyHint="v" className="c-wide" extra={<span className="c-d"> · {visualizer}</span>}>
+              <Spectrum player={data.player} mode={visualizer} />
+            </Pane>
+          </>
+        ) : (
+          <>
+            <NowStrip props={props} tight={stack} />
+            {stack ? null : <PlaylistsPane {...playlistsProps} />}
+          </>
+        )}
         <Pane
-          title={tab === "tracks" ? (data.selection.playlist?.name.toLowerCase() ?? "tracks") : tab}
-          className="c-wide c-bottom"
-          focused={focus === "bottom"}
+          title={listing ? "playlists" : shown === "tracks" ? (data.selection.playlist?.name.toLowerCase() ?? "tracks") : TAB_LABELS[shown]}
+          className={full ? "c-wide c-bottom" : "c-bottom"}
+          focused={focus === "bottom" || stack}
           extra={
             <span className="c-d">
-              {tab === "tracks" && data.selection.tracks ? ` · ${data.selection.tracks.length} tracks · ${playlistLength(data.selection.tracks)}` : ""}
-              {TABS.map((name, index) => (
-                <span key={name} className={name === tab ? "c-y" : "c-f"} onClick={() => (setTab(name), setFocus("bottom"))}>
-                  {"  "}[{index + 2}] {name}
-                </span>
-              ))}
+              {!listing && shown === "tracks" && data.selection.tracks ? ` · ${data.selection.tracks.length} tracks · ${playlistLength(data.selection.tracks)}` : ""}
+              {full
+                ? tabs.map((name, index) => (
+                    <span key={name} className={name === shown ? "c-y" : "c-f"} onClick={() => pickTab(name)}>
+                      {"  "}[{index + 2}] {TAB_LABELS[name]}
+                    </span>
+                  ))
+                : null}
             </span>
           }
         >
-          {tab === "stats" ? (
-            <StatsView props={props} />
-          ) : (
-            <TracksTable
-              props={props}
-              tracks={bottomTracks}
-              cursor={cursor.bottom}
-              focused={focus === "bottom"}
-              onPick={(index) => (setFocus("bottom"), playAt(index))}
-              emptyText={
-                tab === "tracks"
-                  ? data.selection.loading
-                    ? "loading…"
-                    : data.selection.readable
-                      ? "this playlist is empty"
-                      : "spotify only lists songs of playlists you own or collaborate on · press p to play it"
-                  : tab === "search"
-                    ? "press s to search spotify"
-                    : "no plays recorded yet"
-              }
-            />
+          {full ? null : (
+            <div className="c-tabs" role="tablist">
+              {stack ? (
+                <button type="button" role="tab" aria-selected={listing} className={listing ? "c-on" : ""} onClick={() => setFocus("playlists")}>
+                  [1] playlists
+                </button>
+              ) : null}
+              {tabs.map((name, index) => (
+                <button key={name} type="button" role="tab" aria-selected={!listing && name === shown} className={!listing && name === shown ? "c-on" : ""} onClick={() => pickTab(name)}>
+                  [{index + 2}] {TAB_LABELS[name]}
+                </button>
+              ))}
+            </div>
           )}
+          <div className="c-scroll">
+            {listing ? (
+              <PlaylistsBody {...playlistsProps} />
+            ) : shown === "stats" ? (
+              <StatsView props={props} />
+            ) : shown === "upnext" ? (
+              <UpNextBody props={props} />
+            ) : (
+              <TracksTable
+                props={props}
+                tracks={bottomTracks}
+                cursor={cursor.bottom}
+                focused={focus === "bottom"}
+                album={full || layout === "wide"}
+                share={full}
+                onPick={(index) => (setFocus("bottom"), playAt(index))}
+                emptyText={
+                  shown === "tracks"
+                    ? data.selection.loading
+                      ? "loading…"
+                      : data.selection.readable
+                        ? "this playlist is empty"
+                        : "spotify only lists songs of playlists you own or collaborate on · press p to play it"
+                    : shown === "search"
+                      ? "press s to search spotify"
+                      : "no plays recorded yet"
+                }
+              />
+            )}
+          </div>
         </Pane>
+        {layout === "wide" ? <UpNext props={props} /> : null}
       </div>
       <div className="c-status">
         <span className="c-mode">{mode}</span>
-        <span className="c-seg">spotify</span>
-        <span className="c-trunc">
-          {data.player.isPlaying ? "▶" : "❚❚"} {data.player.track ? `${data.player.track.name} — ${artists(data.player.track)}` : "nothing playing"}
-        </span>
+        {full ? (
+          <>
+            <span className="c-seg">spotify</span>
+            <span className="c-trunc">
+              {data.player.isPlaying ? "▶" : "❚❚"} {data.player.track ? `${data.player.track.name} — ${artists(data.player.track)}` : "nothing playing"}
+            </span>
+          </>
+        ) : null}
         <span className="c-grow" />
         {data.player.duck.active ? (
           <span className="c-r c-trunc">
             ♪ {data.player.duck.mode === "pause" ? "paused" : "lowered"} · {data.player.duck.threads.map((thread) => thread.title.toLowerCase()).join(", ")} needs you
           </span>
         ) : null}
-        <span className="c-d">{data.demo ? "preview" : (data.player.device?.name.toLowerCase() ?? "no device")}</span>
-        <span className="c-d">vol {blocksBar(volume / 100, 10)}</span>
+        <span className="c-d c-trunc">{data.demo ? "preview" : (data.player.device?.name.toLowerCase() ?? "no device")}</span>
+        {stack ? null : <span className="c-d">vol {blocksBar(volume / 100, 10)}</span>}
         <span className="c-seg">? help</span>
       </div>
       <div className="c-cmdline">
@@ -618,12 +792,12 @@ function ConsolePage(props: SkinProps) {
           </div>
         )}
       </div>
-      {help ? <Help /> : null}
+      {help ? <Help tabs={tabs} spectrum={full} /> : null}
     </div>
   );
 }
 
-function Help() {
+function Help({ tabs, spectrum }: { tabs: Tab[]; spectrum: boolean }) {
   const rows: [string, string][] = [
     ["j k / ↑ ↓", "move"],
     ["tab", "switch pane"],
@@ -641,9 +815,9 @@ function Help() {
     ["R  e", "smart shuffle / edit flags"],
     ["/", "filter playlists"],
     ["s", "search spotify"],
-    ["2-5", "tracks stats history search"],
+    [`1  2-${tabs.length + 1}`, ["playlists", ...tabs.map((name) => TAB_LABELS[name])].join(" · ")],
     ["o", "open the spotify app"],
-    ["v", "cycle visualizer"],
+    ...(spectrum ? [["v", "cycle visualizer"] as [string, string]] : []),
     [":", "commands (:play, :vibe, :vol, :seek, :share…)"],
     ["⌘⇧S", "mini player anywhere in bb"],
   ];
@@ -653,12 +827,14 @@ function Help() {
         <legend>
           <b>keys</b> <span className="c-f">any key closes</span>
         </legend>
-        {rows.map(([keys, what]) => (
-          <div key={keys} className="c-help-row">
-            <span className="c-y">{keys}</span>
-            <span>{what}</span>
-          </div>
-        ))}
+        <div className="c-help-rows">
+          {rows.map(([keys, what]) => (
+            <div key={keys} className="c-help-row">
+              <span className="c-y">{keys}</span>
+              <span>{what}</span>
+            </div>
+          ))}
+        </div>
       </fieldset>
     </div>
   );

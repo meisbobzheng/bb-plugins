@@ -28,7 +28,9 @@ function AppearanceMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" aria-label="Look and palette">
           <Icon name="Palette" className="size-4" />
-          {SKIN_NAMES[skin]} · {PALETTE_NAMES[palette] ?? palette}
+          <span className="hidden md:inline">
+            {SKIN_NAMES[skin]} · {PALETTE_NAMES[palette] ?? palette}
+          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -67,7 +69,7 @@ function DeviceMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" aria-label="Playback device">
           <Icon name="spotify/speaker" className="size-4" />
-          {active?.name ?? "Device"}
+          <span className="hidden max-w-40 truncate md:inline">{active?.name ?? "Device"}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -101,7 +103,7 @@ export function SpotifyHeader(_props: PluginNavPanelProps) {
       <AppearanceMenu />
       <Button variant="ghost" size="sm" onClick={mini.toggle} aria-label="Toggle the mini player">
         <Icon name="spotify/mini" className="size-4" />
-        Mini
+        <span className="hidden md:inline">Mini</span>
       </Button>
     </div>
   );

@@ -76,7 +76,7 @@ export function AsciiCover({ player, demo, cols = 30, rows = 16 }: { player: Pla
 
 export function BrailleProgress({ player, onSeek }: { player: PlayerState; onSeek(ms: number): void }) {
   const span = useRef<HTMLDivElement>(null);
-  const width = 52;
+  const width = useCharWidth(span) || 52;
   const seed = hash(player.track?.id ?? "");
   const loud = Array.from({ length: width }, (_, index) => {
     const u = index / width;
@@ -92,7 +92,7 @@ export function BrailleProgress({ player, onSeek }: { player: PlayerState; onSee
     },
     player.isPlaying,
     4,
-    [player.progressMs, player.track?.id],
+    [player.progressMs, player.track?.id, width],
   );
   return (
     <div

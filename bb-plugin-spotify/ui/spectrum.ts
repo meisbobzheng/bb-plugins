@@ -61,7 +61,7 @@ export function useFrame(callback: (now: number) => void, active: boolean, fps =
       return;
     }
     let frame = 0;
-    let last = 0;
+    let last = -Infinity;
     const interval = 1000 / fps;
     const loop = (now: number) => {
       frame = requestAnimationFrame(loop);

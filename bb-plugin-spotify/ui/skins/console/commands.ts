@@ -1,6 +1,6 @@
 import type { Repeat, ShuffleOptions } from "../../../contract";
 
-export type Tab = "tracks" | "stats" | "history" | "search";
+export type Tab = "tracks" | "stats" | "history" | "search" | "upnext";
 export const VISUALIZERS = ["bars", "mirror", "scope", "off"] as const;
 export type Visualizer = (typeof VISUALIZERS)[number];
 

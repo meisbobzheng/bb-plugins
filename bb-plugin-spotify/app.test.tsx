@@ -124,4 +124,34 @@ describe("spotify app", () => {
       expect(slot.inspection.rpcCalls).toContainEqual(expect.objectContaining({ method: "player_play", input: { contextUri: "spotify:playlist:p1", uris: null, offsetUri: OTHER.uri } })),
     );
   });
+
+  it("folds into one tabbed pane with clickable transport in a small window", async () => {
+    const size = (axis: "clientWidth" | "clientHeight", value: number) =>
+      Object.defineProperty(HTMLElement.prototype, axis, {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.classList.contains("sp-console") ? value : 0;
+        },
+      });
+    size("clientWidth", 480);
+    size("clientHeight", 360);
+    try {
+      const { slot, commands } = await renderPage();
+      await slot.findByText("Kerala", { selector: "td" });
+      expect(slot.container.querySelector(".sp-console")?.getAttribute("data-layout")).toBe("stack");
+      expect(slot.queryByText("Lo-fi Beats")).toBeNull();
+      fireEvent.click(slot.getByRole("button", { name: "Play" }));
+      await waitFor(() => expect(commands).toContainEqual({ kind: "toggle" }));
+      fireEvent.click(slot.getByRole("tab", { name: "[1] playlists" }));
+      await slot.findByText("Lo-fi Beats");
+      fireEvent.click(slot.getByText("Deep Work"));
+      await slot.findByText("Kerala", { selector: "td" });
+      expect(slot.getByRole("tab", { name: "[2] tracks" }).getAttribute("aria-selected")).toBe("true");
+      fireEvent.click(slot.getByRole("tab", { name: "[6] up next" }));
+      await slot.findByText(/queue is empty|Kerala/);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+      Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+    }
+  });
 });
