@@ -275,7 +275,7 @@ describe("launcher", () => {
     fireEvent.change(input, { target: { value: "deep" } });
     const group = await slot.findByRole("group", { name: "Spotify playlists" });
     expect(group.textContent).toContain("Deep Work");
-    fireEvent.mouseMove(slot.getByText("Deep Work"));
+    fireEvent.mouseMove(within(group).getByRole("option", { name: /Deep Work/ }));
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => {
       const run = slot.inspection.sdkCalls.find((call) => call.method === "plugins.callRpc" && (call.args[0] as { method: string }).method === "launcher.run");
