@@ -31,7 +31,11 @@ vi.mock("@xterm/xterm", () => ({
       xterm.instances.push(this);
     }
     loadAddon() {}
-    open() {}
+    open(parent: HTMLElement) {
+      const textarea = document.createElement("textarea");
+      textarea.addEventListener("keydown", (event) => this.keys(event));
+      parent.append(textarea);
+    }
     focus() {}
     write(data: unknown) {
       this.written.push(data);
@@ -50,7 +54,7 @@ vi.mock("@xterm/xterm", () => ({
       this.data(data);
     }
     press(event: Partial<KeyboardEvent>) {
-      return this.keys({ type: "keydown", ctrlKey: false, metaKey: false, key: "", ...event } as KeyboardEvent);
+      return this.keys(new KeyboardEvent("keydown", { ...event, bubbles: true, cancelable: true } as KeyboardEventInit));
     }
   },
 }));
@@ -345,6 +349,28 @@ describe("floating terminal", () => {
     expect(close).toHaveBeenCalledWith({ terminalId: "term_float", mode: "force" });
     expect(terminal.disposed).toBe(true);
     expect(slot.queryByRole("dialog", { hidden: true })).toBeNull();
+  });
+
+  it("hides on Ctrl+` pressed inside the terminal without bb's shortcut reopening it", async () => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === "`") floating.toggle();
+    };
+    window.addEventListener("keydown", shortcut);
+    try {
+      const { slot } = renderFloating();
+      act(() => floating.toggle());
+      const dialog = await slot.findByRole("dialog", { name: "Floating terminal" });
+      const textarea = dialog.querySelector("textarea")!;
+
+      act(() => {
+        textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "`", ctrlKey: true, bubbles: true, cancelable: true }));
+      });
+
+      expect(floating.get().open).toBe(false);
+      expect(slot.getByRole("dialog", { hidden: true }).className).toContain("hidden");
+    } finally {
+      window.removeEventListener("keydown", shortcut);
+    }
   });
 
   it("toggles from the sidebar footer on any screen", () => {

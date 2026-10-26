@@ -136,6 +136,8 @@ export function FloatingTerminal() {
     instance.current = started;
     terminal.attachCustomKeyEventHandler((event) => {
       if (!isToggleKey(event)) return true;
+      event.preventDefault();
+      event.stopPropagation();
       floating.hide();
       return false;
     });
