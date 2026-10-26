@@ -19,6 +19,8 @@ const tokenFormat = new Intl.NumberFormat(undefined, {
 const usdFormat = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" });
 
 const formatTokens = (tokens: number) => tokenFormat.format(tokens);
+const formatUsd = (usd: number) =>
+  usd > 0 && usd < 0.005 ? `<${usdFormat.format(0.01)}` : usdFormat.format(usd);
 
 function percentOf(used: number, total: number) {
   return total > 0 ? Math.round((used / total) * 100) : 0;
@@ -110,7 +112,7 @@ function SpendSection({ spend }: { spend: Spend }) {
       <Row label="Cache read" value={formatTokens(spend.cacheRead)} />
       <Row label="Cache write" value={formatTokens(spend.cacheWrite)} />
       <Row label="Output" value={formatTokens(spend.output)} />
-      <Row label="API-equivalent cost" value={priced ? usdFormat.format(spend.costUsd) : "—"} strong />
+      <Row label="API-equivalent cost" value={priced ? formatUsd(spend.costUsd) : "—"} strong />
       {spend.unpricedTurns > 0 ? (
         <p className="text-xs text-muted-foreground">
           {spend.unpricedTurns} of {spend.turns} turns used a model without a known price.
@@ -147,7 +149,7 @@ export const ThreadMeterView = memo(function ThreadMeterView({ context, spend, p
   const planPercent = plan?.windows.length
     ? Math.round(Math.max(...plan.windows.map((window) => window.usedPercent)))
     : null;
-  const cost = spend && spend.turns > spend.unpricedTurns ? usdFormat.format(spend.costUsd) : null;
+  const cost = spend && spend.turns > spend.unpricedTurns ? formatUsd(spend.costUsd) : null;
   const summary = [
     contextPercent !== null && `${contextPercent}% of context used`,
     cost && `${cost} API-equivalent cost`,

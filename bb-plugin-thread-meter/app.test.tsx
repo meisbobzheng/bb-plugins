@@ -26,7 +26,7 @@ const requested = (seq: number, model: string) => ({
   data: { execution: { model } },
 });
 
-const tokenUsage = (seq: number) => ({
+const tokenUsage = (seq: number, tokens = 1_000_000) => ({
   id: `evt_${seq}`,
   seq,
   threadId: THREAD_ID,
@@ -36,13 +36,13 @@ const tokenUsage = (seq: number) => ({
   data: {
     tokenUsage: {
       last: {
-        inputTokens: 1_000_000,
+        inputTokens: tokens,
         cachedInputTokens: 0,
         cacheReadInputTokens: 0,
         cacheWriteInputTokens: 0,
-        outputTokens: 1_000_000,
+        outputTokens: tokens,
         reasoningOutputTokens: 0,
-        totalTokens: 2_000_000,
+        totalTokens: 2 * tokens,
       },
     },
   },
@@ -106,6 +106,11 @@ describe("thread meter", () => {
     expect(trigger.textContent).toContain("25%");
     expect(trigger.textContent).toContain("$24.00");
     expect(trigger.textContent).toContain("40% plan");
+  });
+
+  it("shows a sub-cent cost as less than a cent", async () => {
+    const { slot } = await renderMeter([requested(1, "claude-haiku-4-5"), tokenUsage(2, 100)]);
+    await slot.findByText("<$0.01");
   });
 
   it("prices new turns when a token usage event arrives", async () => {
