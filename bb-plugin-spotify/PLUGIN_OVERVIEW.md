@@ -14,8 +14,8 @@ Spotify in bb, with a mini player you can open anywhere with ⌘⇧S.
 - **Listening history and stats**: top artists and songs, listening by hour,
   skip rate, and playlists you've forgotten.
 - **Launcher results**: find and play Spotify playlists and songs from ⌘K.
-- **Four looks**: Console, Receiver, Liner Notes, and Sticker Book, each with
-  its own palettes.
+- **Eight looks**: Console, Receiver, Liner Notes, Sticker Book, Voxel, Neon,
+  Concept Sketch, and Wabi-sabi, each with its own palettes.
 
 ## How it works
 

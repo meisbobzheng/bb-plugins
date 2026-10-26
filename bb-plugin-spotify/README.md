@@ -2,7 +2,7 @@
 
 Spotify inside bb: a mini player on a hotkey, your playlists, a smarter
 shuffle, sharing into threads, a private listening history, and music that
-steps aside when an agent needs you. Pick one of four looks, each with its own
+steps aside when an agent needs you. Pick one of eight looks, each with its own
 palettes.
 
 ## Set up
@@ -94,9 +94,17 @@ and save. `⌘K` on a result offers **Add to queue** or **Smart shuffle**.
 | Receiver | Silver, Midnight, Brass | `←`/`→` tune playlists, `1`–`6` presets |
 | Liner Notes | Vermilion, Cobalt, Night Edition, Riso | `j`/`k` contents, `s` reshuffle |
 | Sticker Book | Sherbet, Matcha, Lavender Dusk, Peach | `j`/`k` playlists, `s` shake it up |
+| Voxel | Gameboy, CGA, Vapor | Shared keys below, plus `v` cycles the voxel city |
+| Neon | Shinjuku, Miami, Acid, Sodium | Shared keys below |
+| Concept Sketch | Graphite, Blueprint, Highlighter | Shared keys below, plus `b` stops the line wobble |
+| Wabi-sabi | Washi, Raku, Moss, Aizome | Shared keys below |
 
 Every look also takes `space` (play or pause), `+`/`-` (volume), and `,`/`.`
-(seek 10 seconds). Switch looks and palettes from the page header or the plugin
+(seek 10 seconds). Voxel, Neon, Concept Sketch, and Wabi-sabi share one key
+map: `n`/`p` next and previous, `j`/`k` and `⏎` in lists, `f` save, `s` search,
+`R` smart reshuffle, `x` shuffle, `r` repeat, `y` copy link, `@` mention, `c`
+share card, `d` devices, `o` open Spotify, `1`–`4` tabs when compact, and `?`
+for help. Switch looks and palettes from the page header or the plugin
 settings. The visualizers are animated from the song's position, not its audio.
 
 Console fits short or narrow windows: below 720px tall or 900px wide it trades
@@ -109,7 +117,7 @@ single pane with a `1` playlists tab.
 | Setting | Default | What it does |
 | --- | --- | --- |
 | Spotify app Client ID | (empty) | The app you registered for sign-in |
-| Look | Console | Which of the four looks to show |
+| Look | Console | Which of the eight looks to show |
 | Palette per look | the first one | Colors for each look |
 | When an agent thread needs your approval | Lower the volume | Lower, pause, or do nothing |
 | Lowered volume (%) | 20 | Volume while ducked |
