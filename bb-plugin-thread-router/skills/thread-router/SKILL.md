@@ -12,10 +12,11 @@ renames untitled threads to a funky name like `hss-warrior`.
 
 ## How it decides
 
-- A hidden, short-lived classifier thread (default `claude-code` /
-  `claude-haiku-4-5-20251001`) runs in the new thread's environment. It sees
-  every section name, up to 8 recent thread titles per section, the project
-  name, the thread title, and the first message.
+- One `claude -p` call (default model `claude-haiku-4-5-20251001`) classifies
+  the thread, with tools, MCP servers, skills, and session persistence off. It
+  runs in the system temp directory and starts no bb thread. It sees every
+  section name, up to 8 recent thread titles per section, the project name,
+  the thread title, and the first message.
 - A titled thread skips the classifier when the recent threads in its project
   with the same title all sit in one section; it joins them there. A recurring
   automation such as a daily brief costs a classifier turn only on its first
@@ -42,12 +43,14 @@ renames untitled threads to a funky name like `hss-warrior`.
 
 Edit with `bb plugin config thread-router` or Settings → Plugins:
 
-- `providerId` — provider for the classifier thread.
-- `model` — classifier model.
+- `model` — classifier model, passed to `claude --model`.
+- `claudePath` — the `claude` command (default `claude`, looked up on `PATH`
+  and the usual install directories).
 - `hints` — free-text notes on what belongs in each section. Use it when
   section names are opaque.
 - `naming` — give untitled new threads a funky name (default on). With it on,
   the classifier runs even when `other` is the only section.
 
 Failures are logged to `<dataDir>/plugins/thread-router/logs/plugin.log`; a
-failed classification leaves the thread in `other`.
+failed classification leaves the thread in `other`. Each route logs its time,
+and an answer that names no section logs a warning.

@@ -17,11 +17,12 @@ glance.
 
 ## How it works
 
-On a thread's first turn, the plugin starts a short-lived hidden thread that
-sees your section names, a few recent titles from each, the project, and the
-new thread's title and first message, then names one section and a one-word
-topic for the thread's name. It runs on your own agent provider, by default
-`claude-code` with `claude-haiku-4-5-20251001`, so each routed thread costs one
-small classifier turn on that provider. A thread titled like recent threads
-that share a section, such as a daily automation run, joins them without one.
-Change the provider and model with `bb plugin config thread-router`.
+On a thread's first turn, the plugin runs the local `claude` CLI once, with no
+tools, MCP servers, or saved session. It sees your section names, a few recent
+titles from each, the project, and the new thread's title and first message,
+then names one section and a one-word topic for the thread's name. No agent
+thread is started, so nothing extra shows up in your threads or prompt
+history. The default model is `claude-haiku-4-5-20251001`. A thread titled like
+recent threads that share a section, such as a daily automation run, joins them
+without a call. Change the model or the `claude` path with
+`bb plugin config thread-router`.

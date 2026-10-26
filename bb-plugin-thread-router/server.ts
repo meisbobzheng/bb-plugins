@@ -1,4 +1,5 @@
 import type { BbPluginApi, PluginThreadEventPayloads } from "@get-bb/plugin-sdk";
+import { createComplete, type Complete } from "./claude";
 import { funkyName, parseFunkyName, toTopic } from "./names";
 
 type Thread = PluginThreadEventPayloads["thread.created"]["thread"];
@@ -10,7 +11,8 @@ const PROMPT_CHAR_LIMIT = 4000;
 const EXAMPLES_PER_SECTION = 8;
 const RECENT_NAMES_LIMIT = 100;
 const SAME_TITLE_LIMIT = 50;
-const CLASSIFY_TIMEOUT_MS = 120_000;
+const CLASSIFY_TIMEOUT_MS = 60_000;
+const SYSTEM_PROMPT = "You route coding-agent threads into sidebar sections. Reply in exactly the format asked for.";
 
 const pendingKey = (threadId: string) => `pending:${threadId}`;
 
@@ -19,198 +21,187 @@ const normalize = (name: string) =>
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-export default async function plugin(bb: BbPluginApi) {
-  const settings = bb.settings.define({
-    providerId: {
-      type: "string",
-      label: "Classifier provider",
-      description: "Provider that runs the hidden routing thread.",
-      default: "claude-code",
-    },
-    model: {
-      type: "string",
-      label: "Classifier model",
-      description: "Small, fast model used to pick a section.",
-      default: "claude-haiku-4-5-20251001",
-    },
-    hints: {
-      type: "string",
-      label: "Routing hints",
-      description: "Optional notes on what belongs in each section, e.g. 'reviews: PR review threads'.",
-      experimental_multiline: true,
-      default: "",
-    },
-    naming: {
-      type: "boolean",
-      label: "Funky thread names",
-      description: "Rename untitled new threads to a topic and a name, e.g. 'hss-warrior'.",
-      default: true,
-    },
-  });
+export function createPlugin(complete: Complete) {
+  return async function plugin(bb: BbPluginApi) {
+    const settings = bb.settings.define({
+      model: {
+        type: "string",
+        label: "Classifier model (claude --model)",
+        description: "Small, fast model used to pick a section.",
+        default: "claude-haiku-4-5-20251001",
+      },
+      claudePath: {
+        type: "string",
+        label: "claude CLI path",
+        description: "The claude command that classifies threads.",
+        default: "claude",
+      },
+      hints: {
+        type: "string",
+        label: "Routing hints",
+        description: "Optional notes on what belongs in each section, e.g. 'reviews: PR review threads'.",
+        experimental_multiline: true,
+        default: "",
+      },
+      naming: {
+        type: "boolean",
+        label: "Funky thread names",
+        description: "Rename untitled new threads to a topic and a name, e.g. 'hss-warrior'.",
+        default: true,
+      },
+    });
 
-  const inFlight = new Set<string>();
+    const inFlight = new Set<string>();
 
-  const isRoutable = (thread: Thread) =>
-    thread.sectionId === null &&
-    thread.parentThreadId === null &&
-    thread.archivedAt === null &&
-    thread.visibility !== "hidden" &&
-    thread.originPluginId !== bb.pluginId;
+    const isRoutable = (thread: Thread) =>
+      thread.sectionId === null &&
+      thread.parentThreadId === null &&
+      thread.archivedAt === null &&
+      thread.visibility !== "hidden" &&
+      thread.originPluginId !== bb.pluginId;
 
-  bb.events.on("thread.created", async ({ thread }) => {
-    if (!isRoutable(thread)) return;
-    await bb.storage.kv.set(pendingKey(thread.id), { untitled: thread.title === null } satisfies Pending);
-  });
+    bb.events.on("thread.created", async ({ thread }) => {
+      if (!isRoutable(thread)) return;
+      await bb.storage.kv.set(pendingKey(thread.id), { untitled: thread.title === null } satisfies Pending);
+    });
 
-  bb.events.on("thread.active", async ({ thread }) => {
-    if (inFlight.has(thread.id)) return;
-    const pending = await bb.storage.kv.get<Pending>(pendingKey(thread.id));
-    if (!pending) return;
-    inFlight.add(thread.id);
-    try {
-      await route(thread.id, pending.untitled);
-    } catch (error) {
-      bb.log.error(`failed to route ${thread.id}: ${errorMessage(error)}`);
-    } finally {
-      await bb.storage.kv.delete(pendingKey(thread.id));
-      inFlight.delete(thread.id);
+    bb.events.on("thread.active", async ({ thread }) => {
+      if (inFlight.has(thread.id)) return;
+      const pending = await bb.storage.kv.get<Pending>(pendingKey(thread.id));
+      if (!pending) return;
+      inFlight.add(thread.id);
+      try {
+        await route(thread.id, pending.untitled);
+      } catch (error) {
+        bb.log.error(`failed to route ${thread.id}: ${errorMessage(error)}`);
+      } finally {
+        await bb.storage.kv.delete(pendingKey(thread.id));
+        inFlight.delete(thread.id);
+      }
+    });
+
+    for (const event of ["thread.archived", "thread.deleted"] as const) {
+      bb.events.on(event, ({ thread }) => bb.storage.kv.delete(pendingKey(thread.id)));
     }
-  });
 
-  for (const event of ["thread.archived", "thread.deleted"] as const) {
-    bb.events.on(event, ({ thread }) => bb.storage.kv.delete(pendingKey(thread.id)));
-  }
+    async function route(threadId: string, untitled: boolean) {
+      const started = Date.now();
+      const thread = await bb.sdk.threads.get({ threadId });
+      if (!isRoutable(thread)) return;
 
-  async function route(threadId: string, untitled: boolean) {
-    const thread = await bb.sdk.threads.get({ threadId });
-    if (!isRoutable(thread)) return;
+      const config = await settings.get();
+      const rename = untitled && config.naming;
+      const sections = await bb.sdk.threadSections.list();
+      const fallback =
+        sections.find((section) => normalize(section.name) === FALLBACK_SECTION) ??
+        (await bb.sdk.threadSections.create({ name: FALLBACK_SECTION }));
+      const candidates = sections.filter((section) => section.id !== fallback.id);
+      const precedent = rename ? undefined : await sameTitleSection(thread, sections);
+      const verdict =
+        !precedent && (candidates.length > 0 || rename)
+          ? await classify(thread, candidates, config).catch((error) => {
+              bb.log.error(`failed to classify ${threadId}, filing it in ${fallback.name}: ${errorMessage(error)}`);
+              return null;
+            })
+          : null;
+      const target = precedent ?? verdict?.section ?? fallback;
 
-    const config = await settings.get();
-    const rename = untitled && config.naming;
-    const sections = await bb.sdk.threadSections.list();
-    const fallback =
-      sections.find((section) => normalize(section.name) === FALLBACK_SECTION) ??
-      (await bb.sdk.threadSections.create({ name: FALLBACK_SECTION }));
-    const candidates = sections.filter((section) => section.id !== fallback.id);
-    const precedent = rename ? undefined : await sameTitleSection(thread, sections);
-    const verdict =
-      !precedent && (candidates.length > 0 || rename)
-        ? await classify(thread, candidates, config).catch((error) => {
-            bb.log.error(`failed to classify ${threadId}, filing it in ${fallback.name}: ${errorMessage(error)}`);
-            return null;
-          })
-        : null;
-    const target = precedent ?? verdict?.section ?? fallback;
+      const current = await bb.sdk.threads.get({ threadId });
+      const sectionId = current.sectionId === null ? target.id : undefined;
+      const untouched = current.title === null || current.title === thread.title;
+      const title = rename && verdict && untouched ? funkyName(verdict.topic, await recentNames()) : undefined;
+      if (sectionId === undefined && title === undefined) return;
 
-    const current = await bb.sdk.threads.get({ threadId });
-    const sectionId = current.sectionId === null ? target.id : undefined;
-    const untouched = current.title === null || current.title === thread.title;
-    const title = rename && verdict && untouched ? funkyName(verdict.topic, await recentNames()) : undefined;
-    if (sectionId === undefined && title === undefined) return;
-
-    await bb.sdk.threads.update({ threadId, sectionId, title });
-    if (sectionId) bb.log.info(`routed ${threadId} to ${target.name}${precedent ? " by title" : ""}`);
-    if (title) bb.log.info(`named ${threadId} ${title}`);
-  }
-
-  async function classify(
-    thread: Thread,
-    sections: Section[],
-    { providerId, model, hints }: Awaited<ReturnType<typeof settings.get>>,
-  ) {
-    const [firstPrompt, project, examples] = await Promise.all([
-      readFirstPrompt(thread.id),
-      bb.sdk.projects.get({ projectId: thread.projectId }),
-      Promise.all(sections.map((section) => recentTitles(section.id))),
-    ]);
-
-    const sectionLines = sections.map((section, index) => {
-      const titles = examples[index]!;
-      return titles.length === 0
-        ? `- ${section.name}`
-        : `- ${section.name} (recent threads: ${titles.map((title) => JSON.stringify(title)).join(", ")})`;
-    });
-
-    const prompt = [
-      "You are routing a new coding-agent thread into one of the user's sidebar sections.",
-      "",
-      "Sections:",
-      ...sectionLines,
-      ...(hints.trim() ? ["", "Routing hints from the user:", hints.trim()] : []),
-      "",
-      "New thread:",
-      `Project: ${project.name}`,
-      `Title: ${thread.title ?? thread.titleFallback ?? "(untitled)"}`,
-      "First message:",
-      '"""',
-      firstPrompt.slice(0, PROMPT_CHAR_LIMIT),
-      '"""',
-      "",
-      "Reply with exactly two lines and nothing else:",
-      `Line 1: one section name from the list, or "${FALLBACK_SECTION}" if none is a clear fit.`,
-      "Line 2: one lowercase word for the thread's project or topic, such as hss, review, or rfc.",
-      "Do not use any tools. Do not label the lines.",
-    ].join("\n");
-
-    const worker = await bb.sdk.threads.spawn({
-      projectId: thread.projectId,
-      environment: thread.environmentId
-        ? { type: "reuse", environmentId: thread.environmentId }
-        : { type: "project-default" },
-      providerId,
-      model,
-      title: `Route thread ${thread.id}`,
-      visibility: "hidden",
-      prompt,
-    });
-
-    try {
-      await bb.sdk.threads.wait({ threadId: worker.id, status: "idle", timeoutMs: CLASSIFY_TIMEOUT_MS });
-      const { output } = await bb.sdk.threads.output({ threadId: worker.id });
-      const [answer = "", topic] = (output ?? "").split("\n").filter((line) => line.trim()).slice(-2);
-      return {
-        section: sections.find((section) => normalize(section.name) === normalize(answer)) ?? null,
-        topic: toTopic(topic, project.name),
-      };
-    } finally {
-      await bb.sdk.threads.archive({ threadId: worker.id });
-      await bb.sdk.threads.stop({ threadId: worker.id });
+      await bb.sdk.threads.update({ threadId, sectionId, title });
+      const elapsed = `${((Date.now() - started) / 1000).toFixed(1)}s`;
+      if (sectionId) bb.log.info(`routed ${threadId} to ${target.name}${precedent ? " by title" : ""} in ${elapsed}`);
+      if (title) bb.log.info(`named ${threadId} ${title}`);
     }
-  }
 
-  async function sameTitleSection(thread: Thread, sections: Section[]) {
-    if (thread.title === null) return undefined;
-    const threads = await bb.sdk.threads.list({ projectId: thread.projectId, limit: SAME_TITLE_LIMIT });
-    const homes = new Set(
-      threads.filter((other) => other.title === thread.title && other.sectionId !== null).map((other) => other.sectionId),
-    );
-    return homes.size === 1 ? sections.find((section) => homes.has(section.id)) : undefined;
-  }
+    async function classify(
+      thread: Thread,
+      sections: Section[],
+      { model, claudePath, hints }: Awaited<ReturnType<typeof settings.get>>,
+    ) {
+      const [firstPrompt, project, examples] = await Promise.all([
+        readFirstPrompt(thread.id),
+        bb.sdk.projects.get({ projectId: thread.projectId }),
+        Promise.all(sections.map((section) => recentTitles(section.id))),
+      ]);
 
-  async function readFirstPrompt(threadId: string) {
-    const history = await bb.sdk.threads.promptHistory({ threadId });
-    const first = history.reduce<(typeof history)[number] | undefined>(
-      (oldest, entry) => (oldest === undefined || entry.createdAt < oldest.createdAt ? entry : oldest),
-      undefined,
-    );
-    return (first?.input ?? [])
-      .flatMap((part) => (part.type === "text" ? [part.text] : []))
-      .join("\n");
-  }
+      const sectionLines = sections.map((section, index) => {
+        const titles = examples[index]!;
+        return titles.length === 0
+          ? `- ${section.name}`
+          : `- ${section.name} (recent threads: ${titles.map((title) => JSON.stringify(title)).join(", ")})`;
+      });
 
-  async function recentNames() {
-    const threads = await bb.sdk.threads.list({ limit: RECENT_NAMES_LIMIT });
-    return threads.flatMap((thread) => {
-      const name = thread.title === null ? null : parseFunkyName(thread.title);
-      return name ? [name] : [];
-    });
-  }
+      const prompt = [
+        "You are routing a new coding-agent thread into one of the user's sidebar sections.",
+        "",
+        "Sections:",
+        ...sectionLines,
+        ...(hints.trim() ? ["", "Routing hints from the user:", hints.trim()] : []),
+        "",
+        "New thread:",
+        `Project: ${project.name}`,
+        `Title: ${thread.title ?? thread.titleFallback ?? "(untitled)"}`,
+        "First message:",
+        '"""',
+        firstPrompt.slice(0, PROMPT_CHAR_LIMIT),
+        '"""',
+        "",
+        "Reply with exactly two lines and nothing else:",
+        `Line 1: one section name from the list, or "${FALLBACK_SECTION}" if none is a clear fit.`,
+        "Line 2: one lowercase word for the thread's project or topic, such as hss, review, or rfc.",
+        "Do not label the lines.",
+      ].join("\n");
 
-  async function recentTitles(sectionId: string) {
-    const threads = await bb.sdk.threads.list({ sectionId, limit: EXAMPLES_PER_SECTION });
-    return threads.flatMap((thread) => {
-      const title = thread.title ?? thread.titleFallback;
-      return title ? [title] : [];
-    });
-  }
+      const output = await complete({ claudePath, model, system: SYSTEM_PROMPT, prompt, timeoutMs: CLASSIFY_TIMEOUT_MS });
+      const [answer = "", topic] = output.split("\n").filter((line) => line.trim()).slice(-2);
+      const match = sections.find((section) => normalize(section.name) === normalize(answer)) ?? null;
+      if (!match && normalize(answer) !== FALLBACK_SECTION) {
+        bb.log.warn(`classifier answered ${JSON.stringify(answer)} for ${thread.id}, which names no section`);
+      }
+      return { section: match, topic: toTopic(topic, project.name) };
+    }
+
+    async function sameTitleSection(thread: Thread, sections: Section[]) {
+      if (thread.title === null) return undefined;
+      const threads = await bb.sdk.threads.list({ projectId: thread.projectId, limit: SAME_TITLE_LIMIT });
+      const homes = new Set(
+        threads.filter((other) => other.title === thread.title && other.sectionId !== null).map((other) => other.sectionId),
+      );
+      return homes.size === 1 ? sections.find((section) => homes.has(section.id)) : undefined;
+    }
+
+    async function readFirstPrompt(threadId: string) {
+      const history = await bb.sdk.threads.promptHistory({ threadId });
+      const first = history.reduce<(typeof history)[number] | undefined>(
+        (oldest, entry) => (oldest === undefined || entry.createdAt < oldest.createdAt ? entry : oldest),
+        undefined,
+      );
+      return (first?.input ?? [])
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n");
+    }
+
+    async function recentNames() {
+      const threads = await bb.sdk.threads.list({ limit: RECENT_NAMES_LIMIT });
+      return threads.flatMap((thread) => {
+        const name = thread.title === null ? null : parseFunkyName(thread.title);
+        return name ? [name] : [];
+      });
+    }
+
+    async function recentTitles(sectionId: string) {
+      const threads = await bb.sdk.threads.list({ sectionId, limit: EXAMPLES_PER_SECTION });
+      return threads.flatMap((thread) => {
+        const title = thread.title ?? thread.titleFallback;
+        return title ? [title] : [];
+      });
+    }
+  };
 }
+
+export default createPlugin(createComplete());
