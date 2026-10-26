@@ -100,9 +100,11 @@ async function renderMeter(events: unknown[]) {
 describe("thread meter", () => {
   it("shows context, cost, and the most-used plan window next to the model", async () => {
     const { slot } = await renderMeter([requested(1, "claude-opus-5-5"), tokenUsage(2)]);
-    const trigger = await slot.findByRole("button", { name: "Context, token cost, and plan usage" });
-    await slot.findByText("$24.00");
+    const trigger = await slot.findByRole("button", {
+      name: "Thread usage: 25% of context used, $24.00 API-equivalent cost, 40% of plan used",
+    });
     expect(trigger.textContent).toContain("25%");
+    expect(trigger.textContent).toContain("$24.00");
     expect(trigger.textContent).toContain("40% plan");
   });
 
@@ -148,7 +150,8 @@ describe("thread meter", () => {
 
   it("opens a breakdown with tokens, cost, and plan reset windows", async () => {
     const { slot } = await renderMeter([requested(1, "claude-opus-5-5"), tokenUsage(2)]);
-    fireEvent.click(await slot.findByRole("button", { name: "Context, token cost, and plan usage" }));
+    fireEvent.click(await slot.findByRole("button", { name: /^Thread usage:/ }));
+    await slot.findByRole("dialog", { name: "Thread usage" });
     await slot.findByText("API-equivalent cost");
     await slot.findByText("Plan usage · Max (5x)");
     await slot.findByText("250K / 1M");

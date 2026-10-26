@@ -147,7 +147,14 @@ export const ThreadMeterView = memo(function ThreadMeterView({ context, spend, p
   const planPercent = plan?.windows.length
     ? Math.round(Math.max(...plan.windows.map((window) => window.usedPercent)))
     : null;
-  const showCost = spend !== null && spend.turns > spend.unpricedTurns;
+  const cost = spend && spend.turns > spend.unpricedTurns ? usdFormat.format(spend.costUsd) : null;
+  const summary = [
+    contextPercent !== null && `${contextPercent}% of context used`,
+    cost && `${cost} API-equivalent cost`,
+    planPercent !== null && `${planPercent}% of plan used`,
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -155,7 +162,7 @@ export const ThreadMeterView = memo(function ThreadMeterView({ context, spend, p
           variant="ghost"
           size="sm"
           className="h-7 gap-2 px-2 text-xs font-normal tabular-nums text-muted-foreground"
-          aria-label="Context, token cost, and plan usage"
+          aria-label={`Thread usage: ${summary}`}
         >
           {contextPercent !== null ? (
             <span className={cn("flex items-center gap-1", toneClass(contextPercent))}>
@@ -163,13 +170,18 @@ export const ThreadMeterView = memo(function ThreadMeterView({ context, spend, p
               {contextPercent}%
             </span>
           ) : null}
-          {showCost ? <span>{usdFormat.format(spend.costUsd)}</span> : null}
+          {cost ? <span>{cost}</span> : null}
           {planPercent !== null ? (
             <span className={toneClass(planPercent)}>{planPercent}% plan</span>
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 space-y-4 text-sm" mobileTitle="Thread usage">
+      <PopoverContent
+        align="end"
+        className="w-80 space-y-4 text-sm"
+        aria-label="Thread usage"
+        mobileTitle="Thread usage"
+      >
         {context ? <ContextSection context={context} /> : null}
         {spend?.turns ? <SpendSection spend={spend} /> : null}
         {plan?.windows.length ? <PlanSection plan={plan} /> : null}
