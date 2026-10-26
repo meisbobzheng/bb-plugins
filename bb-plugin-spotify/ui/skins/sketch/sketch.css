@@ -1,0 +1,447 @@
+.sp-sketch {
+  --hand: "Bradley Hand", "Noteworthy", "Marker Felt", "Chalkboard SE", "Segoe Print", cursive;
+  --pen: "Marker Felt", "Noteworthy", "Chalkboard SE", "Bradley Hand", "Segoe Print", cursive;
+  --tech: "Avenir Next", "Avenir", "Helvetica Neue", sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --mark-bg: transparent;
+  --card-bg: var(--paper);
+  --card-ink: var(--ink);
+  --card-muted: var(--soft);
+  --card-accent: var(--red);
+  --card-title-font: 64px "Marker Felt", "Noteworthy", "Chalkboard SE", cursive;
+  --card-body-font: 32px "Bradley Hand", "Noteworthy", "Chalkboard SE", cursive;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  outline: none;
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image: linear-gradient(var(--grid-major) 1px, transparent 1px), linear-gradient(90deg, var(--grid-major) 1px, transparent 1px), linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+  background-position: -1px -1px;
+  font: 15px/1.3 var(--hand);
+  -webkit-font-smoothing: antialiased;
+}
+
+.sp-sketch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  opacity: var(--grain-op);
+  mix-blend-mode: var(--grain-blend);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .3 0 0 0 0 .26 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.sp-sketch.g-graphite {
+  --paper: #f2ede0;
+  --ink: #2e2d2a;
+  --ink-2: #55524b;
+  --soft: #857f6f;
+  --faint: rgba(70, 62, 48, 0.2);
+  --grid: rgba(86, 140, 196, 0.11);
+  --grid-major: rgba(86, 140, 196, 0.2);
+  --red: #c4432c;
+  --hl: rgba(255, 210, 64, 0.55);
+  --note: #f8e7a1;
+  --note-ink: #3b3422;
+  --note-soft: #7d7350;
+  --check: #c4432c;
+  --tape: rgba(212, 203, 172, 0.88);
+  --hatch: rgba(46, 45, 42, 0.62);
+  --shadow: rgba(70, 55, 30, 0.35);
+  --duck-bg: rgba(196, 67, 44, 0.06);
+  --grain-op: 0.55;
+  --grain-blend: multiply;
+}
+
+.sp-sketch.g-blueprint {
+  --paper: #1e4f8d;
+  --ink: #f3f7fd;
+  --ink-2: #d5e3f5;
+  --soft: #a9c4e8;
+  --faint: rgba(255, 255, 255, 0.2);
+  --grid: rgba(255, 255, 255, 0.07);
+  --grid-major: rgba(255, 255, 255, 0.15);
+  --red: #ffd04d;
+  --hl: rgba(255, 255, 255, 0.17);
+  --note: #fdf3c0;
+  --note-ink: #173a68;
+  --note-soft: #4d6a91;
+  --check: #c4432c;
+  --tape: rgba(255, 255, 255, 0.42);
+  --hatch: rgba(243, 247, 253, 0.62);
+  --shadow: rgba(0, 10, 40, 0.5);
+  --duck-bg: rgba(255, 208, 77, 0.08);
+  --grain-op: 0.35;
+  --grain-blend: soft-light;
+}
+
+.sp-sketch.g-highlighter {
+  --paper: #fdfdfb;
+  --ink: #141414;
+  --ink-2: #333333;
+  --soft: #6f6f6f;
+  --faint: rgba(0, 0, 0, 0.13);
+  --grid: rgba(0, 0, 0, 0.16);
+  --red: #141414;
+  --hl: rgba(205, 255, 0, 0.62);
+  --note: #efff8f;
+  --note-ink: #141414;
+  --note-soft: #575f2c;
+  --check: #141414;
+  --tape: rgba(225, 225, 215, 0.92);
+  --hatch: rgba(20, 20, 20, 0.7);
+  --shadow: rgba(0, 0, 0, 0.2);
+  --duck-bg: rgba(205, 255, 0, 0.55);
+  --mark-bg: rgba(205, 255, 0, 0.62);
+  --grain-op: 0.25;
+  --grain-blend: multiply;
+  background-image: radial-gradient(var(--grid) 1px, transparent 1.4px);
+  background-size: 18px 18px;
+}
+
+.sp-sketch, .sp-sketch *, .sp-sketch *::before, .sp-sketch *::after { box-sizing: border-box; }
+.sp-sketch .g-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sp-sketch :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: left; }
+.sp-sketch button:focus-visible { outline: 1.5px dashed var(--red); outline-offset: 3px; }
+.sp-sketch button:disabled { cursor: default; opacity: 0.55; }
+.sp-sketch .g-tl { font: 600 8.5px/1.25 var(--tech); letter-spacing: 0.18em; text-transform: uppercase; color: var(--soft); white-space: nowrap; }
+.sp-sketch .g-tl.g-ink { color: var(--ink); }
+.sp-sketch .g-mono { font-family: var(--mono); }
+.sp-sketch .g-red { color: var(--red); }
+.sp-sketch .g-soft { color: var(--soft); }
+.sp-sketch .g-trunc { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-sketch .g-quiet { font: 14px/1.3 var(--hand); color: var(--soft); padding: 6px 2px; list-style: none; }
+.sp-sketch .g-hatch { background-image: repeating-linear-gradient(-50deg, var(--hatch) 0 0.9px, transparent 0.9px 4px); }
+
+.sp-sketch .g-l { position: absolute; left: -4px; top: -4px; overflow: visible; pointer-events: none; filter: var(--g-rough); }
+.sp-sketch .g-l path { fill: none; stroke: var(--ink); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+.sp-sketch .g-l path + path { stroke-width: 0.8; opacity: 0.55; }
+.sp-sketch .g-l[data-tone="red"] path { stroke: var(--red); }
+.sp-sketch .g-l[data-tone="soft"] path { stroke: var(--soft); }
+.sp-sketch .g-ic { width: 18px; height: 18px; flex: none; overflow: visible; fill: none; stroke: var(--ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; filter: var(--g-fine); }
+.sp-sketch .g-ic-play path { fill: var(--ink); fill-opacity: 0.16; }
+.sp-sketch .g-ic-pause { stroke-width: 3.1; }
+.sp-sketch .g-arw { flex: none; fill: none; stroke: var(--red); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; filter: var(--g-fine); overflow: visible; }
+.sp-sketch .g-kc { position: relative; display: inline-block; font: 600 9.5px/1 var(--mono); padding: 3px 5px 2px; min-width: 17px; text-align: center; color: var(--ink); background: var(--paper); vertical-align: 1px; white-space: nowrap; }
+.sp-sketch .g-ann { font: 15px/1.1 var(--hand); color: var(--red); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.sp-sketch .g-ann span { background: var(--mark-bg); padding: 0 3px; }
+.sp-sketch .g-delta { width: 20px; height: 18px; fill: none; stroke: var(--red); stroke-width: 1.3; overflow: visible; filter: var(--g-fine); flex: none; }
+.sp-sketch .g-delta text { font: 700 9px var(--mono); fill: var(--red); stroke: none; }
+
+.sp-sketch .g-cover { width: 100%; height: 100%; display: block; overflow: visible; }
+.sp-sketch .g-rough { filter: var(--g-rough); }
+.sp-sketch .g-ln { fill: none; stroke: var(--ink); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.sp-sketch .g-thin { stroke-width: 0.8; }
+.sp-sketch .g-frame { stroke-width: 1.5; }
+.sp-sketch .g-hp { stroke: var(--ink); stroke-width: 0.55; }
+.sp-sketch .g-paperfill { fill: var(--paper); }
+.sp-sketch .g-flow { fill: none; stroke: var(--ink); stroke-width: 0.75; stroke-dasharray: 30 4 8 4; animation: g-flow 6s linear infinite; opacity: 0.85; }
+.sp-sketch .g-flow.g-thick { stroke-width: 1.35; }
+.sp-sketch.g-still .g-flow { animation-play-state: paused; }
+@keyframes g-flow { to { stroke-dashoffset: -92; } }
+
+.sp-sketch .g-art { margin: 0; min-width: 0; }
+.sp-sketch .g-art-box { width: 124px; height: 124px; }
+.sp-sketch .g-art figcaption { margin-top: 5px; font-size: 7.5px; overflow: hidden; text-overflow: ellipsis; }
+
+.sp-sketch .g-meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sp-sketch .g-meta > .g-tl { overflow: hidden; text-overflow: ellipsis; }
+.sp-sketch .g-title { font: 33px/1.1 var(--pen); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 4px 7px; margin-left: -4px; }
+.sp-sketch .g-tu { position: relative; display: inline; }
+.sp-sketch .g-artist { font: 18px/1.2 var(--hand); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-sketch .g-album { color: var(--soft); font-size: 15px; }
+.sp-sketch .g-saved, .sp-sketch .g-launch { display: inline-flex; align-items: center; gap: 6px; font: 14px var(--hand); color: var(--soft); align-self: flex-start; margin-top: 3px; white-space: nowrap; }
+.sp-sketch .g-saved .g-ic { width: 16px; height: 16px; stroke: var(--soft); }
+.sp-sketch .g-saved.g-on { color: var(--ink); }
+.sp-sketch .g-saved.g-on .g-ic path, .sp-sketch .g-tb.g-on .g-ic-heart path { fill: var(--red); stroke: var(--red); }
+.sp-sketch .g-launch { color: var(--red); }
+.sp-sketch .g-share { display: flex; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
+.sp-sketch .g-sbtn { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 3px; font: 14px/1.2 var(--hand); white-space: nowrap; }
+.sp-sketch .g-sbtn .g-ic { width: 15px; height: 15px; }
+.sp-sketch .g-sbtn:hover, .sp-sketch .g-resh:hover, .sp-sketch .g-tb:hover { background: var(--hl); }
+
+.sp-sketch .g-viz { display: block; width: 100%; height: 34px; margin: 2px 0 3px; }
+.sp-sketch .g-seekrow { display: grid; grid-template-columns: minmax(0, 1fr) 118px; gap: 10px; align-items: center; }
+.sp-sketch .g-seek { --p: 0%; position: relative; height: 46px; cursor: pointer; touch-action: none; }
+.sp-sketch .g-dim { position: absolute; left: 0; top: 0; height: 13px; width: var(--p); border-left: 1px solid var(--ink-2); border-right: 1px solid var(--ink-2); background: linear-gradient(var(--ink-2), var(--ink-2)) center / 100% 1px no-repeat; }
+.sp-sketch .g-dim::before, .sp-sketch .g-dim::after { content: ""; position: absolute; top: 2.5px; width: 1px; height: 8px; background: var(--ink-2); transform: rotate(45deg); }
+.sp-sketch .g-dim::before { left: -1px; }
+.sp-sketch .g-dim::after { right: -1px; }
+.sp-sketch .g-dim span { position: absolute; left: max(50%, 18px); top: 50%; transform: translate(-50%, -52%); background: var(--paper); padding: 0 4px; font: 10.5px/1 var(--mono); color: var(--ink); white-space: nowrap; }
+.sp-sketch .g-dim-all { top: 33px; width: 100%; }
+.sp-sketch .g-track { position: absolute; left: 0; right: 0; top: 17px; height: 11px; }
+.sp-sketch .g-played { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p); }
+.sp-sketch .g-thumb { position: absolute; top: 13px; left: calc(var(--p) - 9px); width: 19px; height: 19px; border-radius: 50%; background: var(--paper); }
+.sp-sketch .g-seek.g-sm { height: 16px; }
+.sp-sketch .g-sm .g-track { top: 3px; height: 9px; }
+.sp-sketch .g-sm .g-thumb { top: -1px; width: 16px; height: 16px; left: calc(var(--p) - 8px); }
+.sp-sketch .g-ann-seek { font-size: 14px; gap: 2px; }
+.sp-sketch .g-ann-seek .g-arw { width: 30px; height: 18px; }
+
+.sp-sketch .g-trans { display: flex; align-items: center; justify-content: center; gap: 24px; height: 56px; }
+.sp-sketch .g-tb { position: relative; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; flex: none; }
+.sp-sketch .g-tb.g-big { width: 52px; height: 52px; }
+.sp-sketch .g-tb.g-big::before { content: ""; position: absolute; inset: 6px; border-radius: 50%; background-image: repeating-linear-gradient(-50deg, var(--hatch) 0 0.8px, transparent 0.8px 4.5px); opacity: 0.45; }
+.sp-sketch .g-tb.g-big .g-ic { width: 22px; height: 22px; position: relative; }
+.sp-sketch .g-kca { position: absolute; left: calc(100% - 5px); top: calc(100% - 13px); }
+.sp-sketch .g-st { display: inline-flex; align-items: center; gap: 6px; font: 14px var(--hand); color: var(--soft); white-space: nowrap; }
+.sp-sketch .g-st .g-ic { stroke: var(--soft); width: 16px; height: 16px; }
+.sp-sketch .g-st b { position: relative; font-weight: 400; padding: 0 4px; }
+.sp-sketch .g-st.g-on { color: var(--ink); }
+.sp-sketch .g-st.g-on .g-ic { stroke: var(--ink); }
+.sp-sketch .g-st.g-on b { color: var(--red); }
+
+.sp-sketch.g-full { display: grid; grid-template-rows: 40px minmax(0, 1fr) 56px; row-gap: 10px; padding: 12px 18px; }
+.sp-sketch .g-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-width: 0; }
+.sp-sketch .g-brand { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; min-width: 0; }
+.sp-sketch .g-brand .g-h { font: 27px/1.1 var(--pen); flex: 0 1 auto; }
+.sp-sketch .g-brand .g-tl { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.sp-sketch .g-slash { font: 22px/1 var(--hand); color: var(--soft); }
+.sp-sketch .g-duck { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 16px; color: var(--red); font: 14.5px/1.1 var(--hand); background: var(--duck-bg); white-space: nowrap; min-width: 0; max-width: 55%; flex: 0 1 auto; }
+.sp-sketch .g-helpbtn { flex: none; font-size: 14px; }
+.sp-sketch .g-helpbtn:hover span { text-decoration: underline 1px; text-underline-offset: 3px; }
+
+.sp-sketch .g-body { display: grid; grid-template-columns: 192px minmax(0, 1fr) 272px; column-gap: 22px; min-height: 0; }
+.sp-sketch .g-col { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.sp-sketch .g-lib { gap: 7px; }
+.sp-sketch .g-mid { gap: 8px; }
+.sp-sketch .g-side { gap: 6px; }
+
+.sp-sketch .g-search { position: relative; display: flex; align-items: center; gap: 6px; padding: 4px 7px; flex: none; }
+.sp-sketch .g-search .g-ic { width: 15px; height: 15px; }
+.sp-sketch .g-search input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; font: 14.5px var(--hand); color: var(--ink); padding: 0; }
+.sp-sketch .g-search input::placeholder { color: var(--soft); }
+.sp-sketch .g-pls { list-style: none; margin: 0; padding: 0 0 0 2px; display: flex; flex-direction: column; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.sp-sketch .g-lib .g-pls { flex: 0 1 auto; padding-right: 4px; }
+.sp-sketch .g-grp { padding: 9px 0 2px 2px; }
+.sp-sketch .g-pl { position: relative; display: grid; grid-template-columns: 13px minmax(0, 1fr) auto; gap: 6px; align-items: baseline; width: 100%; padding: 3px 6px 2px 2px; font: 15.5px/1.25 var(--hand); }
+.sp-sketch .g-pl-n { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.sp-sketch .g-pl-n .g-ic { width: 12px; height: 12px; stroke: var(--soft); }
+.sp-sketch .g-pl-c { font: 10.5px var(--mono); color: var(--soft); }
+.sp-sketch .g-pl-mark { color: var(--red); font-size: 13px; }
+.sp-sketch .g-pl:hover .g-pl-n > span { text-decoration: underline 1px var(--faint); text-underline-offset: 3px; }
+.sp-sketch .g-pl.g-cur { background: var(--hl); border-radius: 3px 10px 4px 12px / 8px 3px 10px 4px; }
+.sp-sketch .g-circ { position: absolute; inset: 0 -3px 0 10px; pointer-events: none; }
+.sp-sketch .g-legend { font: 13px var(--hand); color: var(--soft); padding-left: 2px; flex: none; }
+.sp-sketch .g-stats { position: relative; margin-top: auto; padding: 9px 11px; flex: none; }
+.sp-sketch .g-st-top { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 4px; gap: 8px; }
+.sp-sketch .g-st-big { font: 30px/1 var(--pen); white-space: nowrap; }
+.sp-sketch .g-st-big small { display: block; margin-top: 2px; font: 13px var(--hand); color: var(--soft); }
+.sp-sketch .g-bars { display: flex; align-items: flex-end; gap: 4px; height: 38px; }
+.sp-sketch .g-bar { position: relative; width: 9px; }
+.sp-sketch .g-days { display: flex; gap: 4px; justify-content: flex-end; font: 8px/1 var(--mono); color: var(--soft); margin-top: 3px; }
+.sp-sketch .g-days span { width: 9px; text-align: center; }
+.sp-sketch .g-st-line { display: flex; justify-content: space-between; gap: 8px; font: 14px/1.2 var(--hand); border-top: 1px dashed var(--faint); padding-top: 4px; margin-top: 5px; min-width: 0; }
+.sp-sketch .g-st-line span { color: var(--soft); flex: none; }
+.sp-sketch .g-st-line b { font-weight: 400; }
+
+.sp-sketch .g-np { display: grid; grid-template-columns: 124px minmax(0, 1fr); column-gap: 18px; flex: none; }
+.sp-sketch .g-np-meta { min-width: 0; }
+.sp-sketch .g-wave { flex: none; }
+
+.sp-sketch .g-tracks { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sp-sketch .g-thead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 6px 4px; min-width: 0; }
+.sp-sketch .g-tlist { position: relative; flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.sp-sketch .g-trow { position: relative; isolation: isolate; display: grid; grid-template-columns: 26px minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 0.95fr) 48px; gap: 10px; align-items: baseline; width: 100%; padding: 3px 6px 2px; cursor: pointer; font: 15px/1.3 var(--hand); background: linear-gradient(var(--faint), var(--faint)) bottom / 100% 1px no-repeat; }
+.sp-sketch .g-trow > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-sketch .g-t-n, .sp-sketch .g-t-d { font: 10.5px var(--mono); color: var(--soft); }
+.sp-sketch .g-t-d { text-align: right; }
+.sp-sketch .g-t-a { color: var(--ink-2); font-size: 14px; }
+.sp-sketch .g-t-al { color: var(--soft); font: 11.5px var(--tech); }
+.sp-sketch .g-t-q { font: 13px var(--hand); color: var(--red); text-align: right; white-space: nowrap; }
+.sp-sketch .g-t-q:hover { text-decoration: underline 1px; text-underline-offset: 3px; }
+.sp-sketch .g-trow:hover .g-t-t { text-decoration: underline 1px var(--soft); text-underline-offset: 3px; }
+.sp-sketch .g-trow.g-now::before { content: ""; position: absolute; z-index: -1; left: -2px; right: -2px; top: 2px; bottom: 2px; background: var(--hl); border-radius: 3px 12px 4px 14px / 9px 3px 11px 4px; transform: rotate(-0.35deg); }
+.sp-sketch .g-trow.g-cur::after, .sp-sketch .g-q.g-cur::after, .sp-sketch .g-dv.g-cur::after { content: ""; position: absolute; inset: 1px -1px; border: 1.3px dashed var(--red); border-radius: 4px 10px 5px 12px / 9px 4px 10px 5px; pointer-events: none; }
+.sp-sketch .g-trow.g-now .g-t-n { color: var(--red); font-size: 12px; }
+.sp-sketch .g-nowtag { color: var(--red); font-size: 13px; margin-left: 6px; }
+.sp-sketch .g-found-h { display: flex; justify-content: space-between; gap: 10px; padding: 2px 6px 4px; }
+.sp-sketch .g-link { color: var(--red); }
+.sp-sketch .g-ph { padding: 22px 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.sp-sketch .g-ph .g-tl { white-space: normal; }
+.sp-sketch .g-ph-t { font: 24px/1.15 var(--pen); }
+
+.sp-sketch .g-note { position: relative; flex: none; padding: 15px 14px 10px; background: var(--note); color: var(--note-ink); --ink: var(--note-ink); --soft: var(--note-soft); --paper: var(--note); --hl: rgba(255, 255, 255, 0.5); transform: rotate(-1deg); box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.04), 0 10px 14px -8px var(--shadow); margin: 8px 4px 2px 2px; }
+.sp-sketch .g-tape { position: absolute; width: 78px; height: 19px; top: -10px; left: calc(50% - 39px); transform: rotate(-3deg); background: var(--tape); z-index: 2; clip-path: polygon(3% 0, 97% 5%, 100% 30%, 96% 55%, 100% 80%, 97% 100%, 2% 95%, 0 70%, 4% 45%, 0 20%); }
+.sp-sketch .g-vibe { display: block; margin: 6px 0 9px; }
+.sp-sketch .g-vibe-in { position: relative; display: block; }
+.sp-sketch .g-vibe input { display: block; width: 100%; background: none; border: 0; outline: 0; font: 18px/1.3 var(--pen); color: var(--ink); padding: 1px 0 2px; }
+.sp-sketch .g-vibe input::placeholder { color: var(--soft); }
+.sp-sketch .g-cks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.sp-sketch .g-ck { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.sp-sketch .g-ck > button { display: inline-flex; align-items: center; gap: 7px; font: 14.5px var(--hand); }
+.sp-sketch .g-box { position: relative; width: 13px; height: 13px; flex: none; }
+.sp-sketch .g-chk { position: absolute; left: -1px; top: -7px; width: 19px; height: 19px; fill: none; stroke: var(--check); stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; opacity: 0; filter: var(--g-fine); overflow: visible; z-index: 1; }
+.sp-sketch .g-ck.g-on .g-chk { opacity: 1; }
+.sp-sketch .g-days-btn { font: 10px var(--mono); color: var(--soft); }
+.sp-sketch .g-days-btn:hover { color: var(--ink); text-decoration: underline 1px; }
+.sp-sketch .g-note-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; }
+.sp-sketch .g-note-s { margin-top: 6px; white-space: normal; }
+.sp-sketch .g-resh { position: relative; display: inline-flex; gap: 6px; align-items: center; font: 14.5px var(--hand); padding: 2px 8px; white-space: nowrap; }
+
+.sp-sketch .g-arc { height: 50px; margin: 2px 0 4px; flex: none; }
+.sp-sketch .g-plot { width: 100%; height: 100%; overflow: visible; }
+.sp-sketch .g-curve { fill: none; stroke: var(--ink); stroke-width: 1.3; filter: var(--g-fine); }
+.sp-sketch .g-base { fill: none; stroke: var(--faint); stroke-dasharray: 3 4; }
+.sp-sketch .g-plot text { font: 13px var(--hand); fill: var(--soft); }
+.sp-sketch .g-plot .g-num { font: 600 8.5px var(--mono); fill: var(--ink); }
+.sp-sketch .g-dot { fill: var(--paper); stroke: var(--ink); stroke-width: 1.2; }
+.sp-sketch .g-dot.g-now { fill: var(--red); stroke: var(--red); }
+.sp-sketch .g-ann-q { padding-left: 4px; flex: none; }
+.sp-sketch .g-ann-q .g-arw { width: 22px; height: 22px; margin-top: 10px; }
+.sp-sketch .g-queue { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.sp-sketch .g-q { position: relative; display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 6px; padding: 5px 0; width: 100%; background: linear-gradient(var(--faint), var(--faint)) bottom / 100% 1px no-repeat; }
+.sp-sketch .g-redraw .g-q { animation: g-write 0.55s steps(9) both; }
+.sp-sketch .g-q:hover .g-q-t { text-decoration: underline 1px var(--soft); text-underline-offset: 3px; }
+.sp-sketch .g-q-n { font: 10.5px var(--mono); color: var(--soft); padding-top: 3px; }
+.sp-sketch .g-q-b { min-width: 0; }
+.sp-sketch .g-q-t { display: block; font: 15px/1.2 var(--hand); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-sketch .g-q-t span { color: var(--soft); }
+.sp-sketch .g-q-why { display: flex; align-items: center; gap: 7px; margin-top: 3px; font: 13px/1.2 var(--hand); color: var(--soft); white-space: nowrap; overflow: hidden; }
+.sp-sketch .g-q-why i { font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+.sp-sketch .g-tag { position: relative; font: 700 8px/1 var(--tech); letter-spacing: 0.14em; text-transform: uppercase; padding: 3px 5px 2px; color: var(--ink); flex: none; }
+.sp-sketch .g-tag-vibe { background: var(--hl); }
+@keyframes g-write { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+.sp-sketch .g-tblock { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 168px 238px 108px; min-width: 0; }
+.sp-sketch .g-tblock > div { position: relative; padding: 6px 12px 5px; min-width: 0; }
+.sp-sketch .g-keys { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 3px; font: 13px/1.3 var(--hand); max-height: 36px; overflow: hidden; }
+.sp-sketch .g-keys > span { white-space: nowrap; }
+.sp-sketch .g-keys .g-kc { margin-right: 3px; }
+.sp-sketch .g-devbtn { display: block; width: 100%; }
+.sp-sketch .g-devv { font: 16px var(--hand); display: flex; align-items: center; gap: 6px; margin-top: 3px; white-space: nowrap; min-width: 0; }
+.sp-sketch .g-picker { position: absolute; left: 4px; bottom: calc(100% + 10px); width: 220px; background: var(--paper); padding: 6px; z-index: 30; box-shadow: 0 12px 22px -10px var(--shadow); }
+.sp-sketch .g-dv { position: relative; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%; padding: 4px 7px; font: 15px var(--hand); }
+.sp-sketch .g-dv small { font: 10px var(--mono); color: var(--soft); flex: none; }
+.sp-sketch .g-dv.g-on { background: var(--hl); }
+.sp-sketch .g-dv:hover { text-decoration: underline 1px var(--soft); }
+.sp-sketch .g-vol { --v: 0%; position: relative; height: 20px; margin: 7px 34px 0 0; cursor: pointer; touch-action: none; }
+.sp-sketch .g-vol.g-off { cursor: default; opacity: 0.5; }
+.sp-sketch .g-scale { position: absolute; left: 0; right: 0; top: 7px; height: 7px; border: 1px solid var(--ink); background: repeating-linear-gradient(90deg, var(--ink) 0 10%, transparent 10% 20%); }
+.sp-sketch .g-vrest { position: absolute; top: -1px; bottom: -1px; left: var(--v); right: -1px; background: var(--paper); opacity: 0.72; }
+.sp-sketch .g-vmark { position: absolute; left: calc(var(--v) - 5px); top: -3px; border: 5px solid transparent; border-top: 8px solid var(--red); }
+.sp-sketch .g-vnum { position: absolute; right: -34px; top: 3px; font: 12px/1 var(--mono); }
+.sp-sketch .g-sheet-n { font: 22px/1 var(--pen); margin-top: 2px; }
+.sp-sketch .g-tiny { font-size: 7px; }
+
+.sp-sketch .g-toast { position: absolute; right: 26px; bottom: 80px; z-index: 35; background: var(--note); color: var(--note-ink); --tape: rgba(212, 203, 172, 0.88); padding: 9px 16px 7px; font: 15px/1.2 var(--hand); max-width: min(340px, calc(100% - 40px)); box-shadow: 0 10px 18px -8px var(--shadow); transform: rotate(-2deg); pointer-events: none; animation: g-toast 0.18s ease-out; }
+.sp-sketch .g-toast .g-tape { width: 54px; left: calc(50% - 27px); top: -9px; height: 16px; }
+@keyframes g-toast { from { opacity: 0; transform: rotate(-2deg) translateY(8px); } }
+.sp-sketch .g-help { position: absolute; inset: 0; z-index: 36; display: grid; place-items: center; background: color-mix(in srgb, var(--paper) 84%, transparent); backdrop-filter: blur(1.5px); }
+.sp-sketch .g-help-card { position: relative; background: var(--paper); padding: 14px 20px 12px; width: 480px; max-width: calc(100% - 24px); max-height: calc(100% - 24px); overflow: auto; }
+.sp-sketch .g-help-h { font: 24px/1 var(--pen); margin-bottom: 8px; }
+.sp-sketch .g-help-g { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 22px; font: 14.5px/1.35 var(--hand); }
+.sp-sketch .g-help-g > div { display: flex; gap: 8px; align-items: baseline; min-width: 0; white-space: nowrap; }
+.sp-sketch .g-help-g .g-kc { min-width: 50px; }
+.sp-sketch .g-help-f { margin-top: 10px; }
+
+.sp-sketch.g-compact, .sp-sketch.g-tight { display: grid; padding: 8px 14px 10px; row-gap: 6px; }
+.sp-sketch.g-compact { grid-template-rows: 20px 90px 40px 28px minmax(0, 1fr); }
+.sp-sketch.g-tight { grid-template-rows: 18px 60px 40px 34px 28px minmax(0, 1fr); padding: 8px 12px; row-gap: 5px; }
+.sp-sketch .g-c-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; white-space: nowrap; min-width: 0; }
+.sp-sketch .g-c-head > .g-tl:first-child { flex: 0 1 auto; }
+.sp-sketch .g-c-duck { color: var(--red); font: 13.5px/1.2 var(--hand); display: flex; align-items: center; gap: 5px; background: var(--mark-bg); padding: 1px 4px; min-width: 0; flex: 0 1 auto; }
+.sp-sketch .g-c-duck .g-delta { width: 16px; height: 14px; }
+.sp-sketch .g-c-top { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; column-gap: 14px; align-items: center; min-width: 0; }
+.sp-sketch .g-c-top .g-art-box { width: 86px; height: 86px; }
+.sp-sketch .g-c-top .g-title { font-size: 24px; padding-bottom: 6px; }
+.sp-sketch .g-c-top .g-artist { font-size: 15.5px; }
+.sp-sketch .g-c-top .g-album { font-size: 13.5px; }
+.sp-sketch .g-c-top .g-saved, .sp-sketch .g-c-top .g-launch { font-size: 13px; margin-top: 1px; }
+.sp-sketch .g-c-trans { display: flex; align-items: center; gap: 10px; }
+.sp-sketch .g-c-trans .g-tb, .sp-sketch.g-tight .g-tb { width: 33px; height: 33px; }
+.sp-sketch .g-c-trans .g-tb .g-ic, .sp-sketch.g-tight .g-tb .g-ic { width: 16px; height: 16px; }
+.sp-sketch .g-c-trans .g-tb.g-big, .sp-sketch.g-tight .g-tb.g-big { width: 44px; height: 44px; }
+.sp-sketch .g-c-trans .g-tb.g-big .g-ic, .sp-sketch.g-tight .g-tb.g-big .g-ic { width: 19px; height: 19px; }
+.sp-sketch.g-compact .g-kca, .sp-sketch.g-tight .g-kca, .sp-sketch.g-mini .g-kca { display: none; }
+.sp-sketch .g-c-seek { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto 104px; gap: 10px; align-items: center; font: 10.5px var(--mono); min-width: 0; }
+.sp-sketch.g-tight .g-c-seek { grid-template-columns: auto minmax(0, 1fr) auto; }
+.sp-sketch .g-c-wv { position: relative; height: 40px; min-width: 0; }
+.sp-sketch .g-c-wv .g-viz { position: absolute; left: 0; right: 0; top: 0; height: 24px; margin: 0; }
+.sp-sketch .g-c-wv .g-seek { position: absolute; left: 0; right: 0; top: 24px; }
+.sp-sketch .g-c-seek .g-st .g-w { display: none; }
+.sp-sketch .g-c-seek .g-st { gap: 2px; font-size: 12.5px; }
+.sp-sketch .g-c-vol { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.sp-sketch .g-c-vol .g-ic { width: 15px; height: 15px; }
+.sp-sketch .g-c-vol .g-vol { flex: 1; margin: 0 26px 0 0; }
+.sp-sketch .g-c-vol .g-vnum { right: -26px; font-size: 10.5px; }
+.sp-sketch.g-tight .g-c-top { grid-template-columns: 58px minmax(0, 1fr); column-gap: 12px; }
+.sp-sketch.g-tight .g-c-top .g-art-box { width: 56px; height: 56px; }
+.sp-sketch.g-tight .g-c-top .g-title { font-size: 20px; padding-bottom: 4px; }
+.sp-sketch.g-tight .g-c-top .g-artist { font-size: 14px; }
+.sp-sketch.g-tight .g-c-top .g-meta > .g-tl, .sp-sketch.g-tight .g-c-top .g-saved { display: none; }
+.sp-sketch.g-tight .g-trans { height: 34px; gap: 14px; }
+.sp-sketch.g-tight .g-trans .g-st .g-w { display: none; }
+.sp-sketch .g-c-tabs { position: relative; display: flex; align-items: flex-end; gap: 2px; padding: 0 2px; min-width: 0; }
+.sp-sketch .g-tabline { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; }
+.sp-sketch .g-ctab { position: relative; padding: 3px 12px; font: 14.5px/1.1 var(--hand); color: var(--soft); white-space: nowrap; }
+.sp-sketch .g-ctab small { font: 9.5px var(--mono); }
+.sp-sketch .g-ctab.g-on { color: var(--ink); background: var(--paper); z-index: 1; }
+.sp-sketch .g-grow { flex: 1; }
+.sp-sketch .g-hbtn { font: 13px var(--hand); color: var(--soft); padding: 0 0 4px; display: flex; gap: 5px; align-items: center; white-space: nowrap; }
+.sp-sketch.g-tight .g-ctab { padding: 3px 8px; font-size: 14px; }
+.sp-sketch .g-c-pane { min-height: 0; min-width: 0; overflow: auto; position: relative; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.sp-sketch .g-c-pane .g-tlist { overflow: visible; }
+.sp-sketch .g-c-pane .g-trow { grid-template-columns: 24px minmax(0, 1.5fr) minmax(0, 1fr) 48px; }
+.sp-sketch .g-c-pane .g-t-al { display: none; }
+.sp-sketch.g-tight .g-c-pane .g-trow { grid-template-columns: 22px minmax(0, 1.4fr) minmax(0, 1fr) 40px; gap: 8px; }
+.sp-sketch .g-c-pane .g-note { transform: rotate(-0.5deg); margin: 12px 6px 8px; padding: 12px 12px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; align-items: end; }
+.sp-sketch .g-c-pane .g-note-h { grid-column: 1 / 3; }
+.sp-sketch .g-c-pane .g-vibe { margin: 2px 0 6px; grid-column: 1 / 3; }
+.sp-sketch .g-c-pane .g-vibe input { font-size: 16px; }
+.sp-sketch .g-c-pane .g-note-b { display: contents; }
+.sp-sketch .g-c-pane .g-note-foot { margin: 0; flex-direction: column; align-items: flex-end; gap: 4px; }
+.sp-sketch .g-c-pane .g-note-s { grid-column: 1 / 3; }
+.sp-sketch.g-tight .g-c-pane .g-note { grid-template-columns: minmax(0, 1fr); }
+.sp-sketch.g-tight .g-c-pane .g-note-foot { flex-direction: row; justify-content: space-between; margin-top: 8px; grid-column: 1; }
+.sp-sketch .g-c-pane .g-queue { overflow: visible; }
+.sp-sketch.g-compact .g-c-pane .g-q-b { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.sp-sketch.g-compact .g-c-pane .g-q-t { flex: 0 1 auto; min-width: 0; }
+.sp-sketch.g-compact .g-c-pane .g-q-why { margin: 0; flex: 0 1 auto; min-width: 0; }
+.sp-sketch .g-c-pane .g-search { margin: 6px 4px 2px; }
+.sp-sketch .g-c-pane .g-pls { overflow: visible; padding: 6px 4px; }
+.sp-sketch .g-c-pane .g-pls.g-cols { display: block; columns: 2; column-gap: 26px; }
+.sp-sketch .g-c-pane .g-pls.g-cols li { break-inside: avoid; }
+.sp-sketch .g-more { display: grid; grid-template-columns: 150px minmax(0, 1fr) 200px; gap: 18px; padding: 8px 4px; }
+.sp-sketch .g-more .g-share { flex-direction: column; align-items: flex-start; margin: 6px 0 10px; gap: 8px; }
+.sp-sketch .g-more .g-stats { margin: 0; align-self: start; }
+.sp-sketch .g-more .g-dv { margin-top: 2px; }
+.sp-sketch.g-tight .g-more { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.sp-sketch.g-tight .g-more .g-share { flex-direction: row; flex-wrap: wrap; }
+.sp-sketch .g-more-vol { margin-top: 10px; }
+.sp-sketch.g-compact .g-toast, .sp-sketch.g-tight .g-toast { bottom: 14px; right: 16px; }
+.sp-sketch.g-compact .g-help-card, .sp-sketch.g-tight .g-help-card { padding: 10px 16px 8px; }
+.sp-sketch.g-compact .g-help-g, .sp-sketch.g-tight .g-help-g { font-size: 13.5px; gap: 1px 18px; }
+.sp-sketch.g-tight .g-help-g { grid-template-columns: 1fr; }
+
+.sp-sketch.g-mini { position: relative; inset: auto; overflow: visible; width: 460px; max-width: min(760px, calc(100vw - 48px)); margin-top: 8px; padding: 12px 12px 9px; border-radius: 3px; transform: rotate(-0.5deg); box-shadow: 0 18px 30px -10px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.1); }
+.sp-sketch.g-mini::after { border-radius: 3px; }
+.sp-sketch.g-mini > .g-tape { top: -9px; left: 22px; width: 62px; transform: rotate(-7deg); cursor: grab; }
+.sp-sketch.g-mini > .g-tape.g-t2 { left: auto; right: 54px; transform: rotate(5deg); width: 50px; }
+.sp-sketch .g-m-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.sp-sketch .g-m-art { cursor: grab; }
+.sp-sketch .g-m-art .g-art-box { width: 52px; height: 52px; }
+.sp-sketch .g-m-meta { min-width: 0; }
+.sp-sketch .g-m-t { display: block; max-width: 100%; font: 18px/1.15 var(--pen); }
+.sp-sketch .g-m-t:hover { text-decoration: underline 1px var(--red); text-underline-offset: 3px; }
+.sp-sketch .g-m-a { font: 13px/1.2 var(--hand); color: var(--soft); }
+.sp-sketch .g-m-a .g-mono { font-size: 10px; }
+.sp-sketch.g-mini .g-viz { height: 15px; margin: 3px 0 0; }
+.sp-sketch .g-m-btns { display: flex; gap: 7px; align-items: center; }
+.sp-sketch.g-mini .g-tb { width: 29px; height: 29px; }
+.sp-sketch.g-mini .g-tb .g-ic { width: 14px; height: 14px; }
+.sp-sketch.g-mini .g-tb.g-big { width: 38px; height: 38px; }
+.sp-sketch.g-mini .g-tb.g-big .g-ic { width: 16px; height: 16px; }
+.sp-sketch .g-m-x { display: grid; place-items: center; width: 22px; height: 22px; margin-left: 2px; }
+.sp-sketch .g-m-x .g-ic { width: 12px; height: 12px; stroke: var(--soft); }
+.sp-sketch .g-m-x:hover .g-ic { stroke: var(--red); }
+.sp-sketch .g-m-duck { margin-top: 7px; padding-top: 5px; border-top: 1px dashed var(--faint); color: var(--red); font: 13.5px/1.2 var(--hand); }
+.sp-sketch .g-m-duck > span { display: flex; gap: 6px; align-items: center; background: var(--mark-bg); padding: 0 3px; }
+.sp-sketch .g-m-duck .g-delta { width: 15px; height: 13px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-sketch .g-flow, .sp-sketch .g-q, .sp-sketch .g-toast { animation: none; }
+}
