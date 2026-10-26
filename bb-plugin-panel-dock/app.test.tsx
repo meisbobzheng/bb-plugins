@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // @vitest-environment-options { "url": "http://localhost/" }
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   loadPluginApp,
@@ -8,7 +8,58 @@ import {
   renderSlot,
   type CapturedPluginApp,
 } from "@get-bb/plugin-sdk/testing/app";
-import { toggleFloatingTerminal } from "./terminal";
+import { floating } from "./floating";
+
+const xterm = vi.hoisted(() => ({
+  instances: [] as Array<{
+    written: unknown[];
+    disposed: boolean;
+    type(data: string): void;
+    press(event: Partial<KeyboardEvent>): boolean;
+  }>,
+}));
+
+vi.mock("@xterm/xterm", () => ({
+  Terminal: class {
+    cols = 100;
+    rows = 30;
+    written: unknown[] = [];
+    disposed = false;
+    private data: (data: string) => void = () => {};
+    private keys: (event: KeyboardEvent) => boolean = () => true;
+    constructor() {
+      xterm.instances.push(this);
+    }
+    loadAddon() {}
+    open() {}
+    focus() {}
+    write(data: unknown) {
+      this.written.push(data);
+    }
+    onData(handler: (data: string) => void) {
+      this.data = handler;
+    }
+    onResize() {}
+    attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
+      this.keys = handler;
+    }
+    dispose() {
+      this.disposed = true;
+    }
+    type(data: string) {
+      this.data(data);
+    }
+    press(event: Partial<KeyboardEvent>) {
+      return this.keys({ type: "keydown", ctrlKey: false, metaKey: false, key: "", ...event } as KeyboardEvent);
+    }
+  },
+}));
+
+vi.mock("@xterm/addon-fit", () => ({
+  FitAddon: class {
+    fit() {}
+  },
+}));
 
 declare const jsdom: { window: Window };
 vi.stubGlobal("localStorage", jsdom.window.localStorage);
@@ -211,115 +262,97 @@ describe("header menu", () => {
   });
 });
 
-describe("floating terminal", () => {
-  const toggle = (threadId: string) => act(() => toggleFloatingTerminal(threadId));
-  const nextFrame = () => act(() => new Promise(requestAnimationFrame));
 
-  function renderTerminal(panel: HTMLElement) {
-    panel.querySelector("aside")!.innerHTML =
-      "<section data-app-terminal><textarea></textarea></section>";
-    return panel.querySelector("textarea")!;
+describe("floating terminal", () => {
+  const encoded = (text: string) => btoa(text);
+
+  function renderFloating(context: { threadId?: string | null; projectId?: string | null } = {}) {
+    const create = vi.fn(async () => ({ id: "term_float", initialCwd: "/Users/bob/dev/bob-bb" }));
+    const output = vi.fn(async ({ sinceSeq }: { sinceSeq?: number }) =>
+      sinceSeq === undefined
+        ? { chunks: [{ seq: 1, dataBase64: encoded("$ ") }], nextSeq: 2, status: "running" as const, exitCode: null, closeReason: null, truncated: false }
+        : { chunks: [], nextSeq: sinceSeq, status: "running" as const, exitCode: null, closeReason: null, truncated: false },
+    );
+    const input = vi.fn(async () => ({}));
+    const close = vi.fn(async () => ({}));
+    const sdk = {
+      terminals: { create, output, input, close, resize: vi.fn(async () => ({})) },
+      environments: { list: vi.fn(async () => [{ id: "env_checkout", isWorktree: false, path: "/Users/bob/dev/bob-bb" }]) },
+      hosts: { list: vi.fn(async () => [{ id: "host_local", machineProviderId: null, status: "connected" }]) },
+    };
+    const slot = renderSlot(app.appOverlays[0]!, {}, { sdk: sdk as never, context, pluginId: PLUGIN_ID });
+    return { slot, sdk, create, output, input, close };
   }
 
-  it("floats a terminal from the header menu and puts the panel away again", async () => {
-    const mounted = await mount();
-    const { create } = renderMenu("thr_float");
-
-    await choose("menuitem", "Floating terminal");
-    expect(root.dataset.panelFloat).toBe("");
-    expect(create).toHaveBeenCalledOnce();
-
-    const hide = panelToggle("Hide");
-    await toggle("thr_float");
-    expect(root.dataset.panelFloat).toBeUndefined();
-    expect(hide.click).toHaveBeenCalledOnce();
-    await mounted.lifecycle.dispose();
+  afterEach(() => {
+    act(() => floating.hide());
+    xterm.instances.length = 0;
   });
 
-  it("reuses the thread's floating terminal while it is open", async () => {
-    const { slot, create } = renderMenu("thr_reuse");
+  it("opens over any screen in the project's checkout and shows its output", async () => {
+    const { slot, create } = renderFloating({ projectId: "proj_test" });
+    expect(slot.queryByRole("dialog", { name: "Floating terminal" })).toBeNull();
 
-    await toggle("thr_reuse");
-    await toggle("thr_reuse");
-    await toggle("thr_reuse");
+    act(() => floating.toggle());
 
-    expect(create).toHaveBeenCalledOnce();
-    const opens = slot.inspection.navigateCalls.filter(
-      (call) => JSON.stringify(call).includes("term_thr_reuse"),
+    expect(await slot.findByRole("dialog", { name: "Floating terminal" })).toBeTruthy();
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({
+        scope: { kind: "environment", environmentId: "env_checkout" },
+        cols: 100,
+        rows: 30,
+        title: "Floating terminal",
+      }),
     );
-    expect(opens).toHaveLength(2);
-    await toggle("thr_reuse");
+    expect(await slot.findByText("~/dev/bob-bb")).toBeTruthy();
+    await waitFor(() => expect(xterm.instances[0]!.written).toHaveLength(1));
   });
 
-  it("leaves a panel that was already open in place", async () => {
-    renderMenu("thr_open");
-    const hide = panelToggle("Hide");
+  it("opens in the thread's workspace from a thread, and in the home folder elsewhere", async () => {
+    const fromThread = renderFloating();
+    act(() => floating.toggle({ threadId: THREAD_ID, projectId: "proj_test" }));
+    await waitFor(() =>
+      expect(fromThread.create).toHaveBeenCalledWith(expect.objectContaining({ scope: { kind: "thread", threadId: THREAD_ID } })),
+    );
+    act(() => fireEvent.click(fromThread.slot.getByRole("button", { name: "Close terminal" })));
+    cleanup();
 
-    await toggle("thr_open");
-    await toggle("thr_open");
-
-    expect(root.dataset.panelFloat).toBeUndefined();
-    expect(hide.click).not.toHaveBeenCalled();
+    const fromHome = renderFloating();
+    act(() => floating.toggle());
+    await waitFor(() =>
+      expect(fromHome.create).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: { kind: "host_path", hostId: "host_local", cwd: null } }),
+      ),
+    );
   });
 
-  it("puts the panel away when toggled off while its terminal opens", async () => {
-    renderMenu("thr_quick");
-    let hide!: ReturnType<typeof panelToggle>;
+  it("sends keystrokes, hides on Ctrl+` while keeping the session, and closes it from the header", async () => {
+    const { slot, create, input, close } = renderFloating();
+    act(() => floating.toggle());
+    await slot.findByText("~/dev/bob-bb");
+    const terminal = xterm.instances[0]!;
 
-    await act(async () => {
-      const opening = toggleFloatingTerminal("thr_quick");
-      void toggleFloatingTerminal("thr_quick");
-      hide = panelToggle("Hide");
-      await opening;
-    });
+    terminal.type("ls\r");
+    await waitFor(() => expect(input).toHaveBeenCalledWith({ terminalId: "term_float", dataBase64: encoded("ls\r") }));
 
-    expect(root.dataset.panelFloat).toBeUndefined();
-    expect(hide.click).toHaveBeenCalledOnce();
+    expect(terminal.press({ ctrlKey: true, key: "`" })).toBe(false);
+    await waitFor(() => expect(slot.getByRole("dialog", { hidden: true }).className).toContain("hidden"));
+    act(() => floating.toggle());
+    expect(slot.getByRole("dialog").className).toContain("flex");
+    expect(create).toHaveBeenCalledOnce();
+
+    act(() => fireEvent.click(slot.getByRole("button", { name: "Close terminal" })));
+    expect(close).toHaveBeenCalledWith({ terminalId: "term_float", mode: "force" });
+    expect(terminal.disposed).toBe(true);
+    expect(slot.queryByRole("dialog", { hidden: true })).toBeNull();
   });
 
-  it("focuses the floating terminal once it renders", async () => {
-    const panel = renderPanels();
-    renderMenu("thr_focus");
-
-    await toggle("thr_focus");
-    const input = renderTerminal(panel);
-    await nextFrame();
-
-    expect(document.activeElement).toBe(input);
-    await toggle("thr_focus");
-  });
-
-  it("stops reaching for the terminal once the float ends", async () => {
-    const panel = renderPanels();
-    renderMenu("thr_unfocus");
-
-    await toggle("thr_unfocus");
-    await toggle("thr_unfocus");
-    const input = renderTerminal(panel);
-    await nextFrame();
-
-    expect(document.activeElement).not.toBe(input);
-  });
-
-  it("stops floating when the panel is closed some other way", async () => {
-    const panel = renderPanels();
-    renderMenu("thr_closed");
-
-    await toggle("thr_closed");
-    expect(root.dataset.panelFloat).toBe("");
-    await act(async () => {
-      panel.querySelector("aside")!.setAttribute("aria-hidden", "true");
-    });
-
-    expect(root.dataset.panelFloat).toBeUndefined();
-  });
-
-  it("stops floating when the thread's header unmounts", async () => {
-    const { slot } = renderMenu("thr_leave");
-
-    await toggle("thr_leave");
-    slot.lifecycle.unmount();
-
-    expect(root.dataset.panelFloat).toBeUndefined();
+  it("toggles from the sidebar footer on any screen", () => {
+    const item = app.experimentalSidebarFooterItems.find(
+      (entry) => (entry as { id?: string }).id === "floating-terminal",
+    ) as unknown as { label: string; onActivate(): void };
+    expect(item.label).toBe("Floating terminal");
+    act(() => item.onActivate());
+    expect(floating.get()).toEqual({ open: true, place: null });
   });
 });

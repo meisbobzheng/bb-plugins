@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import {
   definePluginApp,
   useBbNavigate,
@@ -18,8 +18,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
 import {
-  endFloat,
-  floatingThreadId,
   getDock,
   mountDock,
   parseDock,
@@ -27,27 +25,19 @@ import {
   showPanel,
   subscribeDock,
 } from "./dock";
-import { openNewTerminal, surfaces, toggleFloatingTerminal } from "./terminal";
+import { floating } from "./floating";
+import { FloatingTerminal } from "./FloatingTerminal";
+import { openNewTerminal } from "./terminal";
 import "./dock.css";
 
 export function PanelDockMenu({
   threadId,
+  projectId,
   isCompactViewport,
 }: PluginThreadHeaderActionProps) {
   const dock = useSyncExternalStore(subscribeDock, getDock);
   const sdk = useSdk();
   const navigate = useBbNavigate();
-
-  useEffect(() => {
-    surfaces.set(threadId, { sdk, navigate });
-  });
-  useEffect(
-    () => () => {
-      surfaces.delete(threadId);
-      if (floatingThreadId() === threadId) endFloat({ hide: false });
-    },
-    [threadId],
-  );
 
   if (isCompactViewport) return null;
 
@@ -80,7 +70,7 @@ export function PanelDockMenu({
           <Icon name="Terminal" />
           New terminal
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => toggleFloatingTerminal(threadId)}>
+        <DropdownMenuItem onSelect={() => floating.toggle({ threadId, projectId })}>
           <Icon name="AppWindow" />
           Floating terminal
         </DropdownMenuItem>
@@ -91,6 +81,7 @@ export function PanelDockMenu({
 
 export default definePluginApp((app) => {
   app.contentScripts.register({ id: "dock", mount: mountDock });
+  app.slots.experimental_appOverlay({ id: "floating-terminal", component: FloatingTerminal });
   app.slots.experimental_threadHeaderAction({
     id: "panel-dock",
     title: "Panel dock",
@@ -105,9 +96,13 @@ export default definePluginApp((app) => {
     id: "floating-terminal",
     title: "Toggle floating terminal",
     defaultShortcut: { key: "`", control: true },
-    isAvailable: ({ threadId }) => threadId !== null && surfaces.has(threadId),
-    run: ({ threadId }) => {
-      if (threadId) return toggleFloatingTerminal(threadId);
-    },
+    run: ({ threadId, projectId }) => floating.toggle({ threadId, projectId }),
+  });
+  app.experimental_sidebarFooter.register({
+    kind: "action",
+    id: "floating-terminal",
+    label: "Floating terminal",
+    icon: "Terminal",
+    onActivate: () => floating.toggle(),
   });
 });

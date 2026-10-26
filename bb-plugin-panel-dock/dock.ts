@@ -2,21 +2,13 @@ import type { PluginContentScriptContext } from "@get-bb/plugin-sdk/app";
 
 export type Dock = "right" | "bottom";
 
-interface Float {
-  threadId: string;
-  wasOpen: boolean;
-  returnFocus: Element | null;
-  observer?: MutationObserver;
-}
-
 const HEIGHT_VAR = "--panel-dock-height";
 const PANEL =
   '[data-panel-resize-handle-id="thread-detail-secondary-panel-handle"] + [data-panel]';
-const BOTTOM_PANEL = `html[data-panel-dock="bottom"]:not([data-panel-float]) ${PANEL}`;
+const BOTTOM_PANEL = `html[data-panel-dock="bottom"] ${PANEL}`;
 
 const listeners = new Set<() => void>();
 let storagePrefix = "panel-dock";
-let float: Float | null = null;
 
 const root = () => document.documentElement;
 const storageKey = (name: string) => `${storagePrefix}:${name}`;
@@ -42,62 +34,10 @@ export function subscribeDock(listener: () => void) {
   };
 }
 
-function clickPanelToggle(action: "Show" | "Hide") {
+export const showPanel = () =>
   document
-    .querySelector<HTMLElement>(`[aria-label^="${action} right panel"]`)
+    .querySelector<HTMLElement>('[aria-label^="Show right panel"]')
     ?.click();
-}
-
-export const showPanel = () => clickPanelToggle("Show");
-
-export const floatingThreadId = () => float?.threadId ?? null;
-
-export function startFloat(threadId: string) {
-  float = {
-    threadId,
-    wasOpen: document.querySelector('[aria-label^="Hide right panel"]') !== null,
-    returnFocus: document.activeElement,
-  };
-  root().dataset.panelFloat = "";
-  return float;
-}
-
-export function settleFloat(started: Float) {
-  if (float !== started) {
-    if (!float && !started.wasOpen) clickPanelToggle("Hide");
-    return;
-  }
-  const aside = document.querySelector(`${PANEL} > aside`);
-  if (!aside) return;
-  started.observer = new MutationObserver(() => {
-    if (aside.getAttribute("aria-hidden") === "true") endFloat({ hide: false });
-  });
-  started.observer.observe(aside, { attributeFilter: ["aria-hidden"] });
-  focusTerminal(started);
-}
-
-export function endFloat({ hide = true } = {}) {
-  if (!float) return;
-  const { wasOpen, returnFocus, observer } = float;
-  float = null;
-  observer?.disconnect();
-  if (hide && !wasOpen) clickPanelToggle("Hide");
-  delete root().dataset.panelFloat;
-  if (returnFocus instanceof HTMLElement && returnFocus.isConnected) {
-    returnFocus.focus();
-  }
-}
-
-function focusTerminal(started: Float, frames = 60) {
-  if (float !== started) return;
-  const target = document.querySelector<HTMLElement>(
-    `${PANEL} [data-app-terminal] textarea`,
-  );
-  if (target) target.focus();
-  else if (frames > 0) {
-    requestAnimationFrame(() => focusTerminal(started, frames - 1));
-  }
-}
 
 const isBottomPanel = (target: EventTarget | null): target is HTMLElement =>
   target instanceof HTMLElement && target.matches(BOTTOM_PANEL);
@@ -150,7 +90,6 @@ export function mountDock({ pluginId, signal }: PluginContentScriptContext) {
   document.addEventListener("click", resetHeight, { capture: true, signal });
 
   return () => {
-    endFloat({ hide: false });
     delete root().dataset.panelDock;
     delete root().dataset.panelDockResizing;
     root().style.removeProperty(HEIGHT_VAR);
