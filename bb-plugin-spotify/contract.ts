@@ -1,7 +1,7 @@
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
-export const SKINS = ["console", "receiver", "liner-notes", "pastel"] as const;
+export const SKINS = ["console", "receiver", "liner-notes", "pastel", "voxel", "neon", "sketch", "wabi-sabi"] as const;
 export type SkinId = (typeof SKINS)[number];
 
 export const PALETTES = {
@@ -9,9 +9,22 @@ export const PALETTES = {
   receiver: ["silver", "midnight", "brass"],
   "liner-notes": ["vermilion", "cobalt", "night-edition", "riso"],
   pastel: ["sherbet", "matcha", "lavender-dusk", "peach"],
+  voxel: ["gameboy", "cga", "vapor"],
+  neon: ["shinjuku", "miami", "acid", "sodium"],
+  sketch: ["graphite", "blueprint", "highlighter"],
+  "wabi-sabi": ["washi", "raku", "moss", "aizome"],
 } as const satisfies Record<SkinId, readonly [string, ...string[]]>;
 
-export const SKIN_NAMES: Record<SkinId, string> = { console: "Console", receiver: "Receiver", "liner-notes": "Liner Notes", pastel: "Sticker Book" };
+export const SKIN_NAMES: Record<SkinId, string> = {
+  console: "Console",
+  receiver: "Receiver",
+  "liner-notes": "Liner Notes",
+  pastel: "Sticker Book",
+  voxel: "Voxel",
+  neon: "Neon",
+  sketch: "Concept Sketch",
+  "wabi-sabi": "Wabi-sabi",
+};
 
 export const PALETTE_NAMES: Record<string, string> = {
   cape: "Cape",
@@ -29,6 +42,20 @@ export const PALETTE_NAMES: Record<string, string> = {
   matcha: "Matcha",
   "lavender-dusk": "Lavender Dusk",
   peach: "Peach",
+  gameboy: "Gameboy",
+  cga: "CGA",
+  vapor: "Vapor",
+  shinjuku: "Shinjuku",
+  miami: "Miami",
+  acid: "Acid",
+  sodium: "Sodium",
+  graphite: "Graphite",
+  blueprint: "Blueprint",
+  highlighter: "Highlighter",
+  washi: "Washi",
+  raku: "Raku",
+  moss: "Moss",
+  aizome: "Aizome",
 };
 
 export const PALETTE_SETTING = {
@@ -36,6 +63,10 @@ export const PALETTE_SETTING = {
   receiver: "receiverPalette",
   "liner-notes": "linerNotesPalette",
   pastel: "pastelPalette",
+  voxel: "voxelPalette",
+  neon: "neonPalette",
+  sketch: "sketchPalette",
+  "wabi-sabi": "wabiSabiPalette",
 } as const satisfies Record<SkinId, string>;
 
 export const CHANNELS = { player: "player", library: "library", auth: "auth", shuffle: "shuffle", history: "history" } as const;

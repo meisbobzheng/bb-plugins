@@ -49,6 +49,16 @@ export default async function plugin(bb: BbPluginApi) {
       default: "vermilion",
     },
     pastelPalette: { type: "select", label: "Sticker Book palette", options: [...PALETTES.pastel], experimental_optionLabels: labels(PALETTES.pastel), default: "sherbet" },
+    voxelPalette: { type: "select", label: "Voxel palette", options: [...PALETTES.voxel], experimental_optionLabels: labels(PALETTES.voxel), default: "gameboy" },
+    neonPalette: { type: "select", label: "Neon palette", options: [...PALETTES.neon], experimental_optionLabels: labels(PALETTES.neon), default: "shinjuku" },
+    sketchPalette: { type: "select", label: "Concept Sketch palette", options: [...PALETTES.sketch], experimental_optionLabels: labels(PALETTES.sketch), default: "graphite" },
+    wabiSabiPalette: {
+      type: "select",
+      label: "Wabi-sabi palette",
+      options: [...PALETTES["wabi-sabi"]],
+      experimental_optionLabels: labels(PALETTES["wabi-sabi"]),
+      default: "washi",
+    },
     duckMode: {
       type: "select",
       label: "When an agent thread needs your approval",
