@@ -12,7 +12,8 @@ window for threads, projects, quick prompts, settings, and plugins.
 - **Home:** with an empty query you see Needs attention (waiting for input,
   errors, unread), Running, Pinned (projects and threads), Recent, Projects,
   and Commands. Recent and Projects are ranked by how often and how recently
-  you open them.
+  you open them. `Tab` jumps back to the thread you were in before this one;
+  the footer names it.
 - **Search:** typing searches thread titles, projects, branches, commands,
   settings, and plugins. Once the query is three characters or longer, the
   Messages section shows threads whose messages match.
@@ -36,6 +37,7 @@ window for threads, projects, quick prompts, settings, and plugins.
 | `↵` | Primary action |
 | `⌘↵` | Secondary action (open in split, new thread) |
 | `⌘K` | Actions for the selected item |
+| `Tab` on an empty query | Back to the previous thread |
 | `⇧⌘P` | Pin or unpin |
 | `⇧⌘U` | Mark read or unread |
 | `⌘E` | Rename thread |
@@ -48,7 +50,11 @@ window for threads, projects, quick prompts, settings, and plugins.
 
 - **Thread actions:** open, open in split, send message, rename, pin, mark
   read or unread, stop, show project threads, new thread in project, copy ID
-  or link, archive (with undo).
+  or link, archive (with undo). **More actions** below them lists every other
+  action in bb's thread menu, bb's own and other plugins' (fork, move to
+  section, delete, PR Board's review, …), skipping ones the launcher already
+  has. Actions with a list of choices, like moving to a section, open it as a
+  page.
 - **Settings…:** general app toggles, theme, default agent, the launcher's own
   settings, and links to every Settings section.
 - **Plugins…:** every installed plugin with its status. Open one to enable,

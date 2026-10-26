@@ -27,6 +27,7 @@ import { projectKey } from "./rank";
 import { ResultsHostContext, type KeyHandler, type ResultsHost } from "./Results";
 import { ProvidersPage, SettingsPage, ThemesPage } from "./settings";
 import { launcher, useLauncherOpen } from "./store";
+import { previousThread, useThreadVisits } from "./visits";
 import type { Controls, Page } from "./types";
 
 interface Frame {
@@ -134,9 +135,10 @@ interface LauncherWindowProps {
   showPreview: boolean;
   launcherState: ReturnType<typeof useLauncherState>;
   config: AsyncState<AppConfig>;
+  visits: readonly string[];
 }
 
-function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowProps) {
+function LauncherWindow({ showPreview, launcherState, config, visits }: LauncherWindowProps) {
   const [stack, setStack] = useState<Frame[]>([{ page: { kind: "root" }, query: "" }]);
   const top = stack[stack.length - 1]!;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -188,11 +190,12 @@ function LauncherWindow({ showPreview, launcherState, config }: LauncherWindowPr
       projects,
       projectsById,
       currentProjectId: bbContext.projectId ?? activeThreadProject ?? frecentProject ?? null,
+      previousThread: previousThread(visits, threads, bbContext.threadId),
       providers: new Map(providers.map((provider) => [provider.id, provider])),
       config,
       plugins,
     };
-  }, [sdk, navigate, controls, pluginId, now, state, recordUse, setProjectPinned, threads, projects, providers, bbContext, config, plugins]);
+  }, [sdk, navigate, controls, pluginId, now, state, recordUse, setProjectPinned, threads, projects, providers, bbContext, config, plugins, visits]);
 
   const host = useMemo(
     (): ResultsHost => ({
@@ -297,12 +300,13 @@ export function LauncherOverlay() {
   const scopeProps = usePortalScopeProps();
   const launcherState = useLauncherState();
   const config = useAppConfig(open);
+  const visits = useThreadVisits();
   useModKInterceptor(values?.replaceShortcut !== false);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => (next ? launcher.open() : launcher.close())}>
       <Dialog.Portal>
         <Dialog.Overlay {...scopeProps} className="fixed inset-0 z-50 bg-black/30" />
-        {open ? <LauncherWindow showPreview={values?.showPreview !== false} launcherState={launcherState} config={config} /> : null}
+        {open ? <LauncherWindow showPreview={values?.showPreview !== false} launcherState={launcherState} config={config} visits={visits} /> : null}
       </Dialog.Portal>
     </Dialog.Root>
   );

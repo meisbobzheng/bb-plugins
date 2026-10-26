@@ -1,4 +1,5 @@
 import {
+  experimental_Icon as Icon,
   experimental_ProviderIcon as ProviderIcon,
   experimental_ThreadStatusGlyph as ThreadStatusGlyph,
   experimental_copyToClipboard as copyToClipboard,
@@ -305,4 +306,8 @@ export function projectItem(project: PluginSidebarProject, ctx: LauncherContextV
       copyAction("copy-id", "Copy project ID", project.id, Copy, COPY_ID_SHORTCUT),
     ],
   };
+}
+
+export function ActionIcon({ icon: Glyph, className }: { icon: Action["icon"]; className: string }) {
+  return typeof Glyph === "string" ? <Icon name={Glyph} className={className} aria-hidden /> : <Glyph className={className} />;
 }

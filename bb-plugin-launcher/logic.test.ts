@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { makeProject, makeThread } from "./fixtures";
 import { matchRanges, matchScore } from "./launcher/match";
 import { projectKey, rank, rootGroups, threadKey } from "./launcher/rank";
+import { actionLabelKey } from "./launcher/threadMenu";
+import { parseVisits, previousThread, recordVisit } from "./launcher/visits";
 import { MAX_USAGE_ENTRIES, frecency, recordUsage } from "./model";
 
 const NOW = 1_000_000_000_000;
@@ -91,5 +93,35 @@ describe("rank", () => {
     const usage = { [projectKey("proj_b")]: { count: 5, lastUsedAt: NOW } };
     const ranked = rank(projects, "api", (project) => [project.name], (project) => projectKey(project.id), usage, NOW);
     expect(ranked.map((project) => project.id)).toEqual(["proj_b", "proj_a"]);
+  });
+});
+
+describe("thread visits", () => {
+  it("keeps the newest visit first without repeats, capped at 20", () => {
+    expect(recordVisit(["b", "a"], "a")).toEqual(["a", "b"]);
+    const many = Array.from({ length: 25 }, (_, index) => `t${index}`);
+    expect(recordVisit(many, "new")).toHaveLength(20);
+  });
+
+  it("picks the latest visited thread other than the current one that still exists", () => {
+    const threads = [makeThread({ id: "a" }), makeThread({ id: "b", isArchived: true }), makeThread({ id: "c" })];
+    expect(previousThread(["a", "gone", "b", "c"], threads, "a")?.id).toBe("c");
+    expect(previousThread(["a"], threads, "a")).toBeUndefined();
+  });
+
+  it("reads only a saved list of ids", () => {
+    expect(parseVisits('["a", 2, "b"]')).toEqual(["a", "b"]);
+    expect(parseVisits("{}")).toEqual([]);
+    expect(parseVisits("nope")).toEqual([]);
+  });
+});
+
+describe("actionLabelKey", () => {
+  it("matches the launcher's labels with bb's shorter ones", () => {
+    expect(actionLabelKey("Pin thread")).toBe(actionLabelKey("Pin"));
+    expect(actionLabelKey("Mark as read")).toBe(actionLabelKey("Mark read"));
+    expect(actionLabelKey("Copy link")).toBe(actionLabelKey("Copy thread link"));
+    expect(actionLabelKey("Rename…")).toBe(actionLabelKey("Rename"));
+    expect(actionLabelKey("Fork")).not.toBe(actionLabelKey("Pin"));
   });
 });

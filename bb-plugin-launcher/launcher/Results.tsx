@@ -47,6 +47,7 @@ export interface ResultsProps {
   emptyText?: string;
   showPreview: boolean;
   highlight?: boolean;
+  tab?: { label: string; item: Item };
 }
 
 function Kbd({ children }: { children: string }) {
@@ -141,7 +142,7 @@ const Row = memo(function Row({ id, item, index, active, terms, onSelect, onRun 
   );
 });
 
-export function Results({ sections, query, emptyText = "No results", showPreview, highlight = true }: ResultsProps) {
+export function Results({ sections, query, emptyText = "No results", showPreview, highlight = true, tab }: ResultsProps) {
   const ctx = useLauncher();
   const runAction = useRunAction();
   const host = useResultsHost();
@@ -201,6 +202,11 @@ export function Results({ sections, query, emptyText = "No results", showPreview
     }
     if (event.key === "ArrowUp" || (ctrlOnly && event.key === "p")) {
       move(-1);
+      return true;
+    }
+    const tabAction = tab?.item.actions[0];
+    if (tab !== undefined && tabAction !== undefined && event.key === "Tab" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      runAction(tab.item, tabAction);
       return true;
     }
     if (selected === undefined) return false;
@@ -271,6 +277,9 @@ export function Results({ sections, query, emptyText = "No results", showPreview
         onMouseDown={(event) => event.preventDefault()}
         className="flex h-10 shrink-0 items-center justify-end gap-4 border-t border-border px-3 text-xs text-muted-foreground"
       >
+        {tab !== undefined && tab.item.actions[0] !== undefined ? (
+          <Hint label={tab.label} keys="⇥" className="mr-auto" onClick={() => runAction(tab.item, tab.item.actions[0]!)} />
+        ) : null}
         {selected !== undefined && primary !== undefined ? (
           <Hint label={primary.title} keys="↵" onClick={() => runAction(selected, primary)} />
         ) : null}

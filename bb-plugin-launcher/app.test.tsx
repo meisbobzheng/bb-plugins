@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
+// @vitest-environment-options { "url": "http://localhost/" }
 import { act, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PluginSidebarPullRequest, PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { loadPluginApp, renderSlot, type PluginSdkTestFakes } from "@get-bb/plugin-sdk/testing/app";
+import { loadPluginApp, renderSlot, type PluginSdkTestFakes, type TestThreadActionsResolver } from "@get-bb/plugin-sdk/testing/app";
 import { makeProject, makeThread } from "./fixtures";
 import { launcher } from "./launcher/store";
 import type { LauncherState } from "./model";
 import type { rpcContract } from "./server";
+
+declare const jsdom: { window: Window };
+vi.stubGlobal("localStorage", jsdom.window.localStorage);
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -20,6 +24,7 @@ beforeAll(() => {
 afterEach(() => {
   act(() => launcher.close());
   cleanup();
+  localStorage.clear();
 });
 
 const GENERAL = {
@@ -59,6 +64,8 @@ interface RenderOptions {
   threads?: PluginSidebarThread[];
   outline?: (threadId: string) => Promise<unknown>;
   pullRequests?: Record<string, PluginSidebarPullRequest>;
+  threadId?: string | null;
+  threadActions?: TestThreadActionsResolver;
 }
 
 async function renderLauncher({
@@ -67,6 +74,8 @@ async function renderLauncher({
   threads = THREADS,
   outline = async () => CER_OUTLINE,
   pullRequests,
+  threadId = null,
+  threadActions,
 }: RenderOptions = {}) {
   const app = await loadPluginApp(() => import("./app"));
   const overlay = app.appOverlays[0]!;
@@ -97,7 +106,8 @@ async function renderLauncher({
   } as unknown as PluginSdkTestFakes;
   const slot = renderSlot<object, typeof rpcContract>(overlay, {}, {
     settings,
-    context: { projectId: "proj_a", threadId: null },
+    context: { projectId: "proj_a", threadId },
+    threadActions,
     sidebarThreads: {
       status: "ready",
       threads,
@@ -331,5 +341,99 @@ describe("launcher", () => {
     await waitFor(() => expect(slot.getByRole("combobox").getAttribute("placeholder")).toContain("Search threads"));
     fireEvent.keyDown(slot.getByRole("combobox"), { key: "Escape" });
     await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
+  });
+
+  it("adds bb's and plugins' thread actions to a thread's actions, skipping ones the launcher has", async () => {
+    const ran: string[] = [];
+    const entry = (key: string, label: string, extra: object = {}) => ({
+      key,
+      pluginId: key.split("/")[0]!,
+      group: "a",
+      action: { label, icon: "Archive", run: async (value?: string) => void ran.push(value === undefined ? key : `${key}:${value}`), ...extra },
+    });
+    const slot = await renderLauncher({
+      threadActions: (thread) => [
+        entry("bb--core/pin", "Pin"),
+        entry("bb--core/fork", "Fork"),
+        entry("pr-board/review", "Run PR review"),
+        entry("bb--core/hidden", "Disabled one", { disabled: true }),
+        entry("bb--core/move", "Move to section", {
+          choices: { items: [{ id: "sec_hss", label: "hss" }, { id: "sec_other", label: "other", selected: true }] },
+        }),
+        ...(thread.id === "thr_old" ? [] : [entry("x/never", "Never")]),
+      ],
+    });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "old cleanup" } });
+    fireEvent.keyDown(input, { key: "k", ctrlKey: true });
+    const more = await slot.findByRole("group", { name: "More actions" });
+    expect([...more.querySelectorAll('[role="option"]')].map((row) => row.textContent)).toEqual([
+      "Fork",
+      "Run PR review",
+      "Move to section…",
+    ]);
+
+    fireEvent.change(input, { target: { value: "review" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(ran).toEqual(["pr-board/review"]));
+  });
+
+  it("lists a thread action's choices on their own page and runs the pick", async () => {
+    const ran: string[] = [];
+    const slot = await renderLauncher({
+      threadActions: () => [
+        {
+          key: "bb--core/move",
+          pluginId: "bb--core",
+          group: "a",
+          action: {
+            label: "Move to section",
+            icon: "FolderInput",
+            choices: { items: [{ id: "sec_hss", label: "hss" }, { id: "sec_other", label: "other", selected: true }] },
+            run: async (value?: string) => void ran.push(value ?? ""),
+          },
+        },
+      ],
+    });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "old cleanup" } });
+    fireEvent.keyDown(input, { key: "k", ctrlKey: true });
+    await slot.findByRole("group", { name: "More actions" });
+    fireEvent.change(input, { target: { value: "move" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((await slot.findByRole("group", { name: "Move to section" })).textContent).toContain("other");
+    fireEvent.change(slot.getByRole("combobox"), { target: { value: "hss" } });
+    fireEvent.keyDown(slot.getByRole("combobox"), { key: "Enter" });
+    await waitFor(() => expect(ran).toEqual(["sec_hss"]));
+    expect(slot.queryByRole("dialog")).toBeNull();
+  });
+
+  it("jumps back to the previous thread with Tab on an empty search", async () => {
+    localStorage.setItem("test-plugin:visits", JSON.stringify(["thr_old", "thr_pin"]));
+    const slot = await renderLauncher({ threadId: "thr_wait" });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    expect(slot.getByRole("button", { name: /Back to Old cleanup/ })).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: "cer" } });
+    expect(slot.queryByRole("button", { name: /Back to/ })).toBeNull();
+    fireEvent.change(input, { target: { value: "" } });
+
+    fireEvent.keyDown(input, { key: "Tab" });
+    await waitFor(() =>
+      expect(slot.inspection.navigateCalls).toContainEqual({ method: "toThread", threadId: "thr_old" }),
+    );
+    expect(slot.queryByRole("dialog")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("test-plugin:visits")!)).toEqual(["thr_wait", "thr_old", "thr_pin"]);
+  });
+
+  it("leaves Tab alone when there is no previous thread", async () => {
+    const slot = await renderLauncher({ threadId: "thr_wait" });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    expect(slot.queryByRole("button", { name: /Back to/ })).toBeNull();
+    expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(true);
   });
 });

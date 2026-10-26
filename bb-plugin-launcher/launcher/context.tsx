@@ -24,6 +24,7 @@ export interface LauncherContextValue {
   projects: readonly PluginSidebarProject[];
   projectsById: ReadonlyMap<string, PluginSidebarProject>;
   currentProjectId: string | null;
+  previousThread: PluginSidebarThread | undefined;
   providers: ReadonlyMap<string, ProviderInfo>;
   config: AsyncState<AppConfig>;
   plugins: AsyncState<PluginEntry[]>;

@@ -7,5 +7,6 @@ Type to search threads, projects, branches, message text, commands, settings,
 and plugins, plus results from plugins that add their own, such as Spotify
 songs and playlists, or type a prompt to start a thread in any project. Press ⌘K on a
 result for its actions: pin, rename, send a message, mark unread, stop,
-archive, and more. Toggle app settings, switch themes, change the default
+archive, and everything else in bb's thread menu, including other plugins'
+actions. Tab on an empty search jumps back to the thread you were in before. Toggle app settings, switch themes, change the default
 agent, and enable, disable, or configure plugins without leaving the keyboard.

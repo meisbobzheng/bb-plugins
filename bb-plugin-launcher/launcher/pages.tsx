@@ -1,5 +1,9 @@
 import { useMemo, type ReactNode } from "react";
-import type { PluginSidebarProject, PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import {
+  experimental_useThreadActions as useThreadActions,
+  type PluginSidebarProject,
+  type PluginSidebarThread,
+} from "@get-bb/plugin-sdk/app";
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
@@ -19,13 +23,14 @@ import {
 } from "lucide-react";
 import { useLauncher, type LauncherContextValue } from "./context";
 import { useMessageSearch, type SearchHit } from "./data";
-import { newThreadAction, projectItem, spawnAction, threadItem } from "./items";
+import { ActionIcon, newThreadAction, projectItem, spawnAction, threadItem } from "./items";
 import { shortcutLabel } from "./keys";
 import { pluginItem, pluginKey, pluginTerms } from "./plugins";
 import { commandKey, isRunning, needsAttention, projectKey, rank, rootGroups, threadKey, visibleThreads } from "./rank";
 import { Results } from "./Results";
 import { useSourceSections } from "./sources";
 import { generalToggleItems, settingLinkItems } from "./settings";
+import { actionTarget, registryActions } from "./threadMenu";
 import type { Action, Item, Page, Section } from "./types";
 
 interface PageProps {
@@ -172,6 +177,11 @@ export function RootPage({ query, showPreview }: PageProps) {
   const ctx = useLauncher();
   const hits = useMessageSearch(query);
   const sources = useSourceSections(query, ctx.plugins.data);
+  const previous = ctx.previousThread;
+  const tab = useMemo(
+    () => (previous === undefined || query.trim() !== "" ? undefined : { label: `Back to ${previous.displayTitle}`, item: threadItem(previous, ctx) }),
+    [previous, query, ctx],
+  );
   const sections = useMemo((): Section[] => {
     const toThread = (thread: PluginSidebarThread) => threadItem(thread, ctx);
     const toProject = (project: PluginSidebarProject) => projectItem(project, ctx);
@@ -206,7 +216,7 @@ export function RootPage({ query, showPreview }: PageProps) {
       { title: "Messages", items: hits.map((hit) => messageItem(ctx, hit)) },
     ];
   }, [ctx, query, hits, sources]);
-  return <Results sections={sections} query={query} showPreview={showPreview} />;
+  return <Results sections={sections} query={query} showPreview={showPreview} tab={tab} />;
 }
 
 export function ProjectPage({ projectId, query, showPreview }: PageProps & { projectId: string }) {
@@ -281,14 +291,13 @@ export function PickProjectPage({ prompt, query, showPreview }: PageProps & { pr
   return <Results sections={[{ title: "Projects", items }]} query={query} showPreview={showPreview} />;
 }
 
-export function ActionsPage({ item, query }: PageProps & { item: Item }) {
-  const ctx = useLauncher();
-  const items = item.actions.map(
+function actionItems(item: Item, actions: readonly Action[], ctx: LauncherContextValue): Item[] {
+  return actions.map(
     (action): Item => ({
       id: `action:${action.id}`,
       title: <span className={action.destructive ? "text-destructive" : undefined}>{action.title}</span>,
       terms: [action.title],
-      icon: <action.icon className={action.destructive ? "size-4 text-destructive" : "size-4 text-muted-foreground"} />,
+      icon: <ActionIcon icon={action.icon} className={action.destructive ? "size-4 text-destructive" : "size-4 text-muted-foreground"} />,
       accessory: action.shortcut ? (
         <span className="text-xs text-muted-foreground">{shortcutLabel(action.shortcut)}</span>
       ) : null,
@@ -306,8 +315,36 @@ export function ActionsPage({ item, query }: PageProps & { item: Item }) {
       ],
     }),
   );
-  const ranked = rank(items, query, itemTerms, (candidate) => candidate.id, {}, ctx.now, 100);
-  return <Results sections={[{ title: "Actions", items: ranked }]} query={query} showPreview={false} />;
+}
+
+function ActionsResults({ sections, query }: PageProps & { sections: readonly Section[] }) {
+  const ctx = useLauncher();
+  const ranked = sections.map((section) => ({
+    ...section,
+    items: rank(section.items, query, itemTerms, (candidate) => candidate.id, {}, ctx.now, 100),
+  }));
+  return <Results sections={ranked} query={query} showPreview={false} />;
+}
+
+function ThreadActionsPage({ item, thread, query }: PageProps & { item: Item; thread: PluginSidebarThread }) {
+  const ctx = useLauncher();
+  const entries = useThreadActions(useMemo(() => actionTarget(thread), [thread]));
+  const sections = useMemo(
+    (): Section[] => [
+      { title: "Actions", items: actionItems(item, item.actions, ctx) },
+      { title: "More actions", items: actionItems(item, registryActions(entries, item.actions, ctx.controls), ctx) },
+    ],
+    [item, entries, ctx],
+  );
+  return <ActionsResults sections={sections} query={query} showPreview={false} />;
+}
+
+export function ActionsPage({ item, query }: PageProps & { item: Item }) {
+  const ctx = useLauncher();
+  const preview = item.preview;
+  const thread = preview?.kind === "thread" ? ctx.threads.find((candidate) => candidate.id === preview.threadId) : undefined;
+  if (thread !== undefined) return <ThreadActionsPage item={item} thread={thread} query={query} showPreview={false} />;
+  return <ActionsResults sections={[{ title: "Actions", items: actionItems(item, item.actions, ctx) }]} query={query} showPreview={false} />;
 }
 
 export function ChoicesPage({ sections, query }: PageProps & { sections: readonly Section[] }) {

@@ -11,7 +11,7 @@ export interface Shortcut {
 export interface Action {
   id: string;
   title: string;
-  icon: LucideIcon;
+  icon: LucideIcon | string;
   shortcut?: Shortcut;
   destructive?: boolean;
   keepOpen?: boolean;

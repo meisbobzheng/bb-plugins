@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Toggle, ValueBadge } from "./badges";
 import { useLauncher, type LauncherContextValue } from "./context";
 import { errorMessage, useAsync, type AsyncState, type PluginEntry, type PluginSettings } from "./data";
+import { ActionIcon } from "./items";
 import { rank } from "./rank";
 import { Results } from "./Results";
 import type { Item, Section } from "./types";
@@ -276,7 +277,7 @@ export function PluginPage({ pluginId, query, showPreview }: { pluginId: string;
     id: `action:${action.id}`,
     title: action.title,
     terms: [action.title],
-    icon: <action.icon className="size-4 text-muted-foreground" />,
+    icon: <ActionIcon icon={action.icon} className="size-4 text-muted-foreground" />,
     usageKey: pluginKey(plugin.id),
     actions: [action],
   }));
