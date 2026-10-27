@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Markdown, useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { Draft, Finding, ReviewThread, Side } from "../contract";
@@ -73,6 +73,7 @@ function useBusy() {
 }
 
 const SIDE_LABEL: Record<Side, string> = { additions: "new", deletions: "old" };
+const unsent = new WeakMap<Composer, string>();
 
 export function FindingCard({ finding, outdated, actions }: { finding: Finding; outdated: boolean; actions: ReviewActions }) {
   const { busy, run } = useBusy();
@@ -223,8 +224,9 @@ export function DraftCard({ draft, actions }: { draft: Draft; actions: ReviewAct
 }
 
 export function CommentEditor({ composer, suggestion, actions }: { composer: Composer; suggestion: string | null; actions: ReviewActions }) {
-  const [body, setBody] = useState(composer.initialBody);
+  const [body, setBody] = useState(() => unsent.get(composer) ?? composer.initialBody);
   const { busy, run } = useBusy();
+  useEffect(() => void unsent.set(composer, body), [body, composer]);
   const empty = body.trim().length === 0;
   const save = () => run("draft", () => actions.saveDraft(composer, body));
   const post = () => run("post", () => actions.postComment(composer, body));

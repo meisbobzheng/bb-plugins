@@ -390,6 +390,17 @@ describe("review workspace", () => {
     expect(saved[0]).toMatchObject({ repo: "acme/app", number: 7, id: null, path: "cmd/main.go", side: "additions", startLine: 3, endLine: 4 });
   });
 
+  it("keeps an unsent comment's edits while another file is open", async () => {
+    const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/7" }, { rpc: workspaceRpc({ ...STATE, drafts: [] }) });
+    fireEvent.click(await slot.findByRole("button", { name: "Comment" }));
+    fireEvent.change(await slot.findByRole("textbox", { name: "Comment" }), { target: { value: "My own words" } });
+    fireEvent.click(slot.getByTitle("docs/readme.md"));
+    await waitFor(() => expect(slot.queryByRole("textbox", { name: "Comment" })).toBeNull());
+    fireEvent.click(slot.getByRole("tab", { name: /^Findings/ }));
+    fireEvent.click(slot.getByRole("button", { name: /Inline b into a/ }));
+    expect(((await slot.findByRole("textbox", { name: "Comment" })) as HTMLTextAreaElement).value).toBe("My own words");
+  });
+
   it("loads the next file's contents in the background so stepping to it shows its diff at once", async () => {
     const headSha = "5".repeat(40);
     const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/16" }, { rpc: workspaceRpc(STATE, { pull: () => ({ ...DETAIL, number: 16, headSha }) }) });
