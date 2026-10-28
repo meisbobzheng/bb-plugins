@@ -326,7 +326,7 @@ function TracksTable({ props, add, tracks, cursor, focused, album, share, onPick
         {album ? <col style={{ width: "24%" }} /> : null}
         <col style={{ width: 60 }} />
         {share ? <col style={{ width: 230 }} /> : null}
-        <col style={{ width: 26 }} />
+        <col style={{ width: 32 }} />
       </colgroup>
       <thead>
         <tr>
