@@ -242,17 +242,19 @@ function NowPlaying({ props, add }: { props: SkinProps; add: PlaylistAdd }) {
                 <tr>
                   <td>add</td>
                   <td>
-                    <button type="button" className="c-add c-d" data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} title="Add to a playlist (a)">
+                    <button type="button" className="c-text c-d" data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} title="Add to a playlist (a)">
                       + to a playlist · a <span className="c-f">or drag the song</span>
                     </button>
                   </td>
                 </tr>
-                {track.url === null ? null : (
-                  <tr>
-                    <td>link</td>
-                    <td className="c-b c-trunc">{track.url.replace("https://", "")}</td>
-                  </tr>
-                )}
+                <tr>
+                  <td>link</td>
+                  <td>
+                    <button type="button" className="c-text c-b" onClick={() => actions.copyLink(track)} title="Copy the song link (yy)">
+                      ⧉ copy link · yy
+                    </button>
+                  </td>
+                </tr>
               </tbody>
             </table>
           )}
@@ -351,7 +353,7 @@ function TracksTable({ props, add, tracks, cursor, focused, album, share, onPick
             <td>
               <button
                 type="button"
-                className="c-add c-row-add"
+                className="c-text c-row-add"
                 data-sp-add=""
                 onClick={(event) => {
                   event.stopPropagation();
