@@ -85,6 +85,7 @@ const ICONS = {
     </>
   ),
   plus: <path d="M12 6v12M6 12h12" />,
+  addto: <path d="M4.5 7h11M4.5 12h11M4.5 17h6M17 14v6M14 17h6" />,
   close: <path d="M7 7l10 10M17 7 7 17" />,
   up: <path d="M8 14l4-4 4 4" />,
   open: <path d="M14 5h5v5M19 5l-8 8M17 14v4a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 5 18V8.5A1.5 1.5 0 0 1 6.5 7h4" />,
@@ -206,9 +207,9 @@ export function Cover({ seed, liked, className = "" }: { seed: string; liked?: b
   );
 }
 
-export function Art({ track, demo, className = "" }: { track: Track | null; demo: boolean; className?: string }) {
+export function Art({ track, demo, className = "", ...rest }: { track: Track | null; demo: boolean; className?: string } & React.HTMLAttributes<HTMLSpanElement>) {
   const art = useArt(track?.album.imageUrl, demo);
-  return <span className={`n-cv ${className}`}>{art === null ? <Glyph seed={track?.album.name ?? "nothing"} /> : <img src={art} alt="" draggable={false} />}</span>;
+  return <span {...rest} className={`n-cv ${className}`}>{art === null ? <Glyph seed={track?.album.name ?? "nothing"} /> : <img src={art} alt="" draggable={false} />}</span>;
 }
 
 export function Sign({ text, lit, max, single = false, ignite }: { text: string; lit: boolean; max: number; single?: boolean; ignite: string }) {

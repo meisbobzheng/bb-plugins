@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Playlist, Stats, Track } from "../../../contract";
 import { artists, clock, hours, playlistLength, trackUrl } from "../../format";
 import { upNext, type SkinProps } from "../../model";
+import type { PlaylistAdd } from "../../playlist-add";
 import { clip, tagFor } from "./pixels";
 import { City, Clock, Cover, Icon, Ident, PixelTitle, Pixels, Record, Seek, Volume, VIS_MODES, type VisMode } from "./visuals";
 
@@ -38,7 +39,7 @@ function crumb(data: SkinProps["data"]): string {
 
 const repeatLabel = (repeat: string) => (repeat === "off" ? "off" : repeat === "track" ? "one" : "all");
 
-function Transport({ props, size, pop }: { props: SkinProps; size: Size; pop: number }) {
+function Transport({ props, add, size, pop }: { props: SkinProps; add: PlaylistAdd; size: Size; pop: number }) {
   const { data, actions } = props;
   const { player } = data;
   const compact = size !== "full";
@@ -83,6 +84,9 @@ function Transport({ props, size, pop }: { props: SkinProps; size: Size; pop: nu
             </span>
           ) : null}
         </button>
+        <button type="button" className="v-btn" data-sp-add="" onClick={(event) => add.open(player.track, event.currentTarget)} disabled={player.track === null} aria-label="Add to a playlist" title="Add to a playlist (a)">
+          <Icon name="addto" />
+        </button>
         {compact ? (
           <>
             <span className="v-sp" />
@@ -113,7 +117,7 @@ function NoDevice({ onLaunch }: { onLaunch(): void }) {
   );
 }
 
-export function NowPlaying({ props, size, mode, pop }: { props: SkinProps; size: Size; mode: VisMode; pop: number }) {
+export function NowPlaying({ props, add, size, mode, pop }: { props: SkinProps; add: PlaylistAdd; size: Size; mode: VisMode; pop: number }) {
   const { data, actions } = props;
   const { player } = data;
   const track = player.track;
@@ -132,7 +136,9 @@ export function NowPlaying({ props, size, mode, pop }: { props: SkinProps; size:
       {view}
       <div className="v-meta">
         <div className="v-crumb">{crumb(data)}</div>
-        <PixelTitle text={track?.name ?? "No disc"} scales={full ? [3, 2] : [2]} lines={full ? 2 : 1} />
+        <div {...add.song(track)}>
+          <PixelTitle text={track?.name ?? "No disc"} scales={full ? [3, 2] : [2]} lines={full ? 2 : 1} />
+        </div>
         {full ? (
           <>
             <div className="v-artist">{track ? artists(track) : "press space to play · or pick a playlist"}</div>
@@ -176,7 +182,7 @@ export function NowPlaying({ props, size, mode, pop }: { props: SkinProps; size:
             </div>
           </>
         )}
-        <Transport props={props} size={size} pop={pop} />
+        <Transport props={props} add={add} size={size} pop={pop} />
       </div>
     </section>
   );
@@ -208,7 +214,7 @@ export function ordered(playlists: Playlist[] | null): Playlist[] {
   return [...all.filter((entry) => entry.readable), ...all.filter((entry) => !entry.readable)];
 }
 
-export function LibraryList({ props, playlists, cursor, focused, grid = false, onPick, onPlay }: { props: SkinProps; playlists: Playlist[]; cursor: number; focused: boolean; grid?: boolean; onPick(index: number): void; onPlay(playlist: Playlist): void }) {
+export function LibraryList({ props, add, playlists, cursor, focused, grid = false, onPick, onPlay }: { props: SkinProps; add: PlaylistAdd; playlists: Playlist[]; cursor: number; focused: boolean; grid?: boolean; onPick(index: number): void; onPlay(playlist: Playlist): void }) {
   const { data } = props;
   const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
@@ -229,6 +235,7 @@ export function LibraryList({ props, playlists, cursor, focused, grid = false, o
           ) : null,
           <li
             key={playlist.id}
+            {...add.target(playlist)}
             className={`${data.selection.playlist?.id === playlist.id ? "v-sel" : ""} ${playing ? "v-playing" : ""} ${focused && index === cursor ? "v-cur" : ""}`}
             title={playlist.readable ? `${playlist.name} · double-click to play` : `${playlist.name} · spotify only lets bb play this one`}
             onClick={() => onPick(index)}
@@ -347,7 +354,7 @@ export interface TrackRows {
   empty: React.ReactNode;
 }
 
-export function TrackTable({ props, rows, cursor, focused, album, onPlay, onQueue }: { props: SkinProps; rows: TrackRows; cursor: number; focused: boolean; album: boolean; onPlay(index: number): void; onQueue(track: Track): void }) {
+export function TrackTable({ props, add, rows, cursor, focused, album, onPlay, onQueue }: { props: SkinProps; add: PlaylistAdd; rows: TrackRows; cursor: number; focused: boolean; album: boolean; onPlay(index: number): void; onQueue(track: Track): void }) {
   const { player } = props.data;
   const body = useRef<HTMLTableSectionElement>(null);
   useEffect(() => {
@@ -363,6 +370,7 @@ export function TrackTable({ props, rows, cursor, focused, album, onPlay, onQueu
         {album ? <col style={{ width: "24%" }} /> : null}
         <col style={{ width: 50 }} />
         {rows.results ? <col style={{ width: 32 }} /> : null}
+        <col style={{ width: 32 }} />
       </colgroup>
       <thead>
         <tr>
@@ -372,6 +380,7 @@ export function TrackTable({ props, rows, cursor, focused, album, onPlay, onQueu
           {album ? <th>album</th> : null}
           <th>time</th>
           {rows.results ? <th /> : null}
+          <th />
         </tr>
       </thead>
       <tbody ref={body}>
@@ -379,7 +388,7 @@ export function TrackTable({ props, rows, cursor, focused, album, onPlay, onQueu
           const current = track.id === player.track?.id;
           const marked = focused && index === cursor;
           return (
-            <tr key={`${track.id}-${index}`} className={`${current ? "v-cur" : ""} ${marked ? "v-sel" : ""}`} onClick={() => onPlay(index)}>
+            <tr key={`${track.id}-${index}`} {...add.song(track)} className={`${current ? "v-cur" : ""} ${marked ? "v-sel" : ""}`} onClick={() => onPlay(index)}>
               <td className="v-n">{current ? <Icon name={player.isPlaying ? "play" : "pause"} scale={1} className="v-in" /> : marked ? "▸" : pad(index + 1)}</td>
               <td>
                 {track.name}
@@ -408,6 +417,21 @@ export function TrackTable({ props, rows, cursor, focused, album, onPlay, onQueu
                   </button>
                 </td>
               ) : null}
+              <td className="v-q">
+                <button
+                  type="button"
+                  className="v-btn v-xs v-add"
+                  data-sp-add=""
+                  aria-label={`Add ${track.name} to a playlist`}
+                  title="Add to a playlist (a)"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    add.open(track, event.currentTarget);
+                  }}
+                >
+                  <Icon name="addto" scale={1} />
+                </button>
+              </td>
             </tr>
           );
         })}
@@ -424,7 +448,7 @@ export function tracksNote(props: SkinProps): string {
   return `by ${playlist.owner.toLowerCase()} · ${playlistLength(tracks)}`;
 }
 
-export function UpNext({ props, compact, onReroll, onLeave }: { props: SkinProps; compact: boolean; onReroll(): void; onLeave(): void }) {
+export function UpNext({ props, add, compact, onReroll, onLeave }: { props: SkinProps; add: PlaylistAdd; compact: boolean; onReroll(): void; onLeave(): void }) {
   const { data, actions } = props;
   const options = data.shuffleOptions;
   const session = data.session;
@@ -487,7 +511,7 @@ export function UpNext({ props, compact, onReroll, onLeave }: { props: SkinProps
         {upcoming.map((entry, index) => {
           const tag = tagFor(entry.reason, vibe);
           return (
-            <div key={`${entry.track.id}-${index}`} className={`v-qi ${enter ? "v-enter" : ""}`} style={enter ? { animationDelay: `${Math.min(index, 8) * 70}ms` } : undefined}>
+            <div key={`${entry.track.id}-${index}`} {...add.song(entry.track)} className={`v-qi ${enter ? "v-enter" : ""}`} style={enter ? { animationDelay: `${Math.min(index, 8) * 70}ms` } : undefined}>
               <span className="v-no">{pad(index + 1)}</span>
               <div className="v-qt">
                 <div className="v-trunc">
@@ -500,6 +524,9 @@ export function UpNext({ props, compact, onReroll, onLeave }: { props: SkinProps
                   </div>
                 )}
               </div>
+              <button type="button" className="v-btn v-xs v-add" data-sp-add="" onClick={(event) => add.open(entry.track, event.currentTarget)} aria-label={`Add ${entry.track.name} to a playlist`}>
+                <Icon name="addto" scale={1} />
+              </button>
             </div>
           );
         })}
@@ -534,10 +561,10 @@ export function ShareButtons({ onShare }: { onShare(how: Share): void }) {
   );
 }
 
-export function SharePreview({ track, demo }: { track: Track | null; demo: boolean }) {
+export function SharePreview({ add, track, demo }: { add: PlaylistAdd; track: Track | null; demo: boolean }) {
   if (track === null) return null;
   return (
-    <div className="v-card">
+    <div className="v-card" {...add.song(track)}>
       <Cover track={track} demo={demo} scale={2} />
       <div className="v-qt">
         <Pixels text={clip(track.name, 24)} scale={1} className="v-t2" />

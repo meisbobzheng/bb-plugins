@@ -31,6 +31,21 @@ function Demo({ skin, palette, mini }: { skin: SkinId; palette: string; mini: bo
   return mini ? <Mini data={demo.data} actions={actions} palette={palette} close={noop} /> : <Page data={demo.data} actions={actions} palette={palette} />;
 }
 
+describe("adding to playlists in every look", () => {
+  for (const skin of SKINS) {
+    it(`${skin} offers a + button and a draggable song on the page and in the mini player, and takes drops on playlists`, () => {
+      const page = render(<Demo skin={skin} palette={PALETTES[skin][0]} mini={false} />);
+      expect(page.container.querySelector("button[data-sp-add]")).not.toBeNull();
+      expect(page.container.querySelector("[data-sp-song]")).not.toBeNull();
+      expect(page.container.querySelector("[data-sp-drop]")).not.toBeNull();
+      page.unmount();
+      const mini = render(<Demo skin={skin} palette={PALETTES[skin][0]} mini />);
+      expect(mini.container.querySelector("button[data-sp-add]")).not.toBeNull();
+      expect(mini.container.querySelector("[data-sp-song]")).not.toBeNull();
+    });
+  }
+});
+
 describe("every look", () => {
   for (const skin of SKINS) {
     for (const palette of PALETTES[skin]) {

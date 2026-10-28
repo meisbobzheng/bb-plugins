@@ -92,7 +92,7 @@ export function useLive(mode: "page" | "mini", enabled: boolean): { data: Spotif
   });
 
   const connected = player.status !== "disconnected";
-  const [playlists] = useLoad<Playlist[]>(async () => (await rpc.call("library_playlists", { refresh: false })).playlists, [connected], CHANNELS.library, page && connected);
+  const [playlists] = useLoad<Playlist[]>(async () => (await rpc.call("library_playlists", { refresh: false })).playlists, [connected], CHANNELS.library, enabled && connected);
   const [session] = useLoad<ShuffleSession | null>(() => rpc.call("shuffle_session_get", null), [], CHANNELS.shuffle, enabled);
   const [savedOptions] = useLoad<ShuffleOptions | null>(() => rpc.call("shuffle_options_get", null), [], null, enabled);
   const [stats] = useLoad<Stats>(() => rpc.call("stats_get", null), [connected], CHANNELS.history, page);
@@ -126,6 +126,15 @@ export function useLive(mode: "page" | "mini", enabled: boolean): { data: Spotif
     (contextUri: string | null, uris: string[] | null, offsetUri: string | null) => void rpc.call("player_play", { contextUri, uris, offsetUri }).then(setPlayer, report),
     [rpc],
   );
+  const addToPlaylist = useCallback(
+    (track: Track, playlist: Playlist, allowDuplicate = false): void =>
+      void rpc.call("playlist_add", { playlistId: playlist.id, track, allowDuplicate }).then(({ added, playlist: updated }) => {
+        if (added) toast.success(`Added ${track.name} to ${updated.name}`);
+        else if (updated.kind === "liked") toast.info(`${track.name} is already in Liked Songs`);
+        else toast.info(`${track.name} is already in ${updated.name}`, { action: { label: "Add anyway", onClick: () => addToPlaylist(track, playlist, true) } });
+      }, report),
+    [rpc],
+  );
   const shuffleOptions = options ?? savedOptions ?? { ...DEFAULT_SHUFFLE, sourceId: effectiveId ?? DEFAULT_SHUFFLE.sourceId };
   const playerRef = useRef(player);
   playerRef.current = player;
@@ -145,6 +154,7 @@ export function useLive(mode: "page" | "mini", enabled: boolean): { data: Spotif
       playTrack: (track) => play(null, [track.uri], null),
       queue: (track) =>
         void rpc.call("queue_add", { uri: track.uri }).then(() => toast.success(`Queued ${track.name}`), report),
+      addToPlaylist: (track, playlist) => addToPlaylist(track, playlist),
       setShuffleOptions: (patch) => setOptions((current) => ({ ...(current ?? shuffleOptions), ...patch })),
       smartShuffle: (patch) => {
         const next = { ...shuffleOptions, ...patch };
@@ -172,7 +182,7 @@ export function useLive(mode: "page" | "mini", enabled: boolean): { data: Spotif
       search: (query) => rpc.call("search", { query }),
       openPage: () => navigate.toPluginPanel(PANEL_PATH),
     }),
-    [command, play, rpc, navigate, shuffleOptions],
+    [command, play, addToPlaylist, rpc, navigate, shuffleOptions],
   );
 
   return {

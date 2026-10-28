@@ -44,7 +44,7 @@ interface CardTheme {
   bodyFont: string;
 }
 
-function themeOf(root: HTMLElement | null): CardTheme {
+export function themeOf(root: HTMLElement | null): CardTheme {
   const style = root === null ? null : getComputedStyle(root);
   const read = (name: string, fallback: string) => style?.getPropertyValue(name).trim() || fallback;
   return {

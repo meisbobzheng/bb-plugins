@@ -192,6 +192,12 @@
 
 .sp-console .c-btn { background: none; border: 1px solid var(--c-line); color: var(--c-ink); font: inherit; line-height: 1.3; padding: 0 7px; cursor: pointer; }
 .sp-console .c-btn:hover { background: var(--c-panel); border-color: var(--c-faint); }
+.sp-console .c-btn:disabled { opacity: 0.4; cursor: default; }
+.sp-console .c-add { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.sp-console .c-add:hover { color: var(--c-y); }
+.sp-console .c-tl .c-row-add { visibility: hidden; padding: 0 4px; }
+.sp-console .c-tl tr:hover .c-row-add, .sp-console .c-tl tr.c-cur .c-row-add, .sp-console .c-row-add:focus-visible { visibility: visible; }
+.sp-console .c-tl tr.c-cur .c-add:hover { color: inherit; }
 .sp-console .c-btn-main { color: var(--c-y); border-color: var(--c-y); }
 .sp-console .c-transport { display: flex; flex: none; gap: 4px; }
 

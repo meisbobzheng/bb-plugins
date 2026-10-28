@@ -1,0 +1,114 @@
+.sp-pick {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  width: 264px;
+  max-height: min(340px, calc(100vh - 16px));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--pick-ink) 22%, transparent);
+  border-radius: 8px;
+  background: var(--pick-bg);
+  color: var(--pick-ink);
+  font: 13px/1.35 var(--pick-body);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 0.32);
+}
+
+.sp-pick-head {
+  overflow: hidden;
+  padding: 10px 12px 2px;
+  color: var(--pick-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-pick-head b {
+  color: var(--pick-ink);
+  font-family: var(--pick-title);
+  font-weight: 600;
+}
+
+.sp-pick input {
+  margin: 6px 8px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--pick-ink) 16%, transparent);
+  border-radius: 5px;
+  outline: none;
+  background: color-mix(in srgb, var(--pick-ink) 6%, transparent);
+  color: inherit;
+  font: inherit;
+}
+
+.sp-pick input:focus {
+  border-color: var(--pick-accent);
+}
+
+.sp-pick input::placeholder {
+  color: var(--pick-muted);
+}
+
+.sp-pick ul {
+  margin: 0;
+  padding: 0 4px 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.sp-pick li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.sp-pick li > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-pick li > span:last-child {
+  color: var(--pick-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-pick li[aria-selected="true"] {
+  background: color-mix(in srgb, var(--pick-accent) 24%, transparent);
+}
+
+.sp-pick-empty {
+  padding: 4px 12px 12px;
+  color: var(--pick-muted);
+}
+
+.sp-drag-chip {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  max-width: 300px;
+  overflow: hidden;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--pick-accent);
+  color: var(--pick-bg);
+  font: 600 12px/1.3 var(--pick-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-sp-song][draggable="true"] {
+  cursor: grab;
+}
+
+:root[data-sp-dragging] [data-sp-drop] {
+  outline: 1px dashed color-mix(in srgb, var(--card-accent) 75%, transparent);
+  outline-offset: -2px;
+}
+
+:root[data-sp-dragging] [data-sp-drop="over"] {
+  outline: 2px solid var(--card-accent);
+  background-color: color-mix(in srgb, var(--card-accent) 20%, transparent);
+}

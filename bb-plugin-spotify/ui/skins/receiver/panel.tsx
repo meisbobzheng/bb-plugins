@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes
 import type { PlayerState, Playlist } from "../../../contract";
 import { artists, clock } from "../../format";
 import { progressAt, upNext, type SpotifyData } from "../../model";
+import type { PlaylistAdd } from "../../playlist-add";
 import { energy, fillLevels, useFrame } from "../../spectrum";
 import { signalOf } from "../console/visuals";
 import { bandSize, needleAt, slotAt, type KnobMode } from "./dial";
@@ -115,7 +116,7 @@ export function LiveClock({ player }: { player: PlayerState }) {
   return <span ref={span} />;
 }
 
-export function Vfd({ data, knob, flash, onSeek, onRepeat }: { data: SpotifyData; knob: KnobMode; flash: string | null; onSeek(ms: number): void; onRepeat(): void }) {
+export function Vfd({ data, add, knob, flash, onSeek, onRepeat }: { data: SpotifyData; add: PlaylistAdd; knob: KnobMode; flash: string | null; onSeek(ms: number): void; onRepeat(): void }) {
   const { player, selection } = data;
   const track = player.track;
   const elapsed = useRef<HTMLSpanElement>(null);
@@ -157,7 +158,7 @@ export function Vfd({ data, knob, flash, onSeek, onRepeat }: { data: SpotifyData
         </span>
       </div>
       <div className="r-vfd-main">
-        <div className="r-vfd-text">
+        <div className="r-vfd-text" {...add.song(track)}>
           <div className="r-title r-glow">{track?.name ?? idle.title}</div>
           <div className="r-artist r-glow">{track === null ? idle.line : `${artists(track)} — ${track.album.name}`}</div>
         </div>
@@ -272,7 +273,7 @@ function useWidth(ref: RefObject<HTMLElement | null>): number {
   return width;
 }
 
-export function Dial({ stations, selectedId, playingUri, loading, onTune }: { stations: Playlist[]; selectedId: string | null; playingUri: string | null; loading: boolean; onTune(index: number): void }) {
+export function Dial({ stations, add, selectedId, playingUri, loading, onTune }: { stations: Playlist[]; add: PlaylistAdd; selectedId: string | null; playingUri: string | null; loading: boolean; onTune(index: number): void }) {
   const glass = useRef<HTMLDivElement>(null);
   const size = bandSize(useWidth(glass) - 36, stations.length);
   const selected = stations.findIndex((entry) => entry.id === selectedId);
@@ -288,14 +289,14 @@ export function Dial({ stations, selectedId, playingUri, loading, onTune }: { st
       <div className="r-bandsel">
         <div className="r-group-label r-engrave">Band</div>
         <div className="r-keys">
-          <Key className="r-step" disabled={shown === 0} onClick={() => setBand(shown - 1)} aria-label="Previous band">
+          <Key className="r-step" disabled={shown === 0} onClick={() => setBand(shown - 1)} aria-label="Previous band" {...add.spring(() => setBand(shown - 1))}>
             ◂
           </Key>
           <span className="r-lcd">
             FM{shown + 1}
             <small>/{bands}</small>
           </span>
-          <Key className="r-step" disabled={shown >= bands - 1} onClick={() => setBand(shown + 1)} aria-label="Next band">
+          <Key className="r-step" disabled={shown >= bands - 1} onClick={() => setBand(shown + 1)} aria-label="Next band" {...add.spring(() => setBand(shown + 1))}>
             ▸
           </Key>
         </div>
@@ -316,6 +317,7 @@ export function Dial({ stations, selectedId, playingUri, loading, onTune }: { st
                 style={{ left: `${slotAt(slot, size) * 100}%`, maxWidth: `calc(${100 / size}% - 4px)` }}
                 onClick={() => onTune(index)}
                 title={station.readable ? `${station.name} · ${station.owner}` : `${station.name} · followed, play only`}
+                {...add.target(station)}
               >
                 {station.name}
                 <small>

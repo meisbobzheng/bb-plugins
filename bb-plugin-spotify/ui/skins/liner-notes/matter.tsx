@@ -1,12 +1,34 @@
 import type { RefObject } from "react";
+import type { Track } from "../../../contract";
 import { artists, daysAgo, hours, monthDay } from "../../format";
 import type { SkinProps } from "../../model";
+import type { PlaylistAdd } from "../../playlist-add";
 import { ago, peakHour, sentence } from "./edition";
 
 export const MATTERS = ["notes", "stats", "history"] as const;
 export type Matter = (typeof MATTERS)[number];
 
 const TITLES: Record<Matter, string> = { notes: "Notes", stats: "Statistics", history: "History" };
+
+type Props = SkinProps & { add: PlaylistAdd };
+
+export function AddMark({ track, add }: { track: Track; add: PlaylistAdd }) {
+  return (
+    <button
+      type="button"
+      className="l-add"
+      data-sp-add=""
+      onClick={(event) => {
+        event.stopPropagation();
+        add.open(track, event.currentTarget);
+      }}
+      aria-label={`Add ${track.name} to a playlist`}
+      title="Add to a playlist"
+    >
+      +
+    </button>
+  );
+}
 
 function Notes({ data }: SkinProps) {
   const days = data.shuffleOptions.freshDays;
@@ -34,13 +56,17 @@ function Notes({ data }: SkinProps) {
   );
 }
 
-function Figures({ data, actions }: SkinProps) {
+function Figures({ data, actions, add }: Props) {
   const stats = data.stats;
   if (stats === null) return <p className="l-quiet">Gathering the figures…</p>;
   if (stats.since === null) return <p className="l-quiet">No history yet. Liner Notes records what you play while bb is running; come back after a few songs.</p>;
   const loudest = Math.max(1, stats.topArtists[0]?.listenedMs ?? 0);
   const busiest = Math.max(1, ...stats.byHour);
   const peak = peakHour(stats.byHour);
+  const target = (id: string) => {
+    const playlist = data.playlists?.find((entry) => entry.id === id);
+    return playlist === undefined ? {} : add.target(playlist);
+  };
   return (
     <div className="l-figures">
       <div>
@@ -90,12 +116,13 @@ function Figures({ data, actions }: SkinProps) {
         <h4>Most played songs</h4>
         <ol className="l-ranked l-num">
           {stats.topTracks.slice(0, 6).map((entry, index) => (
-            <li key={entry.track.id} onClick={() => actions.playTrack(entry.track)} title="Play this song">
+            <li key={entry.track.id} onClick={() => actions.playTrack(entry.track)} title="Play this song" {...add.song(entry.track)}>
               <span className="l-i">{index + 1}</span>
               <span className="l-nm">
                 {entry.track.name} <em>{artists(entry.track)}</em>
               </span>
               <span className="l-d">{entry.plays}×</span>
+              <AddMark track={entry.track} add={add} />
             </li>
           ))}
         </ol>
@@ -104,7 +131,7 @@ function Figures({ data, actions }: SkinProps) {
             <h4 className="l-gap">Gathering dust</h4>
             <ul className="l-dust">
               {stats.forgotten.map((entry) => (
-                <li key={entry.playlistId} onClick={() => actions.select(entry.playlistId)}>
+                <li key={entry.playlistId} onClick={() => actions.select(entry.playlistId)} {...target(entry.playlistId)}>
                   <i>{entry.name}</i>, {entry.lastPlayedAt === null ? "never played here" : `last played ${daysAgo(entry.lastPlayedAt)}`}
                 </li>
               ))}
@@ -116,25 +143,26 @@ function Figures({ data, actions }: SkinProps) {
   );
 }
 
-function History({ data, actions }: SkinProps) {
+function History({ data, actions, add }: Props) {
   if (data.recent.length === 0) return <p className="l-quiet">No plays recorded yet. Liner Notes writes each song down as it finishes.</p>;
   const now = Date.now();
   return (
     <ol className="l-history l-num">
       {data.recent.map((play) => (
-        <li key={`${play.track.id}-${play.startedAt}`} className={play.skipped ? "l-skipped" : ""} onClick={() => actions.playTrack(play.track)} title="Play this song">
+        <li key={`${play.track.id}-${play.startedAt}`} className={play.skipped ? "l-skipped" : ""} onClick={() => actions.playTrack(play.track)} title="Play this song" {...add.song(play.track)}>
           <span className="l-when">{ago(play.endedAt, now)}</span>
           <span className="l-nm">
             {play.track.name} <em>{artists(play.track)}</em>
           </span>
           {play.skipped ? <span className="l-skip">skipped</span> : null}
+          <AddMark track={play.track} add={add} />
         </li>
       ))}
     </ol>
   );
 }
 
-export function BackMatter({ matter, onMatter, anchor, ...props }: SkinProps & { matter: Matter; onMatter(matter: Matter): void; anchor: RefObject<HTMLElement | null> }) {
+export function BackMatter({ matter, onMatter, anchor, ...props }: Props & { matter: Matter; onMatter(matter: Matter): void; anchor: RefObject<HTMLElement | null> }) {
   return (
     <section ref={anchor} className="l-matter">
       <div className="l-matter-h">

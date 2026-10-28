@@ -3,6 +3,7 @@ import { LIKED_ID } from "../../../contract";
 import { artists } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
 import type { MiniProps, Skin, SkinProps } from "../../model";
+import { usePlaylistAdd } from "../../playlist-add";
 import { Cassette, HistoryCard, Processor, SearchCard, StatsCard, TapeCard, useSearch } from "./deck";
 import { KNOB, knobOf, knobPatch, knobText, MODES, stationsOf, wrap, type KnobMode, type Mode } from "./dial";
 import { Dial, Group, idleText, Key, LiveClock, Meters, Rotary, Screws, Spectrum, Unit, Vfd, VolumeKnob } from "./panel";
@@ -23,6 +24,7 @@ const LEGEND: [string, string][] = [
   ["S", "Shuffle knob"],
   ["⇧S", "Run shuffle"],
   ["F", "Save"],
+  ["A", "Add to playlist"],
   ["Y ⇧Y", "Link · URI"],
   ["@", "Thread"],
   ["C", "Card"],
@@ -63,6 +65,7 @@ function ReceiverPage(props: SkinProps) {
   const [mode, setMode] = useState<Mode>("tracks");
   const [flash, setFlash] = useState<string | null>(null);
   const search = useSearch(actions);
+  const add = usePlaylistAdd(props);
   const stations = useMemo(() => stationsOf(data.playlists), [data.playlists]);
   const tuned = stations.findIndex((entry) => entry.id === selection.playlist?.id);
   const knob = knobOf(options);
@@ -157,6 +160,9 @@ function ReceiverPage(props: SkinProps) {
         case "f":
           actions.like();
           return true;
+        case "a":
+          add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
+          return true;
         case "y":
           share("link");
           return true;
@@ -179,7 +185,7 @@ function ReceiverPage(props: SkinProps) {
           return false;
       }
     },
-    [data, actions, stations, mode],
+    [data, actions, add, stations, mode],
   );
   useKeys(root, onKey);
 
@@ -196,15 +202,15 @@ function ReceiverPage(props: SkinProps) {
               <Device props={props} />
             </header>
             <div className="r-top">
-              <Vfd data={data} knob={knob} flash={flash} onSeek={actions.seek} onRepeat={actions.cycleRepeat} />
+              <Vfd data={data} add={add} knob={knob} flash={flash} onSeek={actions.seek} onRepeat={actions.cycleRepeat} />
               <Meters player={player} />
             </div>
             <div className="r-lower">
-              <Dial stations={stations} selectedId={selection.playlist?.id ?? null} playingUri={player.context?.uri ?? null} loading={data.playlists === null} onTune={tune} />
+              <Dial stations={stations} add={add} selectedId={selection.playlist?.id ?? null} playingUri={player.context?.uri ?? null} loading={data.playlists === null} onTune={tune} />
               <div className="r-controls">
                 <Group label="Presets">
                   {stations.slice(0, 6).map((station, index) => (
-                    <Key key={station.id} pip lit={index === tuned} className="r-preset" onClick={() => tune(index)} title={station.name}>
+                    <Key key={station.id} pip lit={index === tuned} className="r-preset" onClick={() => tune(index)} title={station.name} {...add.target(station)}>
                       {index + 1}
                     </Key>
                   ))}
@@ -221,6 +227,9 @@ function ReceiverPage(props: SkinProps) {
                   </Key>
                   <Key pip lit={Boolean(player.liked)} onClick={actions.like} kbd="F" disabled={track === null} title={player.liked ? "Remove from Liked Songs" : "Save to Liked Songs"}>
                     Save
+                  </Key>
+                  <Key pip onClick={(event) => add.open(track, event.currentTarget)} kbd="A" disabled={track === null} data-sp-add="" aria-label="Add to a playlist" title="Add to a playlist">
+                    +List
                   </Key>
                 </Group>
                 <Group label="Share">
@@ -246,7 +255,7 @@ function ReceiverPage(props: SkinProps) {
           </div>
         </Unit>
         <Unit>
-          <Processor data={data} actions={actions} source={source?.name ?? "Liked Songs"} onRun={runShuffle} />
+          <Processor data={data} actions={actions} add={add} source={source?.name ?? "Liked Songs"} onRun={runShuffle} />
         </Unit>
         <Unit className="r-deck">
           <div className="r-face r-deck-face">
@@ -263,10 +272,10 @@ function ReceiverPage(props: SkinProps) {
               </div>
             </div>
             <div className="r-jcard">
-              {mode === "tracks" ? <TapeCard data={data} actions={actions} onPlay={playTuned} /> : null}
-              {mode === "stats" ? <StatsCard data={data} actions={actions} onTune={(id) => tune(stations.findIndex((entry) => entry.id === id))} /> : null}
-              {mode === "history" ? <HistoryCard data={data} actions={actions} /> : null}
-              {mode === "search" ? <SearchCard search={search} input={searchInput} actions={actions} onLeave={() => root.current?.focus()} /> : null}
+              {mode === "tracks" ? <TapeCard data={data} actions={actions} add={add} onPlay={playTuned} /> : null}
+              {mode === "stats" ? <StatsCard data={data} actions={actions} add={add} onTune={(id) => tune(stations.findIndex((entry) => entry.id === id))} /> : null}
+              {mode === "history" ? <HistoryCard data={data} actions={actions} add={add} /> : null}
+              {mode === "search" ? <SearchCard search={search} input={searchInput} actions={actions} add={add} onLeave={() => root.current?.focus()} /> : null}
             </div>
             <div className="r-legend r-engrave">
               {LEGEND.map(([keys, what]) => (
@@ -279,12 +288,14 @@ function ReceiverPage(props: SkinProps) {
           </div>
         </Unit>
       </div>
+      {add.picker}
     </div>
   );
 }
 
 function ReceiverMini({ data, actions, palette, close }: MiniProps) {
   const root = useRef<HTMLDivElement>(null);
+  const add = usePlaylistAdd({ data, actions });
   const { player } = data;
   const track = player.track;
   const idle = idleText(player);
@@ -294,13 +305,14 @@ function ReceiverMini({ data, actions, palette, close }: MiniProps) {
       if (event.key === "n") actions.next();
       else if (event.key === "p") actions.previous();
       else if (event.key === "f") actions.like();
+      else if (event.key === "a") add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
       else if (event.key === "o") actions.openPage();
       else if (event.key === "y" && track !== null) actions.copyLink(track);
       else if (event.key === "@" && track !== null) actions.mention(track);
       else return false;
       return true;
     },
-    [data, actions, track],
+    [data, actions, add, track],
   );
   useKeys(root, onKey);
   return (
@@ -308,7 +320,7 @@ function ReceiverMini({ data, actions, palette, close }: MiniProps) {
       <div className="r-wood" data-sp-drag="" title="Drag to move" />
       <div className="r-face">
         <div className="r-glass r-vfd">
-          <button type="button" className="r-mini-title" onClick={actions.openPage} title="Open the Spotify page">
+          <button type="button" className="r-mini-title" onClick={actions.openPage} title="Open the Spotify page, or drag the song onto a playlist" {...add.song(track)}>
             <span className="r-title r-glow">{track?.name ?? idle.title}</span>
             <span className="r-artist r-glow">
               {track === null ? idle.line : artists(track)}
@@ -335,12 +347,16 @@ function ReceiverMini({ data, actions, palette, close }: MiniProps) {
           <Key lit={Boolean(player.liked)} className="r-heart" onClick={actions.like} disabled={track === null} aria-label={player.liked ? "Remove from Liked Songs" : "Save to Liked Songs"}>
             ♥
           </Key>
+          <Key onClick={(event) => add.open(track, event.currentTarget)} disabled={track === null} data-sp-add="" aria-label="Add to a playlist" title="Add to a playlist (a)">
+            +
+          </Key>
           <Key className="r-close" onClick={close} aria-label="Close the mini player">
             ×
           </Key>
         </div>
       </div>
       <div className="r-wood" data-sp-drag="" />
+      {add.picker}
     </div>
   );
 }

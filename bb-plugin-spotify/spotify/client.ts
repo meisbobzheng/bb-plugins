@@ -62,6 +62,7 @@ function friendly(status: number, reason: string | null, message: string | null)
   if (reason !== null && reason in REASONS) return REASONS[reason]!;
   if (status === 404 && message?.toLowerCase().includes("device")) return REASONS.NO_ACTIVE_DEVICE!;
   if (status === 403 && message?.toLowerCase().includes("premium")) return REASONS.PREMIUM_REQUIRED!;
+  if (status === 403 && message?.toLowerCase().includes("scope")) return "Spotify needs a new permission for this. Disconnect and connect Spotify again in the plugin settings.";
   if (status === 403) return `Spotify refused the request${message ? `: ${message}` : ""}.`;
   if (status === 429) return "Spotify is rate limiting requests. Try again in a few seconds.";
   return `Spotify returned ${status}${message ? `: ${message}` : ""}.`;
@@ -232,6 +233,11 @@ export function createClient(options: ClientOptions) {
         return entry.success ? playlistEntryTrack(entry.data) : null;
       });
       return items;
+    },
+
+    async addToPlaylist(playlistId: string, uris: readonly string[]): Promise<string | null> {
+      const json = await request("POST", `/playlists/${encodeURIComponent(playlistId)}/items`, { body: { uris } });
+      return (json as { snapshot_id?: string } | null)?.snapshot_id ?? null;
     },
 
     async search(query: string, myId: string, limit: number): Promise<SearchResult> {

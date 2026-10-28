@@ -3,6 +3,7 @@ import type { Playlist, SearchResult, Track } from "../../../contract";
 import { artists, clock, daysAgo, hours, playlistLength } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
 import { progressAt, upNext, type MiniProps, type Skin, type SkinProps } from "../../model";
+import { usePlaylistAdd, type PlaylistAdd } from "../../playlist-add";
 import { useFrame } from "../../spectrum";
 import { complete, describeOptions, parseCommand, VISUALIZERS, type ConsoleCommand, type Tab, type Visualizer } from "./commands";
 import { AsciiCover, blocksBar, BrailleProgress, sparkline, Spectrum } from "./visuals";
@@ -55,7 +56,7 @@ function Pane({ title, keyHint, extra, focused, className, children }: { title: 
   );
 }
 
-type PlaylistsProps = { props: SkinProps; focused: boolean; cursor: number; filter: string | null; onPick(index: number): void };
+type PlaylistsProps = { props: SkinProps; add: PlaylistAdd; focused: boolean; cursor: number; filter: string | null; onPick(index: number): void };
 
 function PlaylistsPane(playlists: PlaylistsProps) {
   return (
@@ -65,7 +66,7 @@ function PlaylistsPane(playlists: PlaylistsProps) {
   );
 }
 
-function PlaylistsBody({ props, focused, cursor, filter, onPick }: PlaylistsProps) {
+function PlaylistsBody({ props, add, focused, cursor, filter, onPick }: PlaylistsProps) {
   const { data } = props;
   const ul = useRef<HTMLUListElement>(null);
   useEffect(() => {
@@ -79,7 +80,7 @@ function PlaylistsBody({ props, focused, cursor, filter, onPick }: PlaylistsProp
     const playing = data.player.context?.uri === playlist.uri;
     const selected = data.selection.playlist?.id === playlist.id;
     return (
-      <li key={playlist.id} className={`${index === cursor && focused ? "c-cur" : ""} ${playing ? "c-playing" : ""} ${selected ? "c-sel" : ""}`} onClick={() => onPick(index)}>
+      <li key={playlist.id} {...add.target(playlist)} className={`${index === cursor && focused ? "c-cur" : ""} ${playing ? "c-playing" : ""} ${selected ? "c-sel" : ""}`} onClick={() => onPick(index)}>
         <span className="c-y">{index === cursor ? "▸" : ""}</span>
         <span className="c-name">{playlist.name}</span>
         <span className="c-d">{playlist.trackCount.toLocaleString()}</span>
@@ -148,7 +149,7 @@ function Times({ data, flags = true }: { data: SkinProps["data"]; flags?: boolea
   );
 }
 
-function Transport({ data, actions }: { data: SkinProps["data"]; actions: SkinProps["actions"] }) {
+function Transport({ data, actions, add }: { data: SkinProps["data"]; actions: SkinProps["actions"]; add: PlaylistAdd }) {
   const { isPlaying, liked } = data.player;
   return (
     <span className="c-transport" onMouseDown={(event) => event.preventDefault()}>
@@ -164,11 +165,14 @@ function Transport({ data, actions }: { data: SkinProps["data"]; actions: SkinPr
       <button type="button" className={`c-btn ${liked ? "c-y" : ""}`} onClick={actions.like} aria-pressed={Boolean(liked)} aria-label="Save to Liked Songs" title="Save to Liked Songs (f)">
         {liked ? "♥" : "♡"}
       </button>
+      <button type="button" className="c-btn" data-sp-add="" onClick={(event) => add.open(data.player.track, event.currentTarget)} disabled={data.player.track === null} aria-label="Add to a playlist" title="Add to a playlist (a)">
+        +
+      </button>
     </span>
   );
 }
 
-function NowStrip({ props, tight }: { props: SkinProps; tight: boolean }) {
+function NowStrip({ props, add, tight }: { props: SkinProps; add: PlaylistAdd; tight: boolean }) {
   const { data, actions } = props;
   const { player } = data;
   const track = player.track;
@@ -176,13 +180,17 @@ function NowStrip({ props, tight }: { props: SkinProps; tight: boolean }) {
   return (
     <Pane title="now playing" className="c-strip" extra={<DeviceTag player={player} />}>
       <div className="c-np">
-        {tight ? null : <AsciiCover player={player} demo={data.demo} cols={14} rows={7} />}
+        {tight ? null : (
+          <span {...add.song(track)}>
+            <AsciiCover player={player} demo={data.demo} cols={14} rows={7} />
+          </span>
+        )}
         <div className="c-meta">
           <div className="c-head">
-            <span className="c-trunc">
+            <span className="c-trunc" {...add.song(track)}>
               <b className="c-title">{track?.name ?? "—"}</b> <span className="c-artist">{artistLine(player)}</span>
             </span>
-            <Transport data={data} actions={actions} />
+            <Transport data={data} actions={actions} add={add} />
           </div>
           {tight ? null : (
             <div className="c-d c-trunc">
@@ -200,7 +208,7 @@ function NowStrip({ props, tight }: { props: SkinProps; tight: boolean }) {
   );
 }
 
-function NowPlaying({ props }: { props: SkinProps }) {
+function NowPlaying({ props, add }: { props: SkinProps; add: PlaylistAdd }) {
   const { data, actions } = props;
   const { player } = data;
   const track = player.track;
@@ -208,11 +216,15 @@ function NowPlaying({ props }: { props: SkinProps }) {
   return (
     <Pane title="now playing" extra={<DeviceTag player={player} />}>
       <div className="c-np">
-        <AsciiCover player={player} demo={data.demo} />
+        <span {...add.song(track)}>
+          <AsciiCover player={player} demo={data.demo} />
+        </span>
         <div className="c-meta">
           <div className="c-d">{contextLine(data)}</div>
-          <div className="c-title">{track?.name ?? "—"}</div>
-          <div className="c-artist">{artistLine(player)}</div>
+          <div {...add.song(track)}>
+            <div className="c-title">{track?.name ?? "—"}</div>
+            <div className="c-artist">{artistLine(player)}</div>
+          </div>
           {track === null ? null : (
             <table className="c-kv">
               <tbody>
@@ -226,6 +238,14 @@ function NowPlaying({ props }: { props: SkinProps }) {
                 <tr>
                   <td>saved</td>
                   <td>{player.liked ? <span className="c-y">♥ liked songs</span> : <span className="c-d">♡ not saved · f</span>}</td>
+                </tr>
+                <tr>
+                  <td>add</td>
+                  <td>
+                    <button type="button" className="c-add c-d" data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} title="Add to a playlist (a)">
+                      + to a playlist · a <span className="c-f">or drag the song</span>
+                    </button>
+                  </td>
                 </tr>
                 {track.url === null ? null : (
                   <tr>
@@ -290,7 +310,7 @@ function UpNextBody({ props, limit }: { props: SkinProps; limit?: number }) {
   );
 }
 
-function TracksTable({ props, tracks, cursor, focused, album, share, onPick, emptyText }: { props: SkinProps; tracks: Track[]; cursor: number; focused: boolean; album: boolean; share: boolean; onPick(index: number): void; emptyText: string }) {
+function TracksTable({ props, add, tracks, cursor, focused, album, share, onPick, emptyText }: { props: SkinProps; add: PlaylistAdd; tracks: Track[]; cursor: number; focused: boolean; album: boolean; share: boolean; onPick(index: number): void; emptyText: string }) {
   const current = props.data.player.track?.id;
   const list = useRef<HTMLTableSectionElement>(null);
   useEffect(() => {
@@ -306,6 +326,7 @@ function TracksTable({ props, tracks, cursor, focused, album, share, onPick, emp
         {album ? <col style={{ width: "24%" }} /> : null}
         <col style={{ width: 60 }} />
         {share ? <col style={{ width: 230 }} /> : null}
+        <col style={{ width: 26 }} />
       </colgroup>
       <thead>
         <tr>
@@ -315,17 +336,34 @@ function TracksTable({ props, tracks, cursor, focused, album, share, onPick, emp
           {album ? <th>album</th> : null}
           <th>time</th>
           {share ? <th>share</th> : null}
+          <th />
         </tr>
       </thead>
       <tbody ref={list}>
         {tracks.map((track, index) => (
-          <tr key={`${track.id}-${index}`} className={`${index === cursor && focused ? "c-cur" : ""} ${track.id === current ? "c-now" : ""}`} onClick={() => onPick(index)} onDoubleClick={() => onPick(index)}>
+          <tr key={`${track.id}-${index}`} {...add.song(track)} className={`${index === cursor && focused ? "c-cur" : ""} ${track.id === current ? "c-now" : ""}`} onClick={() => onPick(index)} onDoubleClick={() => onPick(index)}>
             <td className="c-n">{track.id === current ? "▶" : String(index + 1).padStart(2, "0")}</td>
             <td>{track.name}</td>
             <td>{artists(track)}</td>
             {album ? <td>{track.album.name}</td> : null}
             <td className="c-n">{clock(track.durationMs)}</td>
-            {share ? <td className="c-hint">{index === cursor && focused ? "yy link · @ thread · C card · q queue" : ""}</td> : null}
+            {share ? <td className="c-hint">{index === cursor && focused ? "yy link · @ thread · a add · q queue" : ""}</td> : null}
+            <td>
+              <button
+                type="button"
+                className="c-add c-row-add"
+                data-sp-add=""
+                onClick={(event) => {
+                  event.stopPropagation();
+                  add.open(track, event.currentTarget);
+                }}
+                onDoubleClick={(event) => event.stopPropagation()}
+                aria-label={`Add ${track.name} to a playlist`}
+                title="Add to a playlist (a)"
+              >
+                +
+              </button>
+            </td>
           </tr>
         ))}
       </tbody>
@@ -400,6 +438,7 @@ function ConsolePage(props: SkinProps) {
   const [visualizer, setVisualizer] = useState<Visualizer>("bars");
   const [search, setSearch] = useState<SearchResult | null>(null);
   const [help, setHelp] = useState(false);
+  const add = usePlaylistAdd(props);
   const lastY = useRef(0);
   const layout = layoutFor(useSize(root));
   const tabs = layout === "full" || layout === "wide" ? TABS.filter((name) => name !== "upnext") : TABS;
@@ -595,6 +634,9 @@ function ConsolePage(props: SkinProps) {
         case "C":
           share("card", subject);
           return true;
+        case "a":
+          add.open(subject, root.current?.querySelector<HTMLElement>(cursorTrack ? ".c-cur [data-sp-add]" : "[data-sp-add]") ?? root.current);
+          return true;
         case "q":
           if (cursorTrack) {
             actions.queue(cursorTrack);
@@ -645,7 +687,7 @@ function ConsolePage(props: SkinProps) {
           return false;
       }
     },
-    [help, filter, data, actions, focus, cursor, playlists, bottomTracks, subject, cursorTrack, tabs, layout],
+    [help, filter, data, actions, add, focus, cursor, playlists, bottomTracks, subject, cursorTrack, tabs, layout],
   );
   useKeys(root, onKey);
 
@@ -660,7 +702,7 @@ function ConsolePage(props: SkinProps) {
   const stack = layout === "stack";
   const listing = stack && focus === "playlists";
   const pickTab = (name: Tab) => (setTab(name), setFocus("bottom"));
-  const playlistsProps: PlaylistsProps = { props, focused: focus === "playlists", cursor: cursor.playlists, filter, onPick: (index) => (setFocus("playlists"), pickPlaylist(index)) };
+  const playlistsProps: PlaylistsProps = { props, add, focused: focus === "playlists", cursor: cursor.playlists, filter, onPick: (index) => (setFocus("playlists"), pickPlaylist(index)) };
 
   return (
     <div ref={root} tabIndex={0} data-layout={layout} className={`sp-console c-${palette}${full ? "" : " c-compact"}`} onMouseDown={(event) => !isTyping(event.target) && event.currentTarget.focus({ preventScroll: true })}>
@@ -668,7 +710,7 @@ function ConsolePage(props: SkinProps) {
         {full ? (
           <>
             <PlaylistsPane {...playlistsProps} />
-            <NowPlaying props={props} />
+            <NowPlaying props={props} add={add} />
             <UpNext props={props} />
             <Pane title="spectrum" keyHint="v" className="c-wide" extra={<span className="c-d"> · {visualizer}</span>}>
               <Spectrum player={data.player} mode={visualizer} />
@@ -676,7 +718,7 @@ function ConsolePage(props: SkinProps) {
           </>
         ) : (
           <>
-            <NowStrip props={props} tight={stack} />
+            <NowStrip props={props} add={add} tight={stack} />
             {stack ? null : <PlaylistsPane {...playlistsProps} />}
           </>
         )}
@@ -700,7 +742,7 @@ function ConsolePage(props: SkinProps) {
           {full ? null : (
             <div className="c-tabs" role="tablist">
               {stack ? (
-                <button type="button" role="tab" aria-selected={listing} className={listing ? "c-on" : ""} onClick={() => setFocus("playlists")}>
+                <button type="button" role="tab" aria-selected={listing} className={listing ? "c-on" : ""} onClick={() => setFocus("playlists")} {...add.spring(() => setFocus("playlists"))}>
                   [1] playlists
                 </button>
               ) : null}
@@ -721,6 +763,7 @@ function ConsolePage(props: SkinProps) {
             ) : (
               <TracksTable
                 props={props}
+                add={add}
                 tracks={bottomTracks}
                 cursor={cursor.bottom}
                 focused={focus === "bottom"}
@@ -793,6 +836,7 @@ function ConsolePage(props: SkinProps) {
         )}
       </div>
       {help ? <Help tabs={tabs} spectrum={full} /> : null}
+      {add.picker}
     </div>
   );
 }
@@ -812,6 +856,7 @@ function Help({ tabs, spectrum }: { tabs: Tab[]; spectrum: boolean }) {
     ["@", "mention in thread"],
     ["C", "share card"],
     ["q", "queue song"],
+    ["a", "add to a playlist (or drag a song onto one)"],
     ["R  e", "smart shuffle / edit flags"],
     ["/", "filter playlists"],
     ["s", "search spotify"],
@@ -842,6 +887,7 @@ function Help({ tabs, spectrum }: { tabs: Tab[]; spectrum: boolean }) {
 
 function ConsoleMini({ data, actions, palette, close }: MiniProps) {
   const root = useRef<HTMLDivElement>(null);
+  const add = usePlaylistAdd({ data, actions });
   const [, tick] = useState(0);
   useFrame(() => tick((value) => value + 1), data.player.isPlaying, 2);
   const lastY = useRef(0);
@@ -852,6 +898,7 @@ function ConsoleMini({ data, actions, palette, close }: MiniProps) {
       if (event.key === "h") actions.previous();
       else if (event.key === "l") actions.next();
       else if (event.key === "f") actions.like();
+      else if (event.key === "a") add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
       else if (event.key === "@" && track) actions.mention(track);
       else if (event.key === "o") actions.openPage();
       else if (event.key === "y" && track) {
@@ -861,7 +908,7 @@ function ConsoleMini({ data, actions, palette, close }: MiniProps) {
       else return false;
       return true;
     },
-    [data, actions, track, close],
+    [data, actions, add, track, close],
   );
   useKeys(root, onKey);
   return (
@@ -872,7 +919,7 @@ function ConsoleMini({ data, actions, palette, close }: MiniProps) {
       <button type="button" className="c-mini-btn" onClick={actions.toggle} aria-label={data.player.isPlaying ? "Pause" : "Play"}>
         {data.player.isPlaying ? "▶" : "❚❚"}
       </button>
-      <button type="button" className="c-mini-title c-trunc" onClick={actions.openPage} title="Open the Spotify page">
+      <button type="button" className="c-mini-title c-trunc" onClick={actions.openPage} title="Open the Spotify page, or drag the song onto a playlist" {...add.song(track)}>
         <b className="c-y">{track?.name ?? "nothing playing"}</b> <span className="c-b2">{track ? artists(track) : ""}</span>
       </button>
       <Spectrum player={data.player} mode="bars" mini />
@@ -880,9 +927,13 @@ function ConsoleMini({ data, actions, palette, close }: MiniProps) {
         {clock(progressAt(data.player, Date.now()))}/{clock(track?.durationMs ?? 0)}
       </span>
       <span className="c-f c-mini-keys">h ◂ space ▸ l · yy · @ · f{data.player.liked ? " ♥" : ""}</span>
+      <button type="button" className="c-mini-btn" data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} disabled={track === null} aria-label="Add to a playlist" title="Add to a playlist (a)">
+        +
+      </button>
       <button type="button" className="c-mini-btn c-f" onClick={close} aria-label="Close the mini player">
         ×
       </button>
+      {add.picker}
     </div>
   );
 }

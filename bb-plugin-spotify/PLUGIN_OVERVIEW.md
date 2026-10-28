@@ -4,6 +4,8 @@ Spotify in bb, with a mini player you can open anywhere with ⌘⇧S.
 
 - **Playback control** for the Spotify app on this Mac or any of your devices:
   playlists, Liked Songs, search, seek, volume, and save.
+- **Add to playlists** with a + button on any song, or by dragging the song
+  onto a playlist, in every look, size, and the mini player.
 - **Smart shuffle** that spreads out artists, favors songs you haven't heard
   lately, drops songs you usually skip, or follows a vibe you describe, ordered
   by your local `claude` CLI.

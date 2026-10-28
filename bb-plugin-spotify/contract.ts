@@ -248,6 +248,10 @@ export const rpcContract = defineRpcContract({
   search: { input: z.object({ query: z.string().trim().min(1).max(200) }), output: searchResultSchema },
   queue_get: { input: z.null(), output: z.object({ tracks: z.array(trackSchema) }) },
   queue_add: { input: z.object({ uri: spotifyUri }), output: z.object({ ok: z.boolean() }) },
+  playlist_add: {
+    input: z.object({ playlistId: z.string().min(1).max(200), track: trackSchema, allowDuplicate: z.boolean() }),
+    output: z.object({ added: z.boolean(), playlist: playlistSchema }),
+  },
   shuffle_options_get: { input: z.null(), output: shuffleOptionsSchema.nullable() },
   shuffle_start: { input: shuffleOptionsSchema, output: shuffleSessionSchema },
   shuffle_session_get: { input: z.null(), output: shuffleSessionSchema.nullable() },

@@ -3,6 +3,7 @@ import { LIKED_ID, PALETTE_NAMES, PALETTES, type SearchResult, type Track } from
 import { artists } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
 import { progressAt, type MiniProps, type Skin, type SkinProps } from "../../model";
+import { usePlaylistAdd } from "../../playlist-add";
 import { Box, Kc, LibraryList, NowPlaying, ordered, ShareButtons, SharePreview, Spectrum, StatsBox, StatsStrip, TrackTable, tracksNote, UpNext, type Share, type Size, type TrackRows } from "./boxes";
 import { clip } from "./pixels";
 import { City, Clock, Cover, Icon, Pixels, Seek, VIS_MODES, type VisMode } from "./visuals";
@@ -23,6 +24,7 @@ const HELP: [string, string][] = [
   ["f", "like ♥"],
   ["s", "search · esc leaves"],
   ["q", "queue the row"],
+  ["a", "add to playlist"],
   ["R", "reroll smart shuffle"],
   ["x  r", "shuffle · repeat"],
   ["y", "copy link"],
@@ -194,6 +196,7 @@ function VoxelPage(props: SkinProps) {
   const [results, setResults] = useState<SearchResult | null>(null);
   const [message, setMessage] = useState<Message>(null);
   const [pop, setPop] = useState(0);
+  const add = usePlaylistAdd(props);
   const playlists = useMemo(() => ordered(data.playlists), [data.playlists]);
   const track = player.track;
   const active: Focus = full ? focus : tab === 2 ? "library" : "tracks";
@@ -289,6 +292,12 @@ function VoxelPage(props: SkinProps) {
     if (!player.liked) setPop(Date.now());
     actions.like();
     say(player.liked ? "removed from liked songs" : "saved to liked songs");
+  };
+
+  const addTo = () => {
+    const row = active === "tracks" && (full || tab === 0) ? rows.tracks[cursor.tracks] : undefined;
+    if (row === undefined && track === null) return say("nothing playing to add");
+    add.open(row ?? track, root.current?.querySelector<HTMLElement>(row ? "tr.v-sel [data-sp-add]" : ".v-tp [data-sp-add]") ?? root.current);
   };
 
   const reroll = () => {
@@ -410,6 +419,9 @@ function VoxelPage(props: SkinProps) {
         case "q":
           queueTrack(active === "tracks" ? rows.tracks[cursor.tracks] : undefined);
           return true;
+        case "a":
+          addTo();
+          return true;
         case "R":
           press(root.current, "R");
           reroll();
@@ -462,7 +474,7 @@ function VoxelPage(props: SkinProps) {
           return false;
       }
     },
-    [help, menu, data, actions, player, cursor, active, rows, full, mode, results, playlists],
+    [help, menu, data, actions, add, player, cursor, active, rows, full, tab, mode, results, playlists],
   );
   useKeys(root, onKey);
 
@@ -494,6 +506,7 @@ function VoxelPage(props: SkinProps) {
   const tracks = (
     <TrackTable
       props={props}
+      add={add}
       rows={rows}
       cursor={cursor.tracks}
       focused={active === "tracks"}
@@ -509,6 +522,7 @@ function VoxelPage(props: SkinProps) {
   const library = (grid: boolean) => (
     <LibraryList
       props={props}
+      add={add}
       playlists={playlists}
       cursor={cursor.library}
       focused={active === "library"}
@@ -572,7 +586,7 @@ function VoxelPage(props: SkinProps) {
             </Box>
           </aside>
           <main className="v-mid">
-            <NowPlaying props={props} size={size} mode={mode} pop={pop} />
+            <NowPlaying props={props} add={add} size={size} mode={mode} pop={pop} />
             <Spectrum props={props} mode={mode} onMode={setMode} />
             <Box title={results ? "SEARCH" : (data.selection.playlist?.name ?? "TRACKS")} note={results ? `"${query}"` : tracksNote(props)} hint={tracksHint} focus={active === "tracks"} className="v-tracks">
               <div className="v-scroll">{tracks}</div>
@@ -580,20 +594,20 @@ function VoxelPage(props: SkinProps) {
           </main>
           <aside className="v-col">
             <Box title="UP NEXT" hint={<small className="v-hi">smart shuffle</small>} className="v-upnext">
-              <UpNext props={props} compact={false} onReroll={reroll} onLeave={rest} />
+              <UpNext props={props} add={add} compact={false} onReroll={reroll} onLeave={rest} />
             </Box>
             <Box title="SHARE" note="this track" className="v-share">
               <ShareButtons onShare={share} />
-              <SharePreview track={track} demo={data.demo} />
+              <SharePreview add={add} track={track} demo={data.demo} />
             </Box>
           </aside>
         </div>
       ) : (
         <>
-          <NowPlaying props={props} size={size} mode={mode} pop={pop} />
+          <NowPlaying props={props} add={add} size={size} mode={mode} pop={pop} />
           <nav className="v-tabs" role="tablist">
             {TABS.map((name, index) => (
-              <button key={name} type="button" role="tab" aria-selected={index === tab} className={`v-btn ${index === tab ? "v-on" : ""}`} onClick={() => setTab(index)}>
+              <button key={name} type="button" role="tab" aria-selected={index === tab} className={`v-btn ${index === tab ? "v-on" : ""}`} onClick={() => setTab(index)} {...(index === 2 ? add.spring(() => setTab(2)) : {})}>
                 <span className="v-n">{index + 1}</span>
                 {size === "tight" && index === 3 ? "share" : name}
               </button>
@@ -618,7 +632,7 @@ function VoxelPage(props: SkinProps) {
                   {tracks}
                 </>
               ) : tab === 1 ? (
-                <UpNext props={props} compact onReroll={reroll} onLeave={rest} />
+                <UpNext props={props} add={add} compact onReroll={reroll} onLeave={rest} />
               ) : tab === 2 ? (
                 library(true)
               ) : (
@@ -633,6 +647,7 @@ function VoxelPage(props: SkinProps) {
       )}
       <Footer size={size} message={message} />
       {help ? <Help onClose={() => setHelp(false)} /> : null}
+      {add.picker}
     </div>
   );
 }
@@ -641,6 +656,7 @@ function VoxelMini({ data, actions, palette, close }: MiniProps) {
   const root = useRef<HTMLDivElement>(null);
   const { player } = data;
   const track = player.track;
+  const add = usePlaylistAdd({ data, actions });
   const onKey = useCallback(
     (event: KeyboardEvent) => {
       if (transportKey(event, data, actions)) return true;
@@ -649,12 +665,13 @@ function VoxelMini({ data, actions, palette, close }: MiniProps) {
       else if (event.key === "f" && track !== null) actions.like();
       else if (event.key === "y" && track !== null) actions.copyLink(track);
       else if (event.key === "@" && track !== null) actions.mention(track);
+      else if (event.key === "a") add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
       else if (event.key === "o") actions.openPage();
       else if (event.key === "q") close();
       else return false;
       return true;
     },
-    [data, actions, track, close],
+    [data, actions, add, track, close],
   );
   useKeys(root, onKey);
   const { duck } = player;
@@ -664,7 +681,7 @@ function VoxelMini({ data, actions, palette, close }: MiniProps) {
         <Cover track={track} demo={data.demo} scale={3} />
       </span>
       <div className="v-mbody">
-        <button type="button" className="v-mtitle" onClick={actions.openPage} title="Open the Spotify page">
+        <button type="button" className="v-mtitle" onClick={actions.openPage} title="Open the Spotify page, or drag the song onto a playlist" {...add.song(track)}>
           <Pixels text={clip(track?.name ?? "No disc", 17)} shadow />
         </button>
         <div className="v-sub v-trunc">
@@ -701,6 +718,9 @@ function VoxelMini({ data, actions, palette, close }: MiniProps) {
         <button type="button" className={`v-btn v-xs ${player.liked ? "v-on" : ""}`} onClick={actions.like} disabled={track === null} aria-label={player.liked ? "Remove from Liked Songs" : "Save to Liked Songs"} title="Like (f)">
           <Icon name={player.liked ? "heart" : "heart0"} />
         </button>
+        <button type="button" className="v-btn v-xs" data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} disabled={track === null} aria-label="Add to a playlist" title="Add to a playlist (a)">
+          <Icon name="addto" />
+        </button>
         <button type="button" className="v-btn v-xs v-close" onClick={close} aria-label="Close the mini player" title="Close (q)">
           <Icon name="close" />
         </button>
@@ -714,6 +734,7 @@ function VoxelMini({ data, actions, palette, close }: MiniProps) {
           </span>
         </div>
       ) : null}
+      {add.picker}
     </div>
   );
 }

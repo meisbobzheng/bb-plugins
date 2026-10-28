@@ -176,16 +176,19 @@
 .sp-liner .l-side-h b { font: italic 400 24px/1 var(--l-display); color: var(--l-display-ink); }
 .sp-liner .l-side-h span { font-size: 11px; color: var(--l-soft); }
 .sp-liner .l-tracks { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 28px; }
-.sp-liner .l-tracks li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 4px; padding: 5px 0; border-bottom: 1px solid var(--l-hair); font: 14px/1.25 var(--l-text); break-inside: avoid; cursor: pointer; }
+.sp-liner .l-tracks li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: 4px; padding: 5px 0; border-bottom: 1px solid var(--l-hair); font: 14px/1.25 var(--l-text); break-inside: avoid; cursor: pointer; }
 .sp-liner .l-tracks li:hover { background: var(--l-tint); }
 .sp-liner .l-tracks .l-i, .sp-liner .l-ranked .l-i { font: 600 9px/1.9 var(--l-sans); letter-spacing: 0.04em; color: var(--l-soft); }
 .sp-liner .l-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-liner .l-nm em { font-size: 13px; font-style: italic; color: var(--l-soft); }
 .sp-liner .l-tracks .l-d, .sp-liner .l-ranked .l-d { font-size: 13px; color: var(--l-soft); }
 .sp-liner .l-tracks li.l-on .l-nm, .sp-liner .l-tracks li.l-on .l-i { color: var(--l-accent-ink); }
-.sp-liner .l-index .l-tracks li { grid-template-columns: 26px minmax(0, 1fr) auto auto; }
+.sp-liner .l-index .l-tracks li { grid-template-columns: 26px minmax(0, 1fr) auto auto auto; }
 .sp-liner .l-queue { margin-left: 8px; font: 600 9px/1.9 var(--l-sans); letter-spacing: 0.18em; text-transform: uppercase; color: var(--l-soft); }
 .sp-liner .l-queue:hover { color: var(--l-accent-ink); }
+.sp-liner .l-add { grid-column: -2; visibility: hidden; padding: 0 2px; font: 600 13px/1.2 var(--l-sans); color: var(--l-accent-ink); }
+.sp-liner .l-add:hover { color: var(--l-ink); }
+.sp-liner li:hover > .l-add, .sp-liner .l-add:focus-visible { visibility: visible; }
 .sp-liner .l-more { margin-top: 12px; font: italic 14px/1.3 var(--l-text); }
 
 .sp-liner .l-box { position: relative; margin-bottom: 16px; padding: 12px 14px; border: 1px solid var(--l-line); }
@@ -208,7 +211,7 @@
 .sp-liner .l-source { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--l-soft); }
 .sp-liner .l-source i { font: italic 12px/1 var(--l-text); color: var(--l-ink); }
 .sp-liner .l-upnext { list-style: none; margin: 10px 0 0; padding: 0; font: 13px/1.25 var(--l-text); }
-.sp-liner .l-upnext li { display: grid; grid-template-columns: 14px 1fr; gap: 4px; padding: 5px 0; border-top: 1px dotted var(--l-dot); }
+.sp-liner .l-upnext li { display: grid; grid-template-columns: 14px 1fr auto; gap: 4px; padding: 5px 0; border-top: 1px dotted var(--l-dot); }
 .sp-liner .l-upnext li > span:first-child { font: 600 9px/1.7 var(--l-sans); color: var(--l-soft); }
 .sp-liner .l-upnext small { display: block; margin-top: 1px; font-size: 11px; font-style: italic; color: var(--l-accent-ink); }
 .sp-liner .l-cite { margin: 0 0 10px; padding-left: 10px; border-left: 2px solid var(--l-accent); font: 13px/1.45 var(--l-text); }
@@ -244,7 +247,7 @@
 .sp-liner .l-hours i.l-peak { width: 3px; background: var(--l-accent); }
 .sp-liner .l-hour-axis { display: flex; justify-content: space-between; margin-top: 4px; font: 11px/1 var(--l-text); color: var(--l-soft); }
 .sp-liner .l-ranked { list-style: none; margin: 0; padding: 0; }
-.sp-liner .l-ranked li { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 4px; padding: 5px 0 6px; border-bottom: 1px solid var(--l-hair); font: 14px/1.2 var(--l-text); }
+.sp-liner .l-ranked li { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 4px; padding: 5px 0 6px; border-bottom: 1px solid var(--l-hair); font: 14px/1.2 var(--l-text); }
 .sp-liner .l-ranked li[title] { cursor: pointer; }
 .sp-liner .l-ranked li[title]:hover { background: var(--l-tint); }
 .sp-liner .l-ranked li i { position: absolute; left: 22px; bottom: -1px; height: 1px; background: var(--l-accent); }
@@ -253,7 +256,7 @@
 .sp-liner .l-dust li:hover i { text-decoration: underline; text-underline-offset: 3px; }
 .sp-liner .l-dust i { color: var(--l-ink); }
 .sp-liner .l-history { list-style: none; margin: 0; padding: 0; columns: 3; column-gap: 28px; }
-.sp-liner .l-history li { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--l-hair); font: 14px/1.25 var(--l-text); break-inside: avoid; cursor: pointer; }
+.sp-liner .l-history li { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto auto; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--l-hair); font: 14px/1.25 var(--l-text); break-inside: avoid; cursor: pointer; }
 .sp-liner .l-history li:hover { background: var(--l-tint); }
 .sp-liner .l-when { font-size: 11px; line-height: 1.6; color: var(--l-soft); }
 .sp-liner .l-skip { font: italic 12px/1.5 var(--l-text); color: var(--l-accent-ink); }

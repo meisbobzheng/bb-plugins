@@ -206,7 +206,9 @@
 .sp-voxel .v-tl td.v-n, .sp-voxel .v-tl td.v-tm, .sp-voxel .v-tl td.v-al { color: var(--v-dim); }
 .sp-voxel .v-tl tr.v-cur td.v-n, .sp-voxel .v-tl tr.v-cur td.v-tm, .sp-voxel .v-tl tr.v-cur td.v-al, .sp-voxel .v-tl tr.v-cur .v-lk { color: var(--v-on-hi); }
 .sp-voxel .v-tl td.v-q { padding: 0 2px; overflow: visible; }
-.sp-voxel .v-tl td.v-q .v-btn { height: 16px; min-width: 18px; box-shadow: var(--v-b1), 2px 2px 0 0 var(--v-shade); }
+.sp-voxel .v-tl td.v-q .v-btn, .sp-voxel .v-qi .v-btn { height: 16px; min-width: 18px; box-shadow: var(--v-b1), 2px 2px 0 0 var(--v-shade); }
+.sp-voxel .v-add { visibility: hidden; }
+.sp-voxel .v-tl tr:hover .v-add, .sp-voxel .v-tl tr.v-sel .v-add, .sp-voxel .v-qi:hover .v-add, .sp-voxel .v-add:focus-visible { visibility: visible; }
 
 .sp-voxel .v-vibe { display: flex; flex: none; align-items: center; gap: 6px; min-width: 0; height: 26px; padding: 0 8px; font-size: 11px; background: var(--v-bg); box-shadow: inset 0 0 0 2px var(--v-line); }
 .sp-voxel .v-vibe:focus-within { box-shadow: inset 0 0 0 2px var(--v-hi); }
@@ -218,7 +220,7 @@
 .sp-voxel .v-tg.v-on { color: var(--v-ink); }
 .sp-voxel .v-tg.v-on i { background: var(--v-hi); box-shadow: inset 0 0 0 2px var(--v-line), inset 0 0 0 3px var(--v-surf); }
 .sp-voxel .v-queue { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-.sp-voxel .v-qi { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 4px; padding: 6px 0 5px; }
+.sp-voxel .v-qi { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 4px; padding: 6px 0 5px; }
 .sp-voxel .v-qi.v-enter { animation: v-drop 0.36s steps(4) both; }
 .sp-voxel .v-qi + .v-qi { background: linear-gradient(90deg, var(--v-line) 50%, transparent 0) 0 0 / 4px 2px repeat-x; }
 @keyframes v-drop { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }

@@ -4,6 +4,7 @@ import { useArt } from "../../art";
 import { artists } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
 import { upNext, type MiniProps, type Skin, type SkinProps } from "../../model";
+import { usePlaylistAdd, type PlaylistAdd } from "../../playlist-add";
 import { Doodle, DoodleFor, Icon, Tick, type IconName } from "./doodles";
 import { Notebook, TABS, type Finder, type Tab } from "./Notebook";
 import { fillOf, stepDays, stuck, vars } from "./stickers";
@@ -30,6 +31,7 @@ const KEYS: [string, string][] = [
   ["y", "link"],
   ["@", "thread"],
   ["c", "card"],
+  ["a", "add to mixtape"],
   ["1–4", "pages"],
   ["/", "search"],
   ["+ −", "volume"],
@@ -63,7 +65,7 @@ function Keys() {
   );
 }
 
-function Shelf({ props, playlists, cursor, onPick }: { props: SkinProps; playlists: Playlist[]; cursor: number | null; onPick(index: number): void }) {
+function Shelf({ props, add, playlists, cursor, onPick }: { props: SkinProps; add: PlaylistAdd; playlists: Playlist[]; cursor: number | null; onPick(index: number): void }) {
   const { data, actions } = props;
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -75,6 +77,7 @@ function Shelf({ props, playlists, cursor, onPick }: { props: SkinProps; playlis
     return (
       <button
         key={playlist.id}
+        {...add.target(playlist)}
         type="button"
         className={`k-label ${playlist.readable ? "" : "k-ticket"} ${selected ? "k-pressed" : ""} ${index === cursor ? "k-cursor" : ""}`}
         style={stuck(playlist.name)}
@@ -150,7 +153,7 @@ function NoDevice({ onLaunch }: { onLaunch(): void }) {
   );
 }
 
-function Stage({ props, onShare }: { props: SkinProps; onShare(how: Share): void }) {
+function Stage({ props, add, onShare }: { props: SkinProps; add: PlaylistAdd; onShare(how: Share): void }) {
   const { data, actions } = props;
   const { player } = data;
   const track = player.track;
@@ -163,7 +166,9 @@ function Stage({ props, onShare }: { props: SkinProps; onShare(how: Share): void
     <section className={`k-stage k-stk ${spinning ? "k-on" : ""}`}>
       {player.duck.active ? <Duck duck={player.duck} /> : null}
       <div className="k-np">
-        <Turntable player={player} art={track === null ? null : art} />
+        <div className="k-cover" {...add.song(track)}>
+          <Turntable player={player} art={track === null ? null : art} />
+        </div>
         <div className="k-meta">
           <div className="k-kicker">
             <span>{track === null ? "the turntable is quiet" : `${spinning ? "now spinning" : "paused"}${from} ↓`}</span>
@@ -182,7 +187,7 @@ function Stage({ props, onShare }: { props: SkinProps; onShare(how: Share): void
             </>
           ) : (
             <>
-              <span className="k-tape k-title" title={track.name}>
+              <span className="k-tape k-title" title={track.name} {...add.song(track)}>
                 {track.name}
               </span>
               <div className="k-artist k-trunc">{artists(track)}</div>
@@ -216,6 +221,9 @@ function Stage({ props, onShare }: { props: SkinProps; onShare(how: Share): void
                 aria-label={player.liked ? "Remove from Liked Songs" : "Save to Liked Songs"}
               >
                 <Icon name="heart" />
+              </button>
+              <button type="button" className="k-candy" style={vars({ "--fill": "var(--butter)" })} data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} disabled={track === null} aria-label="Add to a playlist" title="Add to a playlist (a)">
+                <Icon name="addto" />
               </button>
               <VolumeDial volume={volume} onChange={actions.setVolume} />
             </div>
@@ -313,7 +321,7 @@ function Recipe({ props, onShake, onLeave }: { props: SkinProps; onShake(): void
   );
 }
 
-function UpNext({ props }: { props: SkinProps }) {
+function UpNext({ props, add }: { props: SkinProps; add: PlaylistAdd }) {
   const upcoming = upNext(props.data).slice(0, 6);
   return (
     <section className="k-upnext k-stk">
@@ -323,7 +331,7 @@ function UpNext({ props }: { props: SkinProps }) {
       ) : (
         <div className="k-next-list">
           {upcoming.map((entry, index) => (
-            <div key={`${entry.track.id}-${index}`} className="k-next" style={stuck(entry.track.id, 1.2)}>
+            <div key={`${entry.track.id}-${index}`} className="k-next" style={stuck(entry.track.id, 1.2)} {...add.song(entry.track)}>
               <span className="k-next-n" style={vars({ "--fill": fillOf(entry.track.name) })}>
                 {index + 1}
               </span>
@@ -334,6 +342,9 @@ function UpNext({ props }: { props: SkinProps }) {
                 </span>
                 {entry.reason === null ? null : <span className="k-next-why k-trunc">↳ {entry.reason}</span>}
               </span>
+              <button type="button" className="k-pill" style={vars({ "--fill": "var(--butter)" })} data-sp-add="" onClick={(event) => add.open(entry.track, event.currentTarget)} aria-label={`Add ${entry.track.name} to a playlist`}>
+                <Icon name="addto" />
+              </button>
             </div>
           ))}
         </div>
@@ -353,6 +364,7 @@ function PastelPage(props: SkinProps) {
   const [result, setResult] = useState<SearchResult | null>(null);
   const [status, setStatus] = useState<Finder["status"]>("idle");
   const [summon, setSummon] = useState(0);
+  const add = usePlaylistAdd(props);
   const playlists = useMemo(() => ordered(data.playlists), [data.playlists]);
   const selected = playlists.findIndex((entry) => entry.id === data.selection.playlist?.id);
   const track = data.player.track;
@@ -469,6 +481,10 @@ function PastelPage(props: SkinProps) {
         case "c":
           share("card");
           return true;
+        case "a":
+          if (track === null) say("nothing is spinning to add", true);
+          else add.open(track, root.current?.querySelector<HTMLElement>(".k-stage [data-sp-add]") ?? root.current);
+          return true;
         case "/":
           openTab("search");
           return true;
@@ -484,7 +500,7 @@ function PastelPage(props: SkinProps) {
         }
       }
     },
-    [data, actions, cursor, selected, playlists, track],
+    [data, actions, add, cursor, selected, playlists, track],
   );
   useKeys(root, onKey);
 
@@ -494,6 +510,7 @@ function PastelPage(props: SkinProps) {
         <div className="k-grid">
           <Shelf
             props={props}
+            add={add}
             playlists={playlists}
             cursor={cursor}
             onPick={(index) => {
@@ -501,12 +518,12 @@ function PastelPage(props: SkinProps) {
               rest();
             }}
           />
-          <Stage props={props} onShare={share} />
+          <Stage props={props} add={add} onShare={share} />
           <div className="k-side">
             <Recipe props={props} onShake={shake} onLeave={rest} />
-            <UpNext props={props} />
+            <UpNext props={props} add={add} />
           </div>
-          <Notebook props={props} tab={tab} onTab={openTab} finder={finder} />
+          <Notebook props={props} add={add} tab={tab} onTab={openTab} finder={finder} />
         </div>
       </div>
       {note === null ? null : (
@@ -514,6 +531,7 @@ function PastelPage(props: SkinProps) {
           {note.text}
         </div>
       )}
+      {add.picker}
     </div>
   );
 }
@@ -523,6 +541,7 @@ function PastelMini({ data, actions, palette, close }: MiniProps) {
   const { player } = data;
   const track = player.track;
   const art = useArt(track?.album.imageUrl, data.demo);
+  const add = usePlaylistAdd({ data, actions });
   const onKey = useCallback(
     (event: KeyboardEvent) => {
       if (transportKey(event, data, actions)) return true;
@@ -531,10 +550,11 @@ function PastelMini({ data, actions, palette, close }: MiniProps) {
       else if (event.key === "h" && track !== null) actions.like();
       else if (event.key === "y" && track !== null) actions.copyLink(track);
       else if (event.key === "@" && track !== null) actions.mention(track);
+      else if (event.key === "a") add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
       else return false;
       return true;
     },
-    [data, actions, track],
+    [data, actions, add, track],
   );
   useKeys(root, onKey);
   return (
@@ -543,7 +563,7 @@ function PastelMini({ data, actions, palette, close }: MiniProps) {
         <MiniDisc art={track === null ? null : art} />
       </div>
       <div className="k-mini-body">
-        <button type="button" className="k-tape k-mini-title" onClick={actions.openPage} title="Open the Spotify page">
+        <button type="button" className="k-tape k-mini-title" onClick={actions.openPage} title="Open the Spotify page, or drag the song onto a playlist" {...add.song(track)}>
           {track?.name ?? "nothing spinning"}
         </button>
         <span className="k-mini-artist k-trunc">{track === null ? "press space to play" : `${artists(track)} · ${track.album.name}`}</span>
@@ -564,11 +584,15 @@ function PastelMini({ data, actions, palette, close }: MiniProps) {
         <button type="button" className={`k-candy ${player.liked ? "k-liked" : ""}`} style={vars({ "--fill": "var(--lilac)" })} onClick={actions.like} disabled={track === null} aria-label={player.liked ? "Remove from Liked Songs" : "Save to Liked Songs"}>
           <Icon name="heart" />
         </button>
+        <button type="button" className="k-candy" style={vars({ "--fill": "var(--butter)" })} data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} disabled={track === null} aria-label="Add to a playlist" title="Add to a playlist (a)">
+          <Icon name="addto" />
+        </button>
         <button type="button" className="k-close" onClick={close} aria-label="Close the mini player">
           ×
         </button>
       </div>
       {player.duck.active ? <span className="k-mini-shh k-stk">shh, an agent needs you</span> : null}
+      {add.picker}
     </div>
   );
 }

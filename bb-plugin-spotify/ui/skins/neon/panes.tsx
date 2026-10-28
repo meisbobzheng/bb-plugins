@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { LIKED_ID, type Device, type DuckState, type Playlist, type Stats as StatsData, type Track } from "../../../contract";
 import { artists, clock } from "../../format";
 import { upNext, type SkinProps } from "../../model";
+import type { PlaylistAdd } from "../../playlist-add";
 import { nextDays, tagFor, type Hue, type Tag } from "./tubes";
 import { Cover, Eq, Icon, vars, type IconName } from "./visuals";
 
@@ -9,10 +10,16 @@ export type Share = "link" | "thread" | "card";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-const stop = (run: () => void) => (event: React.MouseEvent) => {
+const stop = (run: (anchor: HTMLElement) => void) => (event: React.MouseEvent<HTMLElement>) => {
   event.stopPropagation();
-  run();
+  run(event.currentTarget);
 };
+
+const AddTo = ({ add, track }: { add: PlaylistAdd; track: Track }) => (
+  <button type="button" className="n-ab n-play" data-sp-add="" title="Add to a playlist (a)" aria-label={`Add ${track.name} to a playlist`} onClick={stop((anchor) => add.open(track, anchor))}>
+    <Icon name="addto" />
+  </button>
+);
 
 function useCursorInView(list: React.RefObject<HTMLElement | null>, cursor: number | null, focused: boolean) {
   useEffect(() => {
@@ -42,7 +49,7 @@ export function Duck({ duck, short = false }: { duck: DuckState; short?: boolean
   );
 }
 
-export function Library({ props, playlists, cursor, focused, onPick, onPlay }: { props: SkinProps; playlists: Playlist[]; cursor: number; focused: boolean; onPick(index: number): void; onPlay(playlist: Playlist): void }) {
+export function Library({ props, add, playlists, cursor, focused, onPick, onPlay }: { props: SkinProps; add: PlaylistAdd; playlists: Playlist[]; cursor: number; focused: boolean; onPick(index: number): void; onPlay(playlist: Playlist): void }) {
   const { data } = props;
   const list = useRef<HTMLDivElement>(null);
   useCursorInView(list, cursor, focused);
@@ -52,6 +59,7 @@ export function Library({ props, playlists, cursor, focused, onPick, onPlay }: {
     return (
       <button
         key={playlist.id}
+        {...add.target(playlist)}
         type="button"
         className={`n-li ${data.selection.playlist?.id === playlist.id ? "n-sel" : ""} ${focused && index === cursor ? "n-kb" : ""}`}
         title={playlist.readable ? `${playlist.name} · double-click to play` : `${playlist.name} · followed, play only`}
@@ -83,7 +91,7 @@ export function Library({ props, playlists, cursor, focused, onPick, onPlay }: {
   );
 }
 
-export function Tracks({ props, tracks, cursor, focused, album, onPlay, onShare }: { props: SkinProps; tracks: Track[]; cursor: number; focused: boolean; album: boolean; onPlay(index: number): void; onShare(how: Share, track: Track): void }) {
+export function Tracks({ props, add, tracks, cursor, focused, album, onPlay, onShare }: { props: SkinProps; add: PlaylistAdd; tracks: Track[]; cursor: number; focused: boolean; album: boolean; onPlay(index: number): void; onShare(how: Share, track: Track): void }) {
   const { data, actions } = props;
   const list = useRef<HTMLDivElement>(null);
   useCursorInView(list, cursor, focused);
@@ -112,7 +120,7 @@ export function Tracks({ props, tracks, cursor, focused, album, onPlay, onShare 
       {tracks.map((track, index) => {
         const tag = tags.get(track.id);
         return (
-          <div key={`${track.id}-${index}`} className={`n-row ${track.id === current ? "n-cur" : ""} ${focused && index === cursor ? "n-kb" : ""}`} onClick={() => onPlay(index)}>
+          <div key={`${track.id}-${index}`} {...add.song(track)} className={`n-row ${track.id === current ? "n-cur" : ""} ${focused && index === cursor ? "n-kb" : ""}`} onClick={() => onPlay(index)}>
             <span className="n-n">{track.id === current ? <Eq /> : pad(index + 1)}</span>
             <span className="n-ti">
               {track.name}
@@ -121,6 +129,7 @@ export function Tracks({ props, tracks, cursor, focused, album, onPlay, onShare 
             <span>{artists(track)}</span>
             {album ? <span>{track.album.name}</span> : null}
             <span className="n-acts">
+              <AddTo add={add} track={track} />
               {act("plus", "Add to queue", () => actions.queue(track), "clear")}
               {act("link", "Copy link", () => onShare("link", track), "uv")}
               {act("at", "Mention in thread", () => onShare("thread", track), "uv")}
@@ -197,7 +206,7 @@ export function Rules({ props, onShuffle, onLeave }: { props: SkinProps; onShuff
   );
 }
 
-export function Queue({ props, cursor, focused, onPlay }: { props: SkinProps; cursor: number; focused: boolean; onPlay(track: Track): void }) {
+export function Queue({ props, add, cursor, focused, onPlay }: { props: SkinProps; add: PlaylistAdd; cursor: number; focused: boolean; onPlay(track: Track): void }) {
   const { data } = props;
   const list = useRef<HTMLDivElement>(null);
   useCursorInView(list, cursor, focused);
@@ -209,7 +218,7 @@ export function Queue({ props, cursor, focused, onPlay }: { props: SkinProps; cu
       {upcoming.map((entry, index) => {
         const tag = tagFor(entry.reason, vibe);
         return (
-          <div key={`${entry.track.id}-${index}`} className={`n-qi ${focused && index === cursor ? "n-kb" : ""}`} onClick={() => onPlay(entry.track)} title={`Play ${entry.track.name}`}>
+          <div key={`${entry.track.id}-${index}`} {...add.song(entry.track)} className={`n-qi ${focused && index === cursor ? "n-kb" : ""}`} onClick={() => onPlay(entry.track)} title={`Play ${entry.track.name}`}>
             <Cover seed={entry.track.album.name} />
             <span className="n-qm">
               <span className="n-qt">{entry.track.name}</span>
@@ -221,6 +230,7 @@ export function Queue({ props, cursor, focused, onPlay }: { props: SkinProps; cu
                 <span>{entry.reason}</span>
               </span>
             )}
+            <AddTo add={add} track={entry.track} />
           </div>
         );
       })}
@@ -336,6 +346,7 @@ const HELP: [string, [string, string][]][] = [
       ["← →", "seek 10 s (also , .)"],
       ["− +", "volume"],
       ["f", "save to Liked Songs"],
+      ["a", "add to a playlist"],
       ["x r", "shuffle / repeat"],
     ],
   ],

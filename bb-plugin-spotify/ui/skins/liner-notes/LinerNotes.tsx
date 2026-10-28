@@ -3,8 +3,9 @@ import { LIKED_ID, PALETTE_NAMES, type Playlist, type SearchResult, type Track }
 import { artists, clock, playlistLength, trackUrl } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
 import { upNext, type MiniProps, type Skin, type SkinProps } from "../../model";
+import { usePlaylistAdd, type PlaylistAdd } from "../../playlist-add";
 import { contents, credits, duckNote, issueLine, kicker, nextWindow, prose, quoted, sentence, sessionNote, sides, songs } from "./edition";
-import { BackMatter, MATTERS, type Matter } from "./matter";
+import { AddMark, BackMatter, MATTERS, type Matter } from "./matter";
 import { Halftone, Oscillogram, ProgressRule, VolumeRule } from "./plates";
 import "./liner-notes.css";
 
@@ -22,6 +23,7 @@ const KEYS: [string, string][] = [
   [", .", "seek"],
   ["+ −", "volume"],
   ["l", "keep"],
+  ["a", "add to a playlist"],
   ["s", "reshuffle"],
   ["y", "link"],
   ["@", "thread"],
@@ -79,8 +81,9 @@ function Masthead({ data, actions }: SkinProps) {
   );
 }
 
-function Contents({ data, entries, cursor, query, finder, onQuery, onSearch, onEscape, onBrowse, onPick }: {
+function Contents({ data, add, entries, cursor, query, finder, onQuery, onSearch, onEscape, onBrowse, onPick }: {
   data: SkinProps["data"];
+  add: PlaylistAdd;
   entries: Entries;
   cursor: number | null;
   query: string;
@@ -96,7 +99,7 @@ function Contents({ data, entries, cursor, query, finder, onQuery, onSearch, onE
     const index = entries.order.indexOf(playlist);
     const selected = data.selection.playlist?.id === playlist.id;
     return (
-      <li key={playlist.id} className={`${selected ? "l-on" : ""} ${index === cursor ? "l-cur" : ""} ${playlist.uri === playing ? "l-playing" : ""}`} onClick={() => onPick(playlist)}>
+      <li key={playlist.id} className={`${selected ? "l-on" : ""} ${index === cursor ? "l-cur" : ""} ${playlist.uri === playing ? "l-playing" : ""}`} onClick={() => onPick(playlist)} {...add.target(playlist)}>
         <span className="l-n">{index === cursor ? "☞" : playlist.uri === playing ? "●" : String(index + 1).padStart(2, "0")}</span>
         <span className="l-t">{playlist.name}</span>
         <span className="l-dots" />
@@ -142,7 +145,7 @@ function Contents({ data, entries, cursor, query, finder, onQuery, onSearch, onE
   );
 }
 
-function Feature({ data, actions, palette }: SkinProps) {
+function Feature({ data, actions, palette, add }: SkinProps & { add: PlaylistAdd }) {
   const { player } = data;
   const track = player.track;
   const kept = track !== null && player.liked === true;
@@ -157,7 +160,7 @@ function Feature({ data, actions, palette }: SkinProps) {
     <section className="l-feature">
       <div className="l-kicker l-num">{kicker(data)}</div>
       <div className="l-lead">
-        <div className="l-heading">
+        <div className="l-heading" {...add.song(track)}>
           <h2 className={`l-title ${titleSize(title)}`} data-text={title}>
             {title}
           </h2>
@@ -180,7 +183,7 @@ function Feature({ data, actions, palette }: SkinProps) {
             </>
           )}
         </div>
-        <figure className="l-figure">
+        <figure className="l-figure" {...add.song(track)}>
           <Halftone player={player} demo={data.demo} size={188} palette={palette} />
           <figcaption>
             <i>Plate i.</i> {caption}
@@ -204,6 +207,9 @@ function Feature({ data, actions, palette }: SkinProps) {
           {kept ? "Kept ♥\uFE0E" : "Keep ♡\uFE0E"}
           <kbd>L</kbd>
         </button>
+        <button type="button" data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} disabled={track === null} aria-label="Add to a playlist" title="Add to a playlist">
+          Add +<kbd>A</kbd>
+        </button>
         <span className="l-grow" />
         <VolumeRule device={player.device} onChange={actions.setVolume} />
       </div>
@@ -211,7 +217,7 @@ function Feature({ data, actions, palette }: SkinProps) {
   );
 }
 
-function Listing({ data, actions }: SkinProps) {
+function Listing({ data, actions, add }: SkinProps & { add: PlaylistAdd }) {
   const { selection } = data;
   const playlist = selection.playlist;
   const [all, setAll] = useState(false);
@@ -255,12 +261,13 @@ function Listing({ data, actions }: SkinProps) {
               </div>
               <ol className="l-tracks l-num">
                 {side.tracks.map((track, index) => (
-                  <li key={`${track.id}-${index}`} className={track.id === current ? "l-on" : ""} onClick={() => actions.playPlaylist(playlist, track)} title="Play from here">
+                  <li key={`${track.id}-${index}`} className={track.id === current ? "l-on" : ""} onClick={() => actions.playPlaylist(playlist, track)} title="Play from here" {...add.song(track)}>
                     <span className="l-i">{track.id === current ? "●" : `${side.label}${index + 1}`}</span>
                     <span className="l-nm">
                       {track.name} <em>{artists(track)}</em>
                     </span>
                     <span className="l-d">{clock(track.durationMs)}</span>
+                    <AddMark track={track} add={add} />
                   </li>
                 ))}
               </ol>
@@ -276,7 +283,7 @@ function Listing({ data, actions }: SkinProps) {
   );
 }
 
-function Index({ found, actions, onClose }: { found: Found; actions: SkinProps["actions"]; onClose(): void }) {
+function Index({ found, actions, add, onClose }: { found: Found; actions: SkinProps["actions"]; add: PlaylistAdd; onClose(): void }) {
   const { result } = found;
   const queue = (event: React.MouseEvent, track: Track) => {
     event.stopPropagation();
@@ -306,7 +313,7 @@ function Index({ found, actions, onClose }: { found: Found; actions: SkinProps["
       {result !== null && result.tracks.length > 0 ? (
         <ol className="l-tracks l-num">
           {result.tracks.map((track, index) => (
-            <li key={`${track.id}-${index}`} onClick={() => actions.playTrack(track)} title="Play this song">
+            <li key={`${track.id}-${index}`} onClick={() => actions.playTrack(track)} title="Play this song" {...add.song(track)}>
               <span className="l-i">{index + 1}</span>
               <span className="l-nm">
                 {track.name} <em>{artists(track)}</em>
@@ -315,6 +322,7 @@ function Index({ found, actions, onClose }: { found: Found; actions: SkinProps["
               <button type="button" className="l-queue" onClick={(event) => queue(event, track)}>
                 Queue
               </button>
+              <AddMark track={track} add={add} />
             </li>
           ))}
         </ol>
@@ -326,7 +334,7 @@ function Index({ found, actions, onClose }: { found: Found; actions: SkinProps["
           </div>
           <ol className="l-tracks l-num">
             {result.playlists.map((playlist, index) => (
-              <li key={playlist.id} onClick={() => actions.playPlaylist(playlist)} title="Play this playlist">
+              <li key={playlist.id} onClick={() => actions.playPlaylist(playlist)} title="Play this playlist" {...add.target(playlist)}>
                 <span className="l-i">{index + 1}</span>
                 <span className="l-nm">
                   {playlist.name} <em>{playlist.owner}</em>
@@ -353,7 +361,7 @@ function Option({ n, on, label, onToggle, children }: { n: number; on: boolean; 
   );
 }
 
-function Shuffle({ data, actions, onShuffle }: SkinProps & { onShuffle(): void }) {
+function Shuffle({ data, actions, add, onShuffle }: SkinProps & { add: PlaylistAdd; onShuffle(): void }) {
   const options = data.shuffleOptions;
   const vibe = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(options.vibe ?? "");
@@ -425,12 +433,13 @@ function Shuffle({ data, actions, onShuffle }: SkinProps & { onShuffle(): void }
       ) : (
         <ol className="l-upnext l-num">
           {upcoming.map((entry, index) => (
-            <li key={`${entry.track.id}-${index}`}>
+            <li key={`${entry.track.id}-${index}`} {...add.song(entry.track)}>
               <span>{index + 1}</span>
               <span>
                 {entry.track.name} — {artists(entry.track)}
                 {entry.reason === null ? null : <small>{entry.reason}</small>}
               </span>
+              <AddMark track={entry.track} add={add} />
             </li>
           ))}
         </ol>
@@ -481,6 +490,7 @@ function LinerPage(props: SkinProps) {
   const [found, setFound] = useState<Found | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
   const [matter, setMatter] = useState<Matter>("stats");
+  const add = usePlaylistAdd(props);
   const entries = useMemo(() => contents(data.playlists, query), [data.playlists, query]);
   const track = data.player.track;
   const selected = data.selection.playlist;
@@ -552,6 +562,9 @@ function LinerPage(props: SkinProps) {
         case "l":
           if (track) actions.like();
           return true;
+        case "a":
+          add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
+          return true;
         case "s":
           if (!data.shuffling) reshuffle();
           return true;
@@ -578,7 +591,7 @@ function LinerPage(props: SkinProps) {
           return false;
       }
     },
-    [data, actions, entries, cursor, found, selected, track, reshuffle],
+    [data, actions, add, entries, cursor, found, selected, track, reshuffle],
   );
   useKeys(root, onKey);
 
@@ -589,6 +602,7 @@ function LinerPage(props: SkinProps) {
         <div className="l-cols">
           <Contents
             data={data}
+            add={add}
             entries={entries}
             cursor={cursor}
             query={query}
@@ -606,15 +620,15 @@ function LinerPage(props: SkinProps) {
             onPick={pick}
           />
           <main className="l-col l-center">
-            <Feature {...props} />
-            {found !== null ? <Index found={found} actions={actions} onClose={() => setFound(null)} /> : <Listing key={selected?.id ?? "none"} {...props} />}
+            <Feature {...props} add={add} />
+            {found !== null ? <Index found={found} actions={actions} add={add} onClose={() => setFound(null)} /> : <Listing key={selected?.id ?? "none"} {...props} add={add} />}
           </main>
           <aside className="l-col l-right">
-            <Shuffle {...props} onShuffle={reshuffle} />
+            <Shuffle {...props} add={add} onShuffle={reshuffle} />
             <Cite {...props} root={root} />
           </aside>
         </div>
-        <BackMatter {...props} matter={matter} onMatter={setMatter} anchor={anchor} />
+        <BackMatter {...props} add={add} matter={matter} onMatter={setMatter} anchor={anchor} />
         <footer className="l-colophon">
           <span>
             Set in Didot, Iowan Old Style &amp; Avenir Next. The {PALETTE_NAMES[palette] ?? palette} edition.
@@ -628,12 +642,14 @@ function LinerPage(props: SkinProps) {
           </span>
         </footer>
       </div>
+      {add.picker}
     </div>
   );
 }
 
 function LinerMini({ data, actions, palette, close }: MiniProps) {
   const root = useRef<HTMLDivElement>(null);
+  const add = usePlaylistAdd({ data, actions });
   const { player } = data;
   const track = player.track;
   const onKey = useCallback(
@@ -642,12 +658,13 @@ function LinerMini({ data, actions, palette, close }: MiniProps) {
       if (event.key === "n") actions.next();
       else if (event.key === "b") actions.previous();
       else if (event.key === "l" && track) actions.like();
+      else if (event.key === "a") add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
       else if (event.key === "y" && track) actions.copyLink(track);
       else if (event.key === "@" && track) actions.mention(track);
       else return false;
       return true;
     },
-    [data, actions, track],
+    [data, actions, add, track],
   );
   useKeys(root, onKey);
   return (
@@ -658,7 +675,7 @@ function LinerMini({ data, actions, palette, close }: MiniProps) {
         <Halftone player={player} demo={data.demo} size={56} palette={palette} />
       </div>
       <div className="l-slip">
-        <button type="button" className={`l-slip-title ${titleSize(track?.name ?? "")}`} onClick={actions.openPage} title="Open Liner Notes">
+        <button type="button" className={`l-slip-title ${titleSize(track?.name ?? "")}`} onClick={actions.openPage} title="Open Liner Notes, or drag the song onto a playlist" {...add.song(track)}>
           {track?.name ?? "Nothing playing"}
         </button>
         <div className="l-slip-by">
@@ -685,10 +702,14 @@ function LinerMini({ data, actions, palette, close }: MiniProps) {
         <button type="button" className={player.liked ? "l-on" : ""} onClick={actions.like} disabled={track === null} aria-pressed={player.liked ?? false} aria-label="Keep in Liked Songs">
           {"♥\uFE0E"}
         </button>
+        <button type="button" data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} disabled={track === null} aria-label="Add to a playlist" title="Add to a playlist (a)">
+          +
+        </button>
       </div>
       <button type="button" className="l-close" onClick={close} aria-label="Close the mini player">
         ×
       </button>
+      {add.picker}
     </div>
   );
 }

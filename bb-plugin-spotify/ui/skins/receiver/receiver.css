@@ -545,11 +545,12 @@
 .sp-receiver .r-run.r-lit { color: var(--r-lit); }
 .sp-receiver .r-program { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; }
 .sp-receiver .r-program .r-ind { margin-bottom: 5px; }
-.sp-receiver .r-prow { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, max-content); gap: 10px; font-size: 10px; line-height: 1.55; letter-spacing: 0.12em; }
+.sp-receiver .r-prow { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, max-content) auto; gap: 10px; font-size: 10px; line-height: 1.55; letter-spacing: 0.12em; }
 .sp-receiver .r-prow em { max-width: 210px; overflow: hidden; font-style: normal; text-align: right; text-overflow: ellipsis; white-space: nowrap; opacity: 0.55; }
 .sp-receiver .r-prow em.r-fresh { color: var(--r-peak); opacity: 0.95; }
 .sp-receiver .r-prow.r-quiet { display: block; opacity: 0.5; }
 .sp-receiver .r-prow.r-warn { display: block; color: var(--r-peak); }
+.sp-receiver .r-prow .r-q { margin-left: 0; border-color: color-mix(in srgb, var(--r-vfd) 55%, transparent) !important; color: var(--r-vfd); }
 
 .sp-receiver .r-deck-face { display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 12px 20px; padding: 16px 22px 12px; }
 .sp-receiver .r-deck-side { display: flex; flex-direction: column; gap: 14px; }
@@ -602,11 +603,11 @@
 .sp-receiver .r-row > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
 .sp-receiver .r-row em { color: var(--r-paper-muted); font-style: normal; }
 .sp-receiver .r-row.on { color: var(--r-paper-accent); }
-.sp-receiver .r-row.on > span:first-child::before { content: "▶"; font-size: 9px; }
+.sp-receiver .r-row.on > button:first-child > span:first-child::before { content: "▶"; font-size: 9px; }
 .sp-receiver .r-row:hover { background: color-mix(in srgb, var(--r-paper-accent) 7%, transparent); }
 .sp-receiver .r-row.r-plain { display: block; overflow: hidden; text-overflow: ellipsis; }
-.sp-receiver .r-log .r-row { grid-template-columns: 74px minmax(0, 1fr) auto; }
-.sp-receiver .r-log .r-row > span:first-child { color: var(--r-paper-muted); font-size: 11px; }
+.sp-receiver .r-log .r-hit > button:first-child { grid-template-columns: 74px minmax(0, 1fr) auto; }
+.sp-receiver .r-log .r-hit > button:first-child > span:first-child { color: var(--r-paper-muted); font-size: 11px; }
 .sp-receiver .r-stamp { display: inline-block; padding: 1px 4px; border: 1px solid var(--r-paper-accent); border-radius: 2px; color: var(--r-paper-accent); font: 700 8px/1 var(--r-display); letter-spacing: 0.2em; text-transform: uppercase; transform: rotate(-4deg); }
 .sp-receiver .r-note { padding: 8px 0; color: var(--r-paper-muted); line-height: 1.5; }
 .sp-receiver .r-note p { margin: 0 0 10px; max-width: 520px; color: var(--r-paper-ink); }
@@ -628,12 +629,14 @@
 .sp-receiver .r-search span { color: var(--r-paper-accent); }
 .sp-receiver .r-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--r-paper-ink); font: 15px/1.2 var(--r-type); caret-color: var(--r-paper-accent); }
 .sp-receiver .r-search input::placeholder { color: var(--r-paper-muted); opacity: 0.7; }
-.sp-receiver .r-hit { grid-template-columns: minmax(0, 1fr) auto; padding: 0; }
+.sp-receiver .r-hit { grid-template-columns: minmax(0, 1fr) auto auto; padding: 0; }
 .sp-receiver .r-hit > button:first-child { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: baseline; min-width: 0; padding: 4px 0; text-align: left; }
 .sp-receiver .r-hit > button:first-child > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
 .sp-receiver .r-mark { color: var(--r-paper-accent); font-size: 9px; }
 .sp-receiver .r-q { margin-left: 8px; padding: 1px 5px !important; border: 1px solid var(--r-paper-muted) !important; border-radius: 2px; color: var(--r-paper-muted); font: 700 8px/1.3 var(--r-display) !important; letter-spacing: 0.1em; }
 .sp-receiver .r-q:hover { border-color: var(--r-paper-accent) !important; color: var(--r-paper-accent); }
+.sp-receiver .r-add { visibility: hidden; }
+.sp-receiver :hover > .r-add, .sp-receiver .r-add:focus-visible { visibility: visible; }
 .sp-receiver .r-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .sp-receiver .r-chips button { padding: 3px 8px; border: 1px dashed var(--r-paper-muted); border-radius: 2px; color: var(--r-paper-ink); font-size: 11px; }
 .sp-receiver .r-chips button:hover { border-color: var(--r-paper-accent); color: var(--r-paper-accent); }

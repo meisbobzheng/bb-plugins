@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { IDLE_DUCK, type AuthStatus, type PlayerState, type RpcContract } from "./contract";
@@ -74,6 +74,7 @@ async function renderPage(auth: AuthStatus = CONNECTED) {
       app_launch: () => ({ launched: true }),
       search: () => ({ tracks: [], playlists: [], artists: [], albums: [] }),
       queue_add: () => ({ ok: true }),
+      playlist_add: (input) => ({ added: true, playlist: { id: input.playlistId, uri: `spotify:playlist:${input.playlistId}`, name: "Deep Work", owner: "you", ownedByMe: true, collaborative: false, readable: true, trackCount: 3, imageUrl: null, url: null, kind: "playlist" } }),
       shuffle_start: () => {
         throw new Error("not in this test");
       },
@@ -123,6 +124,34 @@ describe("spotify app", () => {
     await waitFor(() =>
       expect(slot.inspection.rpcCalls).toContainEqual(expect.objectContaining({ method: "player_play", input: { contextUri: "spotify:playlist:p1", uris: null, offsetUri: OTHER.uri } })),
     );
+  });
+
+  it("adds the song playing to a playlist you own from the + button", async () => {
+    const { slot } = await renderPage();
+    await slot.findByText("Kerala", { selector: "td" });
+    fireEvent.click(slot.getByRole("button", { name: "+ to a playlist · a or drag the song" }));
+    const picker = await screen.findByRole("dialog", { name: "Add Let It Happen to a playlist" });
+    expect(within(picker).getAllByRole("option").map((option) => option.textContent)).toEqual(["Liked Songs2", "Deep Work2"]);
+    fireEvent.change(within(picker).getByRole("textbox", { name: "Find a playlist" }), { target: { value: "deep" } });
+    fireEvent.keyDown(within(picker).getByRole("textbox"), { key: "Enter" });
+    await waitFor(() => expect(slot.inspection.rpcCalls).toContainEqual(expect.objectContaining({ method: "playlist_add", input: { playlistId: "p1", track: NOW, allowDuplicate: false } })));
+    expect(screen.queryByRole("dialog", { name: /to a playlist/ })).toBeNull();
+  });
+
+  it("adds a song dragged onto a playlist, and ignores followed ones", async () => {
+    const { slot } = await renderPage();
+    const row = (await slot.findByText("Kerala", { selector: "td" })).closest("tr")!;
+    const types: string[] = [];
+    const dataTransfer = { types, setData: (type: string) => types.push(type), setDragImage: () => {}, effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(row, { dataTransfer });
+    const followed = slot.getByText("Lo-fi Beats").closest("li")!;
+    expect(followed.hasAttribute("data-sp-drop")).toBe(false);
+    const target = slot.getByText("Deep Work", { selector: ".c-name" }).closest("li")!;
+    fireEvent.dragOver(target, { dataTransfer });
+    expect(target.getAttribute("data-sp-drop")).toBe("over");
+    fireEvent.drop(target, { dataTransfer });
+    await waitFor(() => expect(slot.inspection.rpcCalls).toContainEqual(expect.objectContaining({ method: "playlist_add", input: { playlistId: "p1", track: OTHER, allowDuplicate: false } })));
+    expect(target.getAttribute("data-sp-drop")).toBe("");
   });
 
   it("folds into one tabbed pane with clickable transport in a small window", async () => {

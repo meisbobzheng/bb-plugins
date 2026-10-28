@@ -33,6 +33,20 @@ songs** shows every look with sample data.
 - Spotify only lists the songs of playlists you own or collaborate on.
   Followed playlists show as **play only**.
 
+**Add to a playlist**
+
+- Click **+** next to the save control, or on any song row, and pick a
+  playlist; type to filter. `a` does the same from the keyboard, and
+  right-clicking a song opens the same list.
+- Or drag the song playing, or any song row, onto a playlist. Playlists you can
+  add to light up while you drag. In compact layouts, hold the song over the
+  playlists tab to open it. The mini player's song can be dropped on the
+  Spotify page's playlists too.
+- Dropping on Liked Songs saves the song. If a song is already in the playlist,
+  you get **Add anyway** instead of a silent duplicate.
+- Only playlists you own or collaborate on take songs. If you connected before
+  this feature, disconnect and connect Spotify again so it can edit playlists.
+
 **Mini player**
 
 - `⌘⇧S` (Ctrl+Shift+S elsewhere) shows or hides a small player that floats over
@@ -90,7 +104,7 @@ and save. `⌘K` on a result offers **Add to queue** or **Smart shuffle**.
 
 | Look | Palettes | Keys |
 | --- | --- | --- |
-| Console (default) | Cape, Phosphor, Glacier, Daylight | Vim-style: `j`/`k`, `⏎`, `h`/`l`, `yy`, `@`, `R`, `/`, `:` commands, `?` for help |
+| Console (default) | Cape, Phosphor, Glacier, Daylight | Vim-style: `j`/`k`, `⏎`, `h`/`l`, `yy`, `@`, `a`, `R`, `/`, `:` commands, `?` for help |
 | Receiver | Silver, Midnight, Brass | `←`/`→` tune playlists, `1`–`6` presets |
 | Liner Notes | Vermilion, Cobalt, Night Edition, Riso | `j`/`k` contents, `s` reshuffle |
 | Sticker Book | Sherbet, Matcha, Lavender Dusk, Peach | `j`/`k` playlists, `s` shake it up |
@@ -101,7 +115,8 @@ and save. `⌘K` on a result offers **Add to queue** or **Smart shuffle**.
 
 Every look also takes `space` (play or pause), `+`/`-` (volume), and `,`/`.`
 (seek 10 seconds). Voxel, Neon, Concept Sketch, and Wabi-sabi share one key
-map: `n`/`p` next and previous, `j`/`k` and `⏎` in lists, `f` save, `s` search,
+map: `n`/`p` next and previous, `j`/`k` and `⏎` in lists, `f` save, `a` add to
+a playlist, `s` search,
 `R` smart reshuffle, `x` shuffle, `r` repeat, `y` copy link, `@` mention, `c`
 share card, `d` devices, `o` open Spotify, `1`–`4` tabs when compact, and `?`
 for help. Switch looks and palettes from the page header or the plugin

@@ -104,6 +104,9 @@ function drifted(previous: PlayerState, next: PlayerState): boolean {
   return Math.abs(expected - next.progressMs) > 2_500;
 }
 
+const likedVersion = (liked: { playlist: Playlist; latestAddedAt: string | null }) => `${liked.playlist.trackCount}:${liked.latestAddedAt ?? ""}`;
+const listingVersion = (listing: PlaylistListing) => listing.snapshotId ?? `${listing.playlist.trackCount}`;
+
 export function createService(deps: ServiceDeps) {
   const now = deps.now ?? Date.now;
   const wait = deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -302,7 +305,7 @@ export function createService(deps: ServiceDeps) {
   async function sourceTracks(playlistId: string): Promise<{ playlist: Playlist; tracks: Track[] }> {
     const loaded = await loadLibrary(false);
     if (playlistId === LIKED_ID) {
-      const version = `${loaded.liked.playlist.trackCount}:${loaded.liked.latestAddedAt ?? ""}`;
+      const version = likedVersion(loaded.liked);
       const tracks = store.cachedPlaylist(LIKED_ID, version) ?? (await client.likedTracks(MAX_SOURCE_TRACKS));
       store.cachePlaylist(LIKED_ID, version, tracks);
       return { playlist: loaded.liked.playlist, tracks };
@@ -310,7 +313,7 @@ export function createService(deps: ServiceDeps) {
     const entry = loaded.playlists.find((candidate) => candidate.playlist.id === playlistId) ?? (await loadLibrary(true)).playlists.find((candidate) => candidate.playlist.id === playlistId);
     if (entry === undefined) throw new Error("That playlist is not in your library.");
     if (!entry.playlist.readable) throw new UnreadablePlaylistError(`Spotify only shares the songs of playlists you own or collaborate on, so "${entry.playlist.name}" can be played but not listed.`);
-    const version = entry.snapshotId ?? `${entry.playlist.trackCount}`;
+    const version = listingVersion(entry);
     const tracks = store.cachedPlaylist(playlistId, version) ?? (await client.playlistTracks(playlistId, MAX_SOURCE_TRACKS));
     store.cachePlaylist(playlistId, version, tracks);
     return { playlist: entry.playlist, tracks };
@@ -323,6 +326,37 @@ export function createService(deps: ServiceDeps) {
       if (error instanceof UnreadablePlaylistError) return { tracks: [], readable: false };
       throw error;
     }
+  }
+
+  async function playlistAdd(playlistId: string, track: Track, allowDuplicate: boolean): Promise<{ added: boolean; playlist: Playlist }> {
+    if (playlistId === LIKED_ID) return likedAdd(track);
+    const known = (await loadLibrary(false)).playlists.find((candidate) => candidate.playlist.id === playlistId);
+    if (known?.playlist.readable === false) throw new Error(`Spotify only lets you add songs to playlists you own or collaborate on, so "${known.playlist.name}" is play only.`);
+    const source = await sourceTracks(playlistId);
+    if (!allowDuplicate && source.tracks.some((entry) => entry.id === track.id)) return { added: false, playlist: source.playlist };
+    const snapshotId = await client.addToPlaylist(playlistId, [track.uri]);
+    const loaded = await loadLibrary(false);
+    const index = loaded.playlists.findIndex((candidate) => candidate.playlist.id === playlistId);
+    const playlist = { ...source.playlist, trackCount: source.playlist.trackCount + 1 };
+    const listing = { playlist, snapshotId };
+    if (index !== -1) loaded.playlists[index] = listing;
+    store.cachePlaylist(playlistId, listingVersion(listing), [...source.tracks, track]);
+    deps.publish(CHANNELS.library, null);
+    return { added: true, playlist };
+  }
+
+  async function likedAdd(track: Track): Promise<{ added: boolean; playlist: Playlist }> {
+    const loaded = await loadLibrary(false);
+    const [saved] = await client.libraryContains([track.uri]);
+    if (saved) return { added: false, playlist: loaded.liked.playlist };
+    await client.librarySave([track.uri]);
+    liked.set(track.id, true);
+    if (state.track?.id === track.id) setState({ ...state, liked: true });
+    const cached = store.cachedPlaylist(LIKED_ID, likedVersion(loaded.liked));
+    loaded.liked = { playlist: { ...loaded.liked.playlist, trackCount: loaded.liked.playlist.trackCount + 1 }, latestAddedAt: new Date(now()).toISOString() };
+    if (cached !== null) store.cachePlaylist(LIKED_ID, likedVersion(loaded.liked), [track, ...cached]);
+    deps.publish(CHANNELS.library, null);
+    return { added: true, playlist: loaded.liked.playlist };
   }
 
   async function startShuffle(options: ShuffleOptions): Promise<ShuffleSession> {
@@ -642,6 +676,7 @@ export function createService(deps: ServiceDeps) {
     search: (query: string) => search(query),
     queue: () => client.queue(),
     queueAdd: (uri: string) => client.addToQueue(uri),
+    playlistAdd,
     startShuffle,
     shuffleSession,
     shuffleOptions,

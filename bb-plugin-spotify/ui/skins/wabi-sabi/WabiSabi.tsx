@@ -3,9 +3,10 @@ import { LIKED_ID, PALETTES, type Device, type Playlist, type SearchResult, type
 import { artists } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
 import { progressAt, upNext, type MiniProps, type Skin, type SkinProps, type SpotifyData } from "../../model";
+import { usePlaylistAdd, type PlaylistAdd } from "../../playlist-add";
 import { deckle, kanji, layoutFor, nextRepeat, pad, repeatWord, stillWater, type Layout } from "./brush";
 import { fibers } from "./paint";
-import { Devices, Duck, emptyTracks, Help, Kbd, Library, ordered, Reshuffle, Session, Shares, Stats, Toggles, Tracks, upCount, UpNext, Vibe, Volume, type Share } from "./parts";
+import { Add, Devices, Duck, emptyTracks, Help, Kbd, Library, ordered, Reshuffle, Session, Shares, Stats, Toggles, Tracks, upCount, UpNext, Vibe, Volume, type Share } from "./parts";
 import { Disc, Elapsed, Enso, Filters, Icon, Ink, PlayButton, Pond, Seal, Seam } from "./visuals";
 import "./wabi-sabi.css";
 
@@ -112,20 +113,23 @@ function Silence({ props }: { props: SkinProps }) {
   );
 }
 
-function Keep({ props, caption }: { props: SkinProps; caption: boolean }) {
+function Keep({ props, add, caption }: { props: SkinProps; add: PlaylistAdd; caption: boolean }) {
   const { data, actions } = props;
   const liked = data.player.track !== null && data.player.liked === true;
   return (
-    <button type="button" className={`w-seal-wrap ${liked ? "w-on" : ""}`} onClick={actions.like} disabled={data.player.track === null} aria-pressed={liked} aria-label={liked ? "Remove from Liked Songs" : "Save to Liked Songs"} title="Keep in Liked Songs (f)">
-      <Seal liked={liked} />
-      {caption ? (
-        <span className="w-seal-cap">
-          <b>{liked ? "Kept" : "Not yet kept"}</b> in Liked Songs
-          <br />
-          <Kbd>f</Kbd> {liked ? "to let go" : "to keep"}
-        </span>
-      ) : null}
-    </button>
+    <div className="w-keep">
+      <button type="button" className={`w-seal-wrap ${liked ? "w-on" : ""}`} onClick={actions.like} disabled={data.player.track === null} aria-pressed={liked} aria-label={liked ? "Remove from Liked Songs" : "Save to Liked Songs"} title="Keep in Liked Songs (f)">
+        <Seal liked={liked} />
+        {caption ? (
+          <span className="w-seal-cap">
+            <b>{liked ? "Kept" : "Not yet kept"}</b> in Liked Songs
+            <br />
+            <Kbd>f</Kbd> {liked ? "to let go" : "to keep"}
+          </span>
+        ) : null}
+      </button>
+      <Add track={data.player.track} add={add} hint={caption} />
+    </div>
   );
 }
 
@@ -214,6 +218,7 @@ function WabiSabiPage(props: SkinProps) {
   const [found, setFound] = useState<SearchResult | null>(null);
   const [searching, setSearching] = useState(false);
   const [summon, setSummon] = useState(0);
+  const add = usePlaylistAdd(props);
   const { player } = data;
   const track = player.track;
   const playlists = useMemo(() => ordered(data.playlists), [data.playlists]);
@@ -397,6 +402,11 @@ function WabiSabiPage(props: SkinProps) {
         case "f":
           like();
           return true;
+        case "a": {
+          const chosen = list === "tracks" && cursor.tracks !== null ? listed[cursor.tracks] : list === "next" && cursor.next !== null ? upcoming[cursor.next]?.track : undefined;
+          add.open(chosen ?? track, root.current?.querySelector<HTMLElement>(chosen ? ".w-cur [data-sp-add]" : "[data-sp-add]") ?? root.current);
+          return true;
+        }
         case "s":
           openSearch();
           return true;
@@ -441,7 +451,7 @@ function WabiSabiPage(props: SkinProps) {
         }
       }
     },
-    [help, picker, cursor, data, actions, player, full, list, listed, upcoming, playlists, found, searching, track],
+    [help, picker, cursor, data, actions, add, player, full, list, listed, upcoming, playlists, found, searching, track],
   );
   useKeys(root, onKey);
 
@@ -475,6 +485,7 @@ function WabiSabiPage(props: SkinProps) {
       <Tracks
         key={results ? "found" : (data.selection.playlist?.id ?? "none")}
         props={props}
+        add={add}
         tracks={listed}
         cursor={cursor.tracks ?? -1}
         focused={list === "tracks"}
@@ -489,6 +500,7 @@ function WabiSabiPage(props: SkinProps) {
   const library = (
     <Library
       data={data}
+      add={add}
       cursor={cursor.library ?? -1}
       focused={list === "library"}
       onPick={(index) => {
@@ -502,6 +514,7 @@ function WabiSabiPage(props: SkinProps) {
   const next = (limit?: number) => (
     <UpNext
       props={props}
+      add={add}
       cursor={cursor.next ?? -1}
       focused={list === "next"}
       limit={limit}
@@ -566,19 +579,21 @@ function WabiSabiPage(props: SkinProps) {
                 <Disc player={player} demo={data.demo} size={208} seed={11} onClick={actions.toggle} title="Play or pause (space)" />
                 <div className="w-meta">
                   <div className="w-kick w-trunc">{kicker(data, true)}</div>
-                  <Title data={data} />
-                  {track === null ? (
-                    <Silence props={props} />
-                  ) : (
-                    <>
-                      <div className="w-artist w-trunc">{artists(track)}</div>
-                      <div className="w-album w-trunc">
-                        {track.album.name}
-                        {track.album.year === null ? null : <span className="w-yr">{track.album.year}</span>}
-                      </div>
-                    </>
-                  )}
-                  <Keep props={props} caption />
+                  <div {...add.song(track)}>
+                    <Title data={data} />
+                    {track === null ? (
+                      <Silence props={props} />
+                    ) : (
+                      <>
+                        <div className="w-artist w-trunc">{artists(track)}</div>
+                        <div className="w-album w-trunc">
+                          {track.album.name}
+                          {track.album.year === null ? null : <span className="w-yr">{track.album.year}</span>}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <Keep props={props} add={add} caption />
                 </div>
                 <div className="w-vert">{vertical(data)}</div>
               </div>
@@ -662,31 +677,33 @@ function WabiSabiPage(props: SkinProps) {
               <Disc player={player} demo={data.demo} size={tight ? 92 : 124} seed={11} onClick={actions.toggle} title="Play or pause (space)" />
               <div className="w-meta">
                 <div className="w-kick w-trunc">{kicker(data, false)}</div>
-                <Title data={data} />
-                {track === null ? (
-                  <Silence props={props} />
-                ) : (
-                  <div className="w-artist w-trunc">
-                    {artists(track)}
-                    {tight ? null : (
-                      <span className="w-album">
-                        {track.album.name}
-                        {track.album.year === null ? null : <span className="w-yr">{track.album.year}</span>}
-                      </span>
-                    )}
-                  </div>
-                )}
+                <div {...add.song(track)}>
+                  <Title data={data} />
+                  {track === null ? (
+                    <Silence props={props} />
+                  ) : (
+                    <div className="w-artist w-trunc">
+                      {artists(track)}
+                      {tight ? null : (
+                        <span className="w-album">
+                          {track.album.name}
+                          {track.album.year === null ? null : <span className="w-yr">{track.album.year}</span>}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <Transport props={props} size={tight ? 34 : 38}>
                   <Volume volume={volume} ducked={ducked} onChange={actions.setVolume} label={false} />
                 </Transport>
               </div>
-              <Keep props={props} caption={false} />
+              <Keep props={props} add={add} caption={false} />
             </div>
             <Seam player={player} onSeek={actions.seek} />
             {stillWater(size) ? null : <Pond player={player} />}
             <nav className="w-tabs" role="tablist">
               {TABS.map((entry, index) => (
-                <button key={entry.id} type="button" role="tab" aria-selected={tab === entry.id} className={tab === entry.id ? "w-on" : ""} onClick={() => setTab(entry.id)} title={`${entry.label} (${index + 1})`}>
+                <button key={entry.id} type="button" role="tab" aria-selected={tab === entry.id} className={tab === entry.id ? "w-on" : ""} onClick={() => setTab(entry.id)} title={`${entry.label} (${index + 1})`} {...(entry.id === "library" ? add.spring(() => setTab("library")) : {})}>
                   {tight ? entry.short : entry.label}
                   {entry.id === "tracks" ? <sup>{listed.length}</sup> : entry.id === "next" ? <sup>{upCount(data)}</sup> : entry.id === "library" ? <sup>{playlists.length}</sup> : null}
                 </button>
@@ -770,6 +787,7 @@ function WabiSabiPage(props: SkinProps) {
           </>
         )}
         {help ? <Help compact={!full} /> : null}
+        {add.picker}
         {note === null ? null : (
           <div key={note.id} className="w-toast" role="status">
             {note.text}
@@ -782,6 +800,7 @@ function WabiSabiPage(props: SkinProps) {
 
 function WabiSabiMini({ data, actions, palette, close }: MiniProps) {
   const root = useRef<HTMLDivElement>(null);
+  const add = usePlaylistAdd({ data, actions });
   const { ink, style } = usePaper(root, palette);
   const { player } = data;
   const track = player.track;
@@ -791,6 +810,7 @@ function WabiSabiMini({ data, actions, palette, close }: MiniProps) {
       if (event.key === "n") actions.next();
       else if (event.key === "p") actions.previous();
       else if (event.key === "f" && track !== null) actions.like();
+      else if (event.key === "a") add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
       else if (event.key === "y" && track !== null) actions.copyLink(track);
       else if (event.key === "@" && track !== null) actions.mention(track);
       else if (event.key === "o") actions.openPage();
@@ -798,7 +818,7 @@ function WabiSabiMini({ data, actions, palette, close }: MiniProps) {
       else return false;
       return true;
     },
-    [data, actions, track, close],
+    [data, actions, add, track, close],
   );
   useKeys(root, onKey);
   const duck = player.duck;
@@ -817,7 +837,7 @@ function WabiSabiMini({ data, actions, palette, close }: MiniProps) {
         </span>
         <Disc player={player} demo={data.demo} size={58} seed={9} onClick={actions.toggle} />
         <div className="w-mini-b">
-          <button type="button" className="w-l1 w-trunc" onClick={actions.openPage} title="Open the Spotify page (o)">
+          <button type="button" className="w-l1 w-trunc" onClick={actions.openPage} title="Open the Spotify page (o), or drag the song onto a playlist" {...add.song(track)}>
             <b>{track?.name ?? "nothing playing"}</b>
             <span>{track ? artists(track) : player.status === "no-device" ? "no device awake" : "press space to play"}</span>
           </button>
@@ -843,10 +863,12 @@ function WabiSabiMini({ data, actions, palette, close }: MiniProps) {
           <button type="button" className={`w-seal-wrap ${liked ? "w-on" : ""}`} onClick={actions.like} disabled={track === null} aria-pressed={liked} aria-label={liked ? "Remove from Liked Songs" : "Save to Liked Songs"} title="Keep (f)">
             <Seal liked={liked} size="mini" />
           </button>
+          <Add track={track} add={add} />
           <button type="button" className="w-close" onClick={close} aria-label="Close the mini player" title="Close (q)">
             ×
           </button>
         </div>
+        {add.picker}
       </Ink.Provider>
     </div>
   );

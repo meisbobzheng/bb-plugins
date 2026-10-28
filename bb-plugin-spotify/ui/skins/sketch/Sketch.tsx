@@ -3,6 +3,7 @@ import { LIKED_ID, PALETTES, type Device, type Playlist, type Track } from "../.
 import { artists, clock } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
 import { progressAt, upNext, type MiniProps, type Skin, type SkinProps } from "../../model";
+import { usePlaylistAdd, type PlaylistAdd } from "../../playlist-add";
 import { Arrow, Clock, Delta, filterIds, Filters, Icon, Kc, Outline, Seek, useFilterId, useSize, Volume, Waveform } from "./drawing";
 import { Art, DeviceList, Finder, Help, LEGEND, Meta, Picks, Playlists, Repeat, ShareButtons, Shuffle, ShuffleNote, StatsBox, Tracks, tracksCaption, Transport, type Found, type Share } from "./parts";
 import { duckLine, layoutFor, ordered, playlistMeta, revision, stamp, type Layout } from "./sheet";
@@ -58,6 +59,7 @@ function SketchPage(props: SkinProps) {
   const [picker, setPicker] = useState(false);
   const [boil, setBoil] = useState(() => !calm());
   const [summon, setSummon] = useState(0);
+  const add = usePlaylistAdd(props);
   const { player } = data;
   const track = player.track;
   const playlists = useMemo(() => ordered(data.playlists, query), [data.playlists, query]);
@@ -81,6 +83,11 @@ function SketchPage(props: SkinProps) {
   const say = (text: string) => setNote({ id: Date.now(), text });
   const rest = () => root.current?.focus({ preventScroll: true });
   const subject = (): Track | null => (active === "tracks" && cursor.tracks !== null ? (rows[cursor.tracks] ?? track) : track);
+
+  const addTo = () => {
+    const chosen = active === "tracks" && cursor.tracks !== null ? rows[cursor.tracks] : active === "next" && cursor.next !== null ? upcoming[cursor.next]?.track : undefined;
+    add.open(chosen ?? track, root.current?.querySelector<HTMLElement>(chosen === undefined ? ".g-tb[data-sp-add]" : ".g-cur [data-sp-add]") ?? null);
+  };
 
   const pick = (playlist: Playlist) => {
     const again = data.selection.playlist?.id === playlist.id;
@@ -226,6 +233,9 @@ function SketchPage(props: SkinProps) {
         case "f":
           if (track !== null) actions.like();
           return true;
+        case "a":
+          addTo();
+          return true;
         case "s":
           openSearch();
           return true;
@@ -276,7 +286,7 @@ function SketchPage(props: SkinProps) {
         }
       }
     },
-    [help, data, actions, player, track, full, active, cursor, picker, found, query, boil, playlists, rows, upcoming],
+    [help, data, actions, add, player, track, full, active, cursor, picker, found, query, boil, playlists, rows, upcoming],
   );
   useKeys(root, onKey);
 
@@ -295,9 +305,10 @@ function SketchPage(props: SkinProps) {
       setCursor((current) => ({ ...current, lib: 0 }));
     },
   };
-  const listProps = { props, list: playlists, cursor: cursor.lib, focused: active === "lib", onPick: pick };
+  const listProps = { props, add, list: playlists, cursor: cursor.lib, focused: active === "lib", onPick: pick };
   const tracksProps = {
     props,
+    add,
     found,
     cursor: cursor.tracks,
     focused: active === "tracks",
@@ -311,7 +322,7 @@ function SketchPage(props: SkinProps) {
       setQuery("");
     },
   };
-  const picksProps = { props, cursor: cursor.next, focused: active === "next", onPlay: playNext };
+  const picksProps = { props, add, cursor: cursor.next, focused: active === "next", onPlay: playNext };
   const playing = player.isPlaying && track !== null;
   const selection = data.selection.playlist;
   const [caption, aside] = tracksCaption(data, found);
@@ -358,9 +369,9 @@ function SketchPage(props: SkinProps) {
             </div>
             <div className="g-col g-mid">
               <div className="g-np">
-                <Art track={track} caption />
+                <Art track={track} caption {...add.song(track)} />
                 <div className="g-np-meta">
-                  <Meta props={props} />
+                  <Meta props={props} add={add} />
                   {track !== null ? <ShareButtons onShare={share} /> : null}
                 </div>
               </div>
@@ -377,7 +388,7 @@ function SketchPage(props: SkinProps) {
               </div>
               <div className="g-trans">
                 <Shuffle props={props} />
-                <Transport props={props} />
+                <Transport props={props} add={add} />
                 <Repeat props={props} />
               </div>
               <div className="g-tracks" onMouseDown={() => setFocus("tracks")}>
@@ -398,6 +409,7 @@ function SketchPage(props: SkinProps) {
       ) : (
         <Compact
           props={props}
+          add={add}
           layout={layout}
           palette={palette}
           tab={tab}
@@ -447,6 +459,7 @@ function SketchPage(props: SkinProps) {
         </div>
       )}
       {help ? <Help onClose={() => setHelp(false)} /> : null}
+      {add.picker}
     </div>
   );
 }
@@ -503,7 +516,7 @@ function TitleBlock({ props, palette, picker, cursor, onPicker, onPick }: { prop
   );
 }
 
-function Compact({ props, layout, palette, tab, duck, panes, onTab, onHelp }: { props: SkinProps; layout: Layout; palette: string; tab: Tab; duck: string | null; panes: Record<Tab, React.ReactNode>; onTab(tab: Tab): void; onHelp(): void }) {
+function Compact({ props, add, layout, palette, tab, duck, panes, onTab, onHelp }: { props: SkinProps; add: PlaylistAdd; layout: Layout; palette: string; tab: Tab; duck: string | null; panes: Record<Tab, React.ReactNode>; onTab(tab: Tab): void; onHelp(): void }) {
   const { data, actions } = props;
   const { player } = data;
   const tight = layout === "tight";
@@ -524,18 +537,18 @@ function Compact({ props, layout, palette, tab, duck, panes, onTab, onHelp }: { 
         )}
       </header>
       <div className="g-c-top">
-        <Art track={player.track} caption={false} />
-        <Meta props={props} />
+        <Art track={player.track} caption={false} {...add.song(player.track)} />
+        <Meta props={props} add={add} />
         {tight ? null : (
           <div className="g-c-trans">
-            <Transport props={props} />
+            <Transport props={props} add={add} />
           </div>
         )}
       </div>
       {tight ? (
         <div className="g-trans">
           <Shuffle props={props} />
-          <Transport props={props} />
+          <Transport props={props} add={add} />
           <Repeat props={props} />
         </div>
       ) : null}
@@ -564,7 +577,16 @@ function Compact({ props, layout, palette, tab, duck, panes, onTab, onHelp }: { 
           <Outline shape="under" seed="tabline" />
         </span>
         {TABS.map((entry, index) => (
-          <button key={entry.id} type="button" role="tab" aria-selected={entry.id === tab} className={`g-ctab ${entry.id === tab ? "g-on" : ""}`} onClick={() => onTab(entry.id)} title={`${entry.label} (${index + 1})`}>
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            aria-selected={entry.id === tab}
+            className={`g-ctab ${entry.id === tab ? "g-on" : ""}`}
+            onClick={() => onTab(entry.id)}
+            title={`${entry.label} (${index + 1})`}
+            {...(entry.id === "lib" ? add.spring(() => onTab("lib")) : {})}
+          >
             {tight ? entry.short : entry.label}
             {counts[entry.id] !== undefined && !tight ? <small> {counts[entry.id]}</small> : null}
             {entry.id === tab ? <Outline shape="tab" seed={entry.id} /> : null}
@@ -590,12 +612,14 @@ function SketchMini({ data, actions, palette: chosen, close }: MiniProps) {
   const { player } = data;
   const track = player.track;
   const duck = duckLine(player.duck);
+  const add = usePlaylistAdd({ data, actions });
   const onKey = useCallback(
     (event: KeyboardEvent) => {
       if (transportKey(event, data, actions)) return true;
       if (event.key === "n") actions.next();
       else if (event.key === "p") actions.previous();
       else if (event.key === "f" && track !== null) actions.like();
+      else if (event.key === "a") add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
       else if (event.key === "y" && track !== null) actions.copyLink(track);
       else if (event.key === "@" && track !== null) actions.mention(track);
       else if (event.key === "o") actions.openPage();
@@ -603,7 +627,7 @@ function SketchMini({ data, actions, palette: chosen, close }: MiniProps) {
       else return false;
       return true;
     },
-    [data, actions, track, close],
+    [data, actions, add, track, close],
   );
   useKeys(root, onKey);
   const playing = player.isPlaying && track !== null;
@@ -617,7 +641,7 @@ function SketchMini({ data, actions, palette: chosen, close }: MiniProps) {
           <Art track={track} caption={false} />
         </div>
         <div className="g-m-meta">
-          <button type="button" className="g-m-t g-trunc" onClick={actions.openPage} title="Open the Spotify page (o)">
+          <button type="button" className="g-m-t g-trunc" onClick={actions.openPage} title="Open the Spotify page (o), or drag the song onto a playlist" {...add.song(track)}>
             {track?.name ?? "nothing on the board"}
           </button>
           <div className="g-m-a g-trunc">
@@ -635,7 +659,7 @@ function SketchMini({ data, actions, palette: chosen, close }: MiniProps) {
           <Waveform player={player} palette={palette} split />
         </div>
         <div className="g-m-btns">
-          <Transport props={{ data, actions, palette }} />
+          <Transport props={{ data, actions, palette }} add={add} />
           <button type="button" className="g-m-x" onClick={close} aria-label="Close the mini player" title="Close (q)">
             <Icon name="close" />
           </button>
@@ -649,6 +673,7 @@ function SketchMini({ data, actions, palette: chosen, close }: MiniProps) {
           </span>
         </div>
       ) : null}
+      {add.picker}
     </div>
   );
 }

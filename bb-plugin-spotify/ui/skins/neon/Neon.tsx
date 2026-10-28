@@ -3,6 +3,7 @@ import { PALETTES, type Device, type Playlist, type SearchResult, type Track } f
 import { artists, playlistLength } from "../../format";
 import { isTyping, transportKey, useKeys } from "../../keys";
 import { progressAt, upNext, type MiniProps, type Skin, type SkinProps } from "../../model";
+import { usePlaylistAdd, type PlaylistAdd } from "../../playlist-add";
 import { Devices, Duck, Help, Keycaps, Library, Queue, Rules, ShareButtons, sourceOf, Stats, Tracks, type Share } from "./panes";
 import { capFor, layoutFor, type Hue } from "./tubes";
 import { Art, Elapsed, Eq, Equalizer, Hairline, Icon, Seek, Sign } from "./visuals";
@@ -28,6 +29,7 @@ const KEYS: Record<"full" | "compact" | "tight", [string, string][]> = {
     ["n", "next"],
     ["p", "prev"],
     ["f", "like"],
+    ["a", "add"],
     ["s", "search"],
     ["R", "reshuffle"],
     ["y", "link"],
@@ -100,7 +102,7 @@ function Over({ data, device = false }: { data: SkinProps["data"]; device?: bool
   );
 }
 
-function Transport({ player, actions }: { player: Player; actions: SkinProps["actions"] }) {
+function Transport({ player, actions, add }: { player: Player; actions: SkinProps["actions"]; add: PlaylistAdd }) {
   return (
     <span className="n-btns" onMouseDown={(event) => event.preventDefault()}>
       <button type="button" className="n-tbb" onClick={actions.previous} aria-label="Previous song" title="Previous (p)">
@@ -122,6 +124,9 @@ function Transport({ player, actions }: { player: Player; actions: SkinProps["ac
         title="Save to Liked Songs (f)"
       >
         <Icon name="heart" />
+      </button>
+      <button type="button" className="n-tbb" data-sp-add="" onClick={(event) => add.open(player.track, event.currentTarget)} disabled={player.track === null} aria-label="Add to a playlist" title="Add to a playlist (a)">
+        <Icon name="addto" />
       </button>
     </span>
   );
@@ -188,16 +193,16 @@ function Volume({ player, onSet }: { player: Player; onSet(percent: number): voi
   );
 }
 
-function Hero({ props, onShare, onLike }: { props: SkinProps; onShare(how: Share): void; onLike(): void }) {
+function Hero({ props, add, onShare, onLike }: { props: SkinProps; add: PlaylistAdd; onShare(how: Share): void; onLike(): void }) {
   const { data, actions } = props;
   const { player } = data;
   const track = player.track;
   return (
     <div className="n-hero">
-      <Art track={track} demo={data.demo} className="n-hcv" />
+      <Art track={track} demo={data.demo} className="n-hcv" {...add.song(track)} />
       <div className="n-hmeta">
         <Over data={data} />
-        <div className="n-plate">
+        <div className="n-plate" {...add.song(track)}>
           <i className="n-bolt n-a" />
           <i className="n-bolt n-b" />
           <i className="n-bolt n-c" />
@@ -255,6 +260,7 @@ function NeonPage(props: SkinProps) {
   const [help, setHelp] = useState(false);
   const [picker, setPicker] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast>(null);
+  const add = usePlaylistAdd(props);
 
   const playlists = useMemo(() => ordered(data.playlists), [data.playlists]);
   const upcoming = upNext(data).slice(0, 30);
@@ -360,6 +366,11 @@ function NeonPage(props: SkinProps) {
   const repeat = () => {
     actions.cycleRepeat();
     say(`repeat ${player.repeat === "off" ? "all" : player.repeat === "context" ? "one" : "off"}`, "clear");
+  };
+
+  const addTo = () => {
+    const chosen = focus === "tracks" && cursor.tracks !== null ? trackList[at.tracks] : focus === "next" && cursor.next !== null ? upcoming[at.next]?.track : undefined;
+    add.open(chosen ?? track, root.current?.querySelector<HTMLElement>(chosen === undefined ? ".n-btns [data-sp-add]" : ".n-kb [data-sp-add]") ?? null);
   };
 
   const openPicker = () => {
@@ -468,6 +479,9 @@ function NeonPage(props: SkinProps) {
       case "f":
         like();
         return true;
+      case "a":
+        addTo();
+        return true;
       case "s":
         summonSearch();
         return true;
@@ -572,7 +586,7 @@ function NeonPage(props: SkinProps) {
       ) : trackList.length === 0 ? (
         <div className="n-empty">{found !== null ? "no songs found" : filtered ? `Nothing in ${playlist?.name ?? "this playlist"} matches “${query.trim()}”. ⏎ searches all of Spotify.` : "this playlist is empty"}</div>
       ) : (
-        <Tracks props={props} tracks={trackList} cursor={at.tracks} focused={focus === "tracks"} album={full || size.width >= 760} onPlay={(index) => (setPane("tracks"), playRow(index))} onShare={share} />
+        <Tracks props={props} add={add} tracks={trackList} cursor={at.tracks} focused={focus === "tracks"} album={full || size.width >= 760} onPlay={(index) => (setPane("tracks"), playRow(index))} onShare={share} />
       );
     return { note, body };
   };
@@ -605,6 +619,7 @@ function NeonPage(props: SkinProps) {
       <Keycaps keys={KEYS[layout]} toast={toast} />
       {devicePicker}
       {help ? <Help onClose={() => setHelp(false)} /> : null}
+      {add.picker}
     </div>
   );
 
@@ -629,11 +644,11 @@ function NeonPage(props: SkinProps) {
             <div className="n-cap">
               Library <small>{data.playlists === null ? "" : `${playlists.length} playlists`}</small>
             </div>
-            <Library props={props} playlists={playlists} cursor={at.playlists} focused={focus === "playlists"} onPick={pick} onPlay={playList} />
+            <Library props={props} add={add} playlists={playlists} cursor={at.playlists} focused={focus === "playlists"} onPick={pick} onPlay={playList} />
             <Stats stats={data.stats} />
           </aside>
           <main className="n-center">
-            <Hero props={props} onShare={share} onLike={like} />
+            <Hero props={props} add={add} onShare={share} onLike={like} />
             <Equalizer player={player} palette={palette} bands={52} reflect className="n-fvis" />
             <div className={`n-tl ${pane === "tracks" ? "n-focus" : ""}`} onMouseDown={() => setPane("tracks")}>
               <div className="n-tl-h">
@@ -654,13 +669,13 @@ function NeonPage(props: SkinProps) {
               Up next <span className={`n-ss-on ${data.session === null ? "n-unlit" : "n-lit n-vibe"}`}>smart shuffle</span>
             </div>
             <Rules props={props} onShuffle={reshuffle} onLeave={rest} />
-            <Queue props={props} cursor={at.next} focused={focus === "next"} onPlay={playNext} />
+            <Queue props={props} add={add} cursor={at.next} focused={focus === "next"} onPlay={playNext} />
           </aside>
         </div>
         <div className="n-tbar">
           <Modes player={player} onShuffle={shuffle} onRepeat={repeat} />
           <div className="n-ctl">
-            <Transport player={player} actions={actions} />
+            <Transport player={player} actions={actions} add={add} />
             <div className="n-seek">
               <Seek player={player} onSeek={actions.seek} />
             </div>
@@ -685,8 +700,8 @@ function NeonPage(props: SkinProps) {
     <>
       <div className="n-chead">
         <Equalizer player={player} palette={palette} bands={36} className="n-cvis" />
-        {tight ? null : <Art track={track} demo={data.demo} className="n-ccv" />}
-        <div className="n-cmeta">
+        {tight ? null : <Art track={track} demo={data.demo} className="n-ccv" {...add.song(track)} />}
+        <div className="n-cmeta" {...add.song(track)}>
           <Over data={data} device />
           <Sign text={titleOf(player)} lit={track !== null} max={26} single ignite={track?.id ?? player.status} />
           <div className="n-cart">
@@ -710,7 +725,7 @@ function NeonPage(props: SkinProps) {
               Open Spotify
             </button>
           ) : (
-            <Transport player={player} actions={actions} />
+            <Transport player={player} actions={actions} add={add} />
           )}
         </div>
         <div className="n-cseek">
@@ -721,7 +736,15 @@ function NeonPage(props: SkinProps) {
       </div>
       <div className="n-tabs" role="tablist">
         {TABS.map((entry) => (
-          <button key={entry.id} type="button" role="tab" aria-selected={tab === entry.id} className={`n-tab ${tab === entry.id ? "n-on" : ""}`} onClick={() => openTab(entry.id)}>
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === entry.id}
+            className={`n-tab ${tab === entry.id ? "n-on" : ""}`}
+            onClick={() => openTab(entry.id)}
+            {...(entry.id === "library" ? add.spring(() => openTab("library")) : {})}
+          >
             {entry.label}
             {counts[entry.id] === undefined ? null : <small>{counts[entry.id]}</small>}
           </button>
@@ -738,10 +761,10 @@ function NeonPage(props: SkinProps) {
         ) : tab === "next" ? (
           <>
             <Rules props={props} onShuffle={reshuffle} onLeave={rest} />
-            <Queue props={props} cursor={at.next} focused={focus === "next"} onPlay={playNext} />
+            <Queue props={props} add={add} cursor={at.next} focused={focus === "next"} onPlay={playNext} />
           </>
         ) : tab === "library" ? (
-          <Library props={props} playlists={playlists} cursor={at.playlists} focused={focus === "playlists"} onPick={pick} onPlay={playList} />
+          <Library props={props} add={add} playlists={playlists} cursor={at.playlists} focused={focus === "playlists"} onPick={pick} onPlay={playList} />
         ) : (
           <div className="n-cgrid">
             <div>
@@ -766,11 +789,13 @@ function NeonMini({ data, actions, palette, close }: MiniProps) {
   const root = useRef<HTMLDivElement>(null);
   const { player } = data;
   const track = player.track;
+  const add = usePlaylistAdd({ data, actions });
   useKeys(root, (event) => {
     if (transportKey(event, data, actions)) return true;
     if (event.key === "n") actions.next();
     else if (event.key === "p") actions.previous();
     else if (event.key === "f" && track !== null) actions.like();
+    else if (event.key === "a") add.open(track, root.current?.querySelector<HTMLElement>("[data-sp-add]") ?? null);
     else if (event.key === "y" && track !== null) actions.copyLink(track);
     else if (event.key === "@" && track !== null) actions.mention(track);
     else if (event.key === "o") actions.openPage();
@@ -784,7 +809,7 @@ function NeonMini({ data, actions, palette, close }: MiniProps) {
       <span className="n-mcv" data-sp-drag="" title="Drag to move">
         <Art track={track} demo={data.demo} />
       </span>
-      <div className="n-mm">
+      <div className="n-mm" {...add.song(track)}>
         <button type="button" className="n-mtitle" onClick={actions.openPage} title="Open the Spotify page">
           <Sign text={titleOf(player)} lit={track !== null} max={17} single ignite={track?.id ?? player.status} />
         </button>
@@ -799,7 +824,7 @@ function NeonMini({ data, actions, palette, close }: MiniProps) {
         </div>
       </div>
       <Eq />
-      <Transport player={player} actions={actions} />
+      <Transport player={player} actions={actions} add={add} />
       <button type="button" className="n-tbb n-x" onClick={close} aria-label="Close the mini player" title="Close (q)">
         <Icon name="close" />
       </button>
@@ -809,6 +834,7 @@ function NeonMini({ data, actions, palette, close }: MiniProps) {
           <Duck duck={player.duck} />
         </div>
       ) : null}
+      {add.picker}
     </div>
   );
 }

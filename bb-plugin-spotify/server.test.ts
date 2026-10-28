@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakePluginHost, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import plugin from "./server";
+import { parseTrack } from "./spotify/parse";
 import { empty, fakeFetch, json, on, rawTrack, type Recorded } from "./test/fake-spotify";
 
 const CLIENT_ID = "0123456789abcdef0123456789abcdef";
 
 function fakeSpotify() {
-  const player = { volume: 70, isPlaying: true, trackId: "now" };
+  const player = { volume: 70, isPlaying: true, trackId: "now", saved: true };
   const pending: unknown[] = [];
   const tracks = ["a", "b", "c", "d", "e", "f"].map((id, index) => rawTrack(id, { artist: index % 2 === 0 ? "Even" : `Odd ${id}` }));
   const fake = fakeFetch([
@@ -23,7 +24,12 @@ function fakeSpotify() {
         item: rawTrack(player.trackId, { name: "Let It Happen", artist: "Tame Impala" }),
       }),
     ),
-    on("GET", "/v1/me/library/contains", () => json([true])),
+    on("GET", "/v1/me/library/contains", () => json([player.saved])),
+    on("PUT", "/v1/me/library", () => {
+      player.saved = true;
+      return empty();
+    }),
+    on("POST", "/v1/playlists/p1/items", () => json({ snapshot_id: "snap-2" }, 201)),
     on("PUT", "/v1/me/player/volume", (request) => {
       player.volume = Number(request.url.searchParams.get("volume_percent"));
       return empty();
@@ -178,6 +184,41 @@ describe("playing", () => {
       ["Deep Work", 6],
       ["Lo-fi Beats", 300],
     ]);
+  });
+});
+
+describe("adding to playlists", () => {
+  const song = (id: string) => parseTrack(rawTrack(id))!;
+
+  it("adds a song to a playlist you own once, unless you ask for a duplicate", async () => {
+    const { harness } = await start();
+    await connect(harness);
+    expect(await harness.behavior.callRpc("playlist_add", { playlistId: "p1", track: song("z"), allowDuplicate: false })).toMatchObject({ added: true, playlist: { name: "Deep Work", trackCount: 7 } });
+    expect(JSON.parse(calls("POST", "/v1/playlists/p1/items")[0]!.body!)).toEqual({ uris: ["spotify:track:z"] });
+    const { tracks } = (await harness.behavior.callRpc("library_tracks", { playlistId: "p1" })) as { tracks: { id: string }[] };
+    expect(tracks.map((track) => track.id)).toEqual(["a", "b", "c", "d", "e", "f", "z"]);
+    expect(calls("GET", "/v1/playlists/p1/items")).toHaveLength(1);
+    expect(await harness.behavior.callRpc("playlist_add", { playlistId: "p1", track: song("a"), allowDuplicate: false })).toMatchObject({ added: false });
+    expect(calls("POST", "/v1/playlists/p1/items")).toHaveLength(1);
+    await harness.behavior.callRpc("playlist_add", { playlistId: "p1", track: song("a"), allowDuplicate: true });
+    expect(calls("POST", "/v1/playlists/p1/items")).toHaveLength(2);
+  });
+
+  it("refuses a followed playlist", async () => {
+    const { harness } = await start();
+    await connect(harness);
+    await expect(harness.behavior.callRpc("playlist_add", { playlistId: "p2", track: song("z"), allowDuplicate: false })).rejects.toThrow('"Lo-fi Beats" is play only');
+    expect(calls("POST", "/v1/playlists/p2/items")).toHaveLength(0);
+  });
+
+  it("saves to Liked Songs without listing them", async () => {
+    const { harness } = await start();
+    await connect(harness);
+    expect(await harness.behavior.callRpc("playlist_add", { playlistId: "liked", track: song("now"), allowDuplicate: true })).toMatchObject({ added: false });
+    spotify.player.saved = false;
+    expect(await harness.behavior.callRpc("playlist_add", { playlistId: "liked", track: song("now"), allowDuplicate: false })).toMatchObject({ added: true, playlist: { trackCount: 1285 } });
+    expect(calls("PUT", "/v1/me/library")[0]!.url.searchParams.get("uris")).toBe("spotify:track:now");
+    expect(calls("GET", "/v1/me/tracks").every((call) => call.url.searchParams.get("limit") === "1")).toBe(true);
   });
 });
 

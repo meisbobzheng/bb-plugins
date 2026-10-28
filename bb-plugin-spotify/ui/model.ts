@@ -36,6 +36,7 @@ export interface SpotifyActions {
   playPlaylist(playlist: Playlist, startAt?: Track): void;
   playTrack(track: Track): void;
   queue(track: Track): void;
+  addToPlaylist(track: Track, playlist: Playlist): void;
   setShuffleOptions(patch: Partial<ShuffleOptions>): void;
   smartShuffle(patch?: Partial<ShuffleOptions>): void;
   copyLink(track: Track): void;

@@ -1,14 +1,23 @@
 import { useRef, useState, type ReactNode, type RefObject } from "react";
-import type { PlayerState, SearchResult } from "../../../contract";
+import type { PlayerState, SearchResult, Track } from "../../../contract";
 import { artists, clock, daysAgo, hours, monthDay, playlistLength } from "../../format";
 import { progressAt, upNext, type SpotifyActions, type SpotifyData } from "../../model";
+import type { PlaylistAdd } from "../../playlist-add";
 import { useFrame } from "../../spectrum";
 import { stepDays } from "./dial";
 import { Group, Key, pad, Screws } from "./panel";
 
 const isFresh = (reason: string | null) => reason !== null && /^(unheard|new to)/.test(reason);
 
-export function Processor({ data, actions, source, onRun }: { data: SpotifyData; actions: SpotifyActions; source: string; onRun(): void }) {
+function AddKey({ track, add }: { track: Track; add: PlaylistAdd }) {
+  return (
+    <button type="button" className="r-q r-add" data-sp-add="" onClick={(event) => add.open(track, event.currentTarget)} aria-label={`Add ${track.name} to a playlist`} title="Add to a playlist">
+      +
+    </button>
+  );
+}
+
+export function Processor({ data, actions, add, source, onRun }: { data: SpotifyData; actions: SpotifyActions; add: PlaylistAdd; source: string; onRun(): void }) {
   const options = data.shuffleOptions;
   const session = data.session;
   const upcoming = upNext(data).slice(0, 4);
@@ -80,12 +89,13 @@ export function Processor({ data, actions, source, onRun }: { data: SpotifyData;
         </div>
         {upcoming.length === 0 ? <div className="r-prow r-glow r-quiet">Queue empty · press Shuffle to build a program</div> : null}
         {upcoming.map((entry, index) => (
-          <div key={`${entry.track.id}-${index}`} className="r-prow r-glow">
+          <div key={`${entry.track.id}-${index}`} className="r-prow r-glow" {...add.song(entry.track)}>
             <span>{pad(index + 1)}</span>
             <span className="r-trunc">
               {entry.track.name} — {artists(entry.track)}
             </span>
             <em className={isFresh(entry.reason) ? "r-fresh" : ""}>{entry.reason ?? ""}</em>
+            <AddKey track={entry.track} add={add} />
           </div>
         ))}
         {session?.vibeError ? <div className="r-prow r-glow r-warn">Vibe off · {session.vibeError}</div> : null}
@@ -137,7 +147,7 @@ function Card({ title, aside, children }: { title: string; aside?: ReactNode; ch
 
 const Note = ({ children }: { children: ReactNode }) => <div className="r-note">{children}</div>;
 
-export function TapeCard({ data, actions, onPlay }: { data: SpotifyData; actions: SpotifyActions; onPlay(): void }) {
+export function TapeCard({ data, actions, add, onPlay }: { data: SpotifyData; actions: SpotifyActions; add: PlaylistAdd; onPlay(): void }) {
   const { selection } = data;
   const playlist = selection.playlist;
   const tracks = selection.tracks ?? [];
@@ -163,13 +173,16 @@ export function TapeCard({ data, actions, onPlay }: { data: SpotifyData; actions
       {!selection.loading && selection.readable ? (
         <div className="r-tl">
           {tracks.map((track, index) => (
-            <button type="button" key={`${track.id}-${index}`} className={`r-row ${track.id === current ? "on" : ""}`} onClick={() => actions.playPlaylist(playlist, track)} title={`${track.name} — ${artists(track)} · ${track.album.name}`}>
-              <span>{track.id === current ? "" : pad(index + 1)}</span>
-              <span>
-                {track.name} <em>— {artists(track)}</em>
-              </span>
-              <span>{clock(track.durationMs)}</span>
-            </button>
+            <div key={`${track.id}-${index}`} className={`r-row r-hit ${track.id === current ? "on" : ""}`} {...add.song(track)}>
+              <button type="button" onClick={() => actions.playPlaylist(playlist, track)} title={`${track.name} — ${artists(track)} · ${track.album.name}`}>
+                <span>{track.id === current ? "" : pad(index + 1)}</span>
+                <span>
+                  {track.name} <em>— {artists(track)}</em>
+                </span>
+                <span>{clock(track.durationMs)}</span>
+              </button>
+              <AddKey track={track} add={add} />
+            </div>
           ))}
         </div>
       ) : null}
@@ -177,8 +190,12 @@ export function TapeCard({ data, actions, onPlay }: { data: SpotifyData; actions
   );
 }
 
-export function StatsCard({ data, actions, onTune }: { data: SpotifyData; actions: SpotifyActions; onTune(playlistId: string): void }) {
+export function StatsCard({ data, actions, add, onTune }: { data: SpotifyData; actions: SpotifyActions; add: PlaylistAdd; onTune(playlistId: string): void }) {
   const stats = data.stats;
+  const target = (id: string) => {
+    const playlist = data.playlists?.find((entry) => entry.id === id);
+    return playlist === undefined ? {} : add.target(playlist);
+  };
   if (stats === null) return (
       <Card title="Listening log">
         <Note>Reading the log…</Note>
@@ -224,7 +241,7 @@ export function StatsCard({ data, actions, onTune }: { data: SpotifyData; action
           </div>
           {stats.forgotten.length > 0 ? <div className="r-sub">Forgotten</div> : null}
           {stats.forgotten.map((entry) => (
-            <button type="button" key={entry.playlistId} className="r-row r-plain" onClick={() => onTune(entry.playlistId)} title="Tune this station">
+            <button type="button" key={entry.playlistId} className="r-row r-plain" onClick={() => onTune(entry.playlistId)} title="Tune this station" {...target(entry.playlistId)}>
               <span>
                 {entry.name} <em>· {entry.lastPlayedAt === null ? "never played here" : daysAgo(entry.lastPlayedAt)}</em>
               </span>
@@ -246,12 +263,15 @@ export function StatsCard({ data, actions, onTune }: { data: SpotifyData; action
         <div>
           <div className="r-sub">Top songs · 30 days</div>
           {stats.topTracks.slice(0, 8).map((entry) => (
-            <button type="button" key={entry.track.id} className="r-row" onClick={() => actions.playTrack(entry.track)} title="Play">
-              <span>{entry.plays}×</span>
-              <span>
-                {entry.track.name} <em>— {artists(entry.track)}</em>
-              </span>
-            </button>
+            <div key={entry.track.id} className="r-row r-hit" {...add.song(entry.track)}>
+              <button type="button" onClick={() => actions.playTrack(entry.track)} title="Play">
+                <span>{entry.plays}×</span>
+                <span>
+                  {entry.track.name} <em>— {artists(entry.track)}</em>
+                </span>
+              </button>
+              <AddKey track={entry.track} add={add} />
+            </div>
           ))}
         </div>
       </div>
@@ -264,19 +284,22 @@ function when(at: number): string {
   return date.toDateString() === new Date().toDateString() ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : daysAgo(at);
 }
 
-export function HistoryCard({ data, actions }: { data: SpotifyData; actions: SpotifyActions }) {
+export function HistoryCard({ data, actions, add }: { data: SpotifyData; actions: SpotifyActions; add: PlaylistAdd }) {
   return (
     <Card title="Play log" aside={data.recent.length > 0 ? `${data.recent.length} recent · click replays` : undefined}>
       {data.recent.length === 0 ? <Note>No plays logged yet. They show up here as you listen.</Note> : null}
       <div className="r-tl r-log">
         {data.recent.map((play, index) => (
-          <button type="button" key={`${play.startedAt}-${index}`} className="r-row" onClick={() => actions.playTrack(play.track)} title="Play again">
-            <span>{when(play.startedAt)}</span>
-            <span>
-              {play.track.name} <em>— {artists(play.track)}</em>
-            </span>
-            <span>{play.skipped ? <b className="r-stamp">Skip</b> : clock(play.listenedMs)}</span>
-          </button>
+          <div key={`${play.startedAt}-${index}`} className="r-row r-hit" {...add.song(play.track)}>
+            <button type="button" onClick={() => actions.playTrack(play.track)} title="Play again">
+              <span>{when(play.startedAt)}</span>
+              <span>
+                {play.track.name} <em>— {artists(play.track)}</em>
+              </span>
+              <span>{play.skipped ? <b className="r-stamp">Skip</b> : clock(play.listenedMs)}</span>
+            </button>
+            <AddKey track={play.track} add={add} />
+          </div>
         ))}
       </div>
     </Card>
@@ -311,7 +334,7 @@ export function useSearch(actions: SpotifyActions): Search {
   return { query, setQuery, run, ...state };
 }
 
-export function SearchCard({ search, input, actions, onLeave }: { search: Search; input: RefObject<HTMLInputElement | null>; actions: SpotifyActions; onLeave(): void }) {
+export function SearchCard({ search, input, actions, add, onLeave }: { search: Search; input: RefObject<HTMLInputElement | null>; actions: SpotifyActions; add: PlaylistAdd; onLeave(): void }) {
   const result = search.result;
   const empty = result !== null && result.tracks.length + result.playlists.length + result.artists.length + result.albums.length === 0;
   const names = result === null ? [] : [...result.artists.map((artist) => artist.name), ...result.albums.map((album) => `${album.name} ${album.artist}`)].slice(0, 8);
@@ -342,7 +365,7 @@ export function SearchCard({ search, input, actions, onLeave }: { search: Search
       {result !== null && result.tracks.length > 0 ? <div className="r-sub">Songs</div> : null}
       <div className="r-tl">
         {result?.tracks.map((track) => (
-          <div key={track.id} className="r-row r-hit">
+          <div key={track.id} className="r-row r-hit" {...add.song(track)}>
             <button type="button" onClick={() => actions.playTrack(track)} title="Play">
               <span className="r-mark">▶</span>
               <span>
@@ -353,13 +376,14 @@ export function SearchCard({ search, input, actions, onLeave }: { search: Search
             <button type="button" className="r-q" onClick={() => actions.queue(track)} title="Add to queue">
               Q
             </button>
+            <AddKey track={track} add={add} />
           </div>
         ))}
       </div>
       {result !== null && result.playlists.length > 0 ? <div className="r-sub">Playlists</div> : null}
       <div className="r-tl">
         {result?.playlists.map((playlist) => (
-          <button type="button" key={playlist.id} className="r-row" onClick={() => actions.playPlaylist(playlist)} title="Play">
+          <button type="button" key={playlist.id} className="r-row" onClick={() => actions.playPlaylist(playlist)} title="Play" {...add.target(playlist)}>
             <span className="r-mark">▶</span>
             <span>
               {playlist.name} <em>— {playlist.owner}</em>

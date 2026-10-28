@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { Device, Playlist, Stats, Track } from "../../../contract";
 import { artists, clock, hours, playlistLength } from "../../format";
 import { upNext, type SkinProps, type SpotifyData } from "../../model";
+import type { PlaylistAdd } from "../../playlist-add";
 import { Arrow, Check, Cover, Icon, Kc, Outline, Plot, type IconName } from "./drawing";
 import { nextDays, tagFor, vibeEnds, weekBars } from "./sheet";
 
@@ -31,14 +32,32 @@ function kicker(data: SpotifyData): string {
   return `${player.isPlaying ? "now playing" : "paused"}${at === null ? "" : ` · track ${at}`} · ${from}`;
 }
 
-export function Meta({ props }: { props: SkinProps }) {
+function AddTo({ add, track }: { add: PlaylistAdd; track: Track }) {
+  return (
+    <button
+      type="button"
+      className="g-add"
+      data-sp-add=""
+      title="Add to a playlist (a)"
+      aria-label={`Add ${track.name} to a playlist`}
+      onClick={(event) => {
+        event.stopPropagation();
+        add.open(track, event.currentTarget);
+      }}
+    >
+      +
+    </button>
+  );
+}
+
+export function Meta({ props, add }: { props: SkinProps; add: PlaylistAdd }) {
   const { data, actions } = props;
   const { player } = data;
   const track = player.track;
   return (
     <div className="g-meta">
       <div className="g-tl">{kicker(data)}</div>
-      <div className="g-title">
+      <div className="g-title" {...add.song(track)}>
         <span className="g-tu">
           {track?.name ?? "nothing on the board"}
           <Outline shape="under" tone="red" seed="title" />
@@ -69,9 +88,9 @@ export function Meta({ props }: { props: SkinProps }) {
   );
 }
 
-export function Art({ track, caption }: { track: Track | null; caption: boolean }) {
+export function Art({ track, caption, ...rest }: { track: Track | null; caption: boolean } & React.HTMLAttributes<HTMLElement>) {
   return (
-    <figure className="g-art">
+    <figure {...rest} className="g-art">
       <div className="g-art-box">
         <Cover track={track} />
       </div>
@@ -98,9 +117,9 @@ export function ShareButtons({ onShare }: { onShare(how: Share): void }) {
   );
 }
 
-function Round({ label, keyHint, big = false, on = false, onClick, children }: { label: string; keyHint: string; big?: boolean; on?: boolean; onClick(): void; children: React.ReactNode }) {
+function Round({ label, keyHint, big = false, on = false, children, ...button }: { label: string; keyHint: string; big?: boolean; on?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button type="button" className={`g-tb ${big ? "g-big" : ""} ${on ? "g-on" : ""}`} onClick={onClick} aria-label={label} title={`${label} (${keyHint})`}>
+    <button type="button" {...button} className={`g-tb ${big ? "g-big" : ""} ${on ? "g-on" : ""}`} aria-label={label} title={`${label} (${keyHint})`}>
       {children}
       <span className="g-kca">
         <Kc>{keyHint}</Kc>
@@ -110,7 +129,7 @@ function Round({ label, keyHint, big = false, on = false, onClick, children }: {
   );
 }
 
-export function Transport({ props }: { props: SkinProps }) {
+export function Transport({ props, add }: { props: SkinProps; add: PlaylistAdd }) {
   const { data, actions } = props;
   const { isPlaying, liked, track } = data.player;
   return (
@@ -126,6 +145,9 @@ export function Transport({ props }: { props: SkinProps }) {
       </Round>
       <Round label={liked ? "Remove from Liked Songs" : "Save to Liked Songs"} keyHint="f" on={liked === true} onClick={() => track !== null && actions.like()}>
         <Icon name="heart" />
+      </Round>
+      <Round label="Add to a playlist" keyHint="a" data-sp-add="" disabled={track === null} onClick={(event) => add.open(track, event.currentTarget)}>
+        <Icon name="plus" />
       </Round>
     </>
   );
@@ -154,7 +176,7 @@ export function Repeat({ props }: { props: SkinProps }) {
   return <Toggle icon="repeat" word="repeat" state={repeatWord(player.repeat)} on={player.repeat !== "off"} onClick={props.actions.cycleRepeat} />;
 }
 
-export function Playlists({ props, list, cursor, focused, columns = false, onPick }: { props: SkinProps; list: Playlist[]; cursor: number | null; focused: boolean; columns?: boolean; onPick(playlist: Playlist): void }) {
+export function Playlists({ props, add, list, cursor, focused, columns = false, onPick }: { props: SkinProps; add: PlaylistAdd; list: Playlist[]; cursor: number | null; focused: boolean; columns?: boolean; onPick(playlist: Playlist): void }) {
   const { data } = props;
   const ul = useRef<HTMLUListElement>(null);
   useEffect(() => {
@@ -165,7 +187,7 @@ export function Playlists({ props, list, cursor, focused, columns = false, onPic
     const selected = data.selection.playlist?.id === playlist.id;
     return (
       <li key={playlist.id}>
-        <button type="button" className={`g-pl ${focused && index === cursor ? "g-cur" : ""}`} onClick={() => onPick(playlist)} aria-pressed={selected} title={playlist.readable ? playlist.name : `${playlist.name} · play only`}>
+        <button type="button" {...add.target(playlist)} className={`g-pl ${focused && index === cursor ? "g-cur" : ""}`} onClick={() => onPick(playlist)} aria-pressed={selected} title={playlist.readable ? playlist.name : `${playlist.name} · play only`}>
           <span className="g-pl-mark">{data.player.context?.uri === playlist.uri ? "♪" : ""}</span>
           <span className="g-pl-n">
             <span className="g-trunc">{playlist.name}</span>
@@ -265,7 +287,7 @@ export function StatsBox({ stats }: { stats: Stats | null }) {
   );
 }
 
-export function Tracks({ props, found, cursor, focused, onPlay, onQueue, onClear }: { props: SkinProps; found: Found | null; cursor: number | null; focused: boolean; onPlay(index: number): void; onQueue(track: Track): void; onClear(): void }) {
+export function Tracks({ props, add, found, cursor, focused, onPlay, onQueue, onClear }: { props: SkinProps; add: PlaylistAdd; found: Found | null; cursor: number | null; focused: boolean; onPlay(index: number): void; onQueue(track: Track): void; onClear(): void }) {
   const { data, actions } = props;
   const { playlist, readable, loading } = data.selection;
   const box = useRef<HTMLDivElement>(null);
@@ -303,7 +325,7 @@ export function Tracks({ props, found, cursor, focused, onPlay, onQueue, onClear
     return rows.map((track, index) => {
       const now = track.id === current;
       return (
-        <div key={`${track.id}-${index}`} role="button" tabIndex={-1} className={`g-trow ${now ? "g-now" : ""} ${focused && index === cursor ? "g-cur" : ""}`} onClick={() => onPlay(index)}>
+        <div key={`${track.id}-${index}`} {...add.song(track)} role="button" tabIndex={-1} className={`g-trow ${now ? "g-now" : ""} ${focused && index === cursor ? "g-cur" : ""}`} onClick={() => onPlay(index)}>
           <span className="g-t-n">{now ? (data.player.isPlaying ? "♪" : "❚❚") : String(index + 1).padStart(2, "0")}</span>
           <span className="g-t-t">
             {track.name}
@@ -326,6 +348,7 @@ export function Tracks({ props, found, cursor, focused, onPlay, onQueue, onClear
           ) : (
             <span className="g-t-d">{clock(track.durationMs)}</span>
           )}
+          <AddTo add={add} track={track} />
         </div>
       );
     });
@@ -432,7 +455,7 @@ export function ShuffleNote({ props, onShuffle, onLeave }: { props: SkinProps; o
   );
 }
 
-export function Picks({ props, cursor, focused, limit, plot = true, onPlay }: { props: SkinProps; cursor: number | null; focused: boolean; limit?: number; plot?: boolean; onPlay(track: Track): void }) {
+export function Picks({ props, add, cursor, focused, limit, plot = true, onPlay }: { props: SkinProps; add: PlaylistAdd; cursor: number | null; focused: boolean; limit?: number; plot?: boolean; onPlay(track: Track): void }) {
   const { data } = props;
   const upcoming = upNext(data).slice(0, limit);
   const vibe = data.session?.options.vibe ?? data.shuffleOptions.vibe;
@@ -459,7 +482,15 @@ export function Picks({ props, cursor, focused, limit, plot = true, onPlay }: { 
         {upcoming.map((entry, index) => {
           const tag = tagFor(entry.reason, data.session?.options.vibe != null);
           return (
-            <button key={`${entry.track.id}-${index}`} type="button" className={`g-q ${focused && index === cursor ? "g-cur" : ""}`} style={{ animationDelay: `${Math.min(index, 8) * 0.09}s` }} onClick={() => onPlay(entry.track)}>
+            <div
+              key={`${entry.track.id}-${index}`}
+              {...add.song(entry.track)}
+              role="button"
+              tabIndex={-1}
+              className={`g-q ${focused && index === cursor ? "g-cur" : ""}`}
+              style={{ animationDelay: `${Math.min(index, 8) * 0.09}s` }}
+              onClick={() => onPlay(entry.track)}
+            >
               <span className="g-q-n">{index + 1}</span>
               <span className="g-q-b">
                 <span className="g-q-t">
@@ -475,7 +506,8 @@ export function Picks({ props, cursor, focused, limit, plot = true, onPlay }: { 
                   </span>
                 ) : null}
               </span>
-            </button>
+              <AddTo add={add} track={entry.track} />
+            </div>
           );
         })}
       </div>
@@ -505,6 +537,7 @@ export const HELP: [string, string][] = [
   ["j k ⏎", "move · play / open"],
   ["tab", "next list"],
   ["f", "like / unlike"],
+  ["a", "add to a playlist"],
   ["s", "search · esc leaves"],
   ["R", "smart reshuffle"],
   ["x · r", "shuffle · repeat"],
@@ -524,6 +557,7 @@ export const LEGEND: [string, string][] = [
   ["n", "next"],
   ["p", "prev"],
   ["f", "like"],
+  ["a", "add"],
   ["s", "search"],
   ["R", "reshuffle"],
   ["y", "link"],

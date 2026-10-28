@@ -1,6 +1,7 @@
 import type { Playlist, SearchResult, Track } from "../../../contract";
 import { artists, clock, daysAgo, hours, monthDay, playlistLength } from "../../format";
 import type { SkinProps } from "../../model";
+import type { PlaylistAdd } from "../../playlist-add";
 import { Doodle, DoodleFor, Icon, Squiggle } from "./doodles";
 import { FILLS, stuck, vars } from "./stickers";
 import { Badge } from "./visuals";
@@ -39,14 +40,14 @@ function Head({ title, sub, action }: { title: string; sub: string; action?: Rea
   );
 }
 
-function Row({ props, track, lead, middle, time, skipped = false, log = false, onPlay }: { props: SkinProps; track: Track; lead: string; middle: string; time: string; skipped?: boolean; log?: boolean; onPlay(): void }) {
+function Row({ props, add, track, lead, middle, time, skipped = false, log = false, onPlay }: { props: SkinProps; add: PlaylistAdd; track: Track; lead: string; middle: string; time: string; skipped?: boolean; log?: boolean; onPlay(): void }) {
   const { actions, data } = props;
-  const act = (run: () => void) => (event: React.MouseEvent) => {
+  const act = (run: (event: React.MouseEvent<HTMLElement>) => void) => (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
-    run();
+    run(event);
   };
   return (
-    <div className={`k-row ${log ? "k-row-log" : ""} ${track.id === data.player.track?.id ? "k-now" : ""} ${skipped ? "k-skip" : ""}`} onClick={onPlay} title={`Play ${track.name}`}>
+    <div className={`k-row ${log ? "k-row-log" : ""} ${track.id === data.player.track?.id ? "k-now" : ""} ${skipped ? "k-skip" : ""}`} onClick={onPlay} title={`Play ${track.name}`} {...add.song(track)}>
       <DoodleFor seed={track.name} size={16} />
       <span className="k-row-n">{lead}</span>
       <span className="k-row-title k-trunc">
@@ -63,6 +64,9 @@ function Row({ props, track, lead, middle, time, skipped = false, log = false, o
         <button type="button" className="k-pill" style={vars({ "--fill": "var(--mint)" })} onClick={act(() => actions.queue(track))} aria-label={`Queue ${track.name}`}>
           <Icon name="plus" />
         </button>
+        <button type="button" className="k-pill" style={vars({ "--fill": "var(--butter)" })} data-sp-add="" onClick={act((event) => add.open(track, event.currentTarget))} aria-label={`Add ${track.name} to a playlist`}>
+          <Icon name="addto" />
+        </button>
         <button type="button" className="k-pill" style={vars({ "--fill": "var(--sky)" })} onClick={act(() => actions.copyLink(track))} aria-label={`Copy the link to ${track.name}`}>
           <Icon name="link" />
         </button>
@@ -74,7 +78,7 @@ function Row({ props, track, lead, middle, time, skipped = false, log = false, o
   );
 }
 
-function Songs({ props }: { props: SkinProps }) {
+function Songs({ props, add }: { props: SkinProps; add: PlaylistAdd }) {
   const { data, actions } = props;
   const { playlist, tracks, readable, loading } = data.selection;
   if (playlist === null) return <Message>pick a mixtape from the shelf and its songs get written down here.</Message>;
@@ -98,14 +102,14 @@ function Songs({ props }: { props: SkinProps }) {
         <Message>this page is blank. the playlist has no songs yet.</Message>
       ) : (
         tracks.map((track, index) => (
-          <Row key={`${track.id}-${index}`} props={props} track={track} lead={String(index + 1)} middle={track.album.name} time={clock(track.durationMs)} onPlay={() => actions.playPlaylist(playlist, track)} />
+          <Row key={`${track.id}-${index}`} props={props} add={add} track={track} lead={String(index + 1)} middle={track.album.name} time={clock(track.durationMs)} onPlay={() => actions.playPlaylist(playlist, track)} />
         ))
       )}
     </>
   );
 }
 
-function Stats({ props }: { props: SkinProps }) {
+function Stats({ props, add }: { props: SkinProps; add: PlaylistAdd }) {
   const { data, actions } = props;
   const stats = data.stats;
   if (stats === null) return <Message>counting your plays…</Message>;
@@ -128,7 +132,7 @@ function Stats({ props }: { props: SkinProps }) {
         {stats.topTracks.length > 0 ? (
           <div className="k-repeat">
             {stats.topTracks.slice(0, 3).map((entry) => (
-              <div key={entry.track.id} className="k-trunc">
+              <div key={entry.track.id} className="k-trunc" {...add.song(entry.track)}>
                 <b>{entry.plays}×</b>
                 {entry.track.name} <span className="k-soft">· {artists(entry.track)}</span>
               </div>
@@ -166,7 +170,7 @@ function Stats({ props }: { props: SkinProps }) {
             {stats.forgotten.slice(0, 4).map((entry, index) => {
               const playlist = replay(entry.playlistId);
               return (
-                <button key={entry.playlistId} type="button" className="k-miss" style={stuck(entry.name, 3.5, index % 2 ? "var(--pink)" : "var(--butter)")} disabled={playlist === undefined} onClick={() => playlist && actions.playPlaylist(playlist)} title={playlist ? `Play ${entry.name}` : entry.name}>
+                <button key={entry.playlistId} {...(playlist && add.target(playlist))} type="button" className="k-miss" style={stuck(entry.name, 3.5, index % 2 ? "var(--pink)" : "var(--butter)")} disabled={playlist === undefined} onClick={() => playlist && actions.playPlaylist(playlist)} title={playlist ? `Play ${entry.name}` : entry.name}>
                   <em>miss you!</em>
                   <b className="k-trunc">{entry.name}</b>
                   <small>{entry.lastPlayedAt === null ? "never played here" : `last played ${daysAgo(entry.lastPlayedAt)}`}</small>
@@ -185,20 +189,20 @@ function when(at: number): string {
   return daysAgo(at) === "today" ? time : new Date(at).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-function History({ props }: { props: SkinProps }) {
+function History({ props, add }: { props: SkinProps; add: PlaylistAdd }) {
   const { data, actions } = props;
   if (data.recent.length === 0) return <Message>nothing written down yet. songs land here after you play them with bb open.</Message>;
   return (
     <>
       <Head title="Lately" sub={`${data.recent.length} plays · skips crossed out`} />
       {data.recent.map((play, index) => (
-        <Row key={`${play.startedAt}-${index}`} props={props} track={play.track} lead={when(play.startedAt)} middle={play.track.album.name} time={clock(play.listenedMs)} skipped={play.skipped} log onPlay={() => actions.playTrack(play.track)} />
+        <Row key={`${play.startedAt}-${index}`} props={props} add={add} track={play.track} lead={when(play.startedAt)} middle={play.track.album.name} time={clock(play.listenedMs)} skipped={play.skipped} log onPlay={() => actions.playTrack(play.track)} />
       ))}
     </>
   );
 }
 
-function Search({ props, finder }: { props: SkinProps; finder: Finder }) {
+function Search({ props, add, finder }: { props: SkinProps; add: PlaylistAdd; finder: Finder }) {
   const { actions } = props;
   const { result, status } = finder;
   return (
@@ -227,7 +231,7 @@ function Search({ props, finder }: { props: SkinProps; finder: Finder }) {
       {status === "idle" && result !== null && result.playlists.length > 0 ? (
         <div className="k-found">
           {result.playlists.slice(0, 6).map((playlist) => (
-            <button key={playlist.id} type="button" className={`k-label ${playlist.readable ? "" : "k-ticket"}`} style={stuck(playlist.name)} onClick={() => actions.playPlaylist(playlist)} title={`Play ${playlist.name}`}>
+            <button key={playlist.id} {...add.target(playlist)} type="button" className={`k-label ${playlist.readable ? "" : "k-ticket"}`} style={stuck(playlist.name)} onClick={() => actions.playPlaylist(playlist)} title={`Play ${playlist.name}`}>
               <span className="k-badge-dot">
                 <DoodleFor seed={playlist.name} size={18} />
               </span>
@@ -243,13 +247,13 @@ function Search({ props, finder }: { props: SkinProps; finder: Finder }) {
         </div>
       ) : null}
       {status === "idle" && result !== null
-        ? result.tracks.map((track, index) => <Row key={`${track.id}-${index}`} props={props} track={track} lead={String(index + 1)} middle={track.album.name} time={clock(track.durationMs)} onPlay={() => actions.playTrack(track)} />)
+        ? result.tracks.map((track, index) => <Row key={`${track.id}-${index}`} props={props} add={add} track={track} lead={String(index + 1)} middle={track.album.name} time={clock(track.durationMs)} onPlay={() => actions.playTrack(track)} />)
         : null}
     </>
   );
 }
 
-export function Notebook({ props, tab, onTab, finder }: { props: SkinProps; tab: Tab; onTab(tab: Tab): void; finder: Finder }) {
+export function Notebook({ props, add, tab, onTab, finder }: { props: SkinProps; add: PlaylistAdd; tab: Tab; onTab(tab: Tab): void; finder: Finder }) {
   return (
     <section className="k-notebook">
       <div className="k-tabs" role="tablist" aria-label="Notebook">
@@ -262,7 +266,7 @@ export function Notebook({ props, tab, onTab, finder }: { props: SkinProps; tab:
         <span className="k-tabs-note">{TABS.find((entry) => entry.id === tab)?.note}</span>
       </div>
       <div className="k-page" role="tabpanel">
-        {tab === "songs" ? <Songs props={props} /> : tab === "stats" ? <Stats props={props} /> : tab === "history" ? <History props={props} /> : <Search props={props} finder={finder} />}
+        {tab === "songs" ? <Songs props={props} add={add} /> : tab === "stats" ? <Stats props={props} add={add} /> : tab === "history" ? <History props={props} add={add} /> : <Search props={props} add={add} finder={finder} />}
       </div>
     </section>
   );

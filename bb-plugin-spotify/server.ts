@@ -147,6 +147,7 @@ export default async function plugin(bb: BbPluginApi) {
       await service.queueAdd(uri);
       return { ok: true };
     },
+    playlist_add: ({ playlistId, track, allowDuplicate }) => service.playlistAdd(playlistId, track, allowDuplicate),
     shuffle_options_get: () => service.shuffleOptions(),
     shuffle_start: (options) => service.startShuffle(options),
     shuffle_session_get: () => service.shuffleSession(),

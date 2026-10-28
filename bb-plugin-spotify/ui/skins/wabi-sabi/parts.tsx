@@ -2,9 +2,10 @@ import { useEffect, useRef } from "react";
 import type { Device, DuckState, Playlist, Track } from "../../../contract";
 import { artists, clock } from "../../format";
 import { upNext, type SkinProps, type SpotifyData } from "../../model";
+import type { PlaylistAdd } from "../../playlist-add";
 import { stepDays } from "../pastel/stickers";
 import { listened, tagFor } from "./brush";
-import { Cover } from "./visuals";
+import { Cover, Icon } from "./visuals";
 
 export type Share = "link" | "thread" | "card";
 
@@ -17,6 +18,7 @@ const SHARES: [Share, string, string][] = [
 export const HELP: [string, string][] = [
   ["space", "play · pause"],
   ["f", "keep in Liked Songs"],
+  ["a", "add to a playlist"],
   ["n", "next"],
   ["p", "previous"],
   ["← →  , .", "seek 10 s"],
@@ -45,7 +47,27 @@ export function useNearest(ref: React.RefObject<HTMLElement | null>, deps: reado
   }, deps);
 }
 
-export function Library({ data, cursor, focused, onPick }: { data: SpotifyData; cursor: number; focused: boolean; onPick(index: number): void }) {
+export function Add({ track, add, hint = false }: { track: Track | null; add: PlaylistAdd; hint?: boolean }) {
+  return (
+    <button
+      type="button"
+      className="w-ib w-add"
+      data-sp-add=""
+      onClick={(event) => {
+        event.stopPropagation();
+        add.open(track, event.currentTarget);
+      }}
+      disabled={track === null}
+      aria-label={`Add ${track?.name ?? "the song"} to a playlist`}
+      title="Add to a playlist (a)"
+    >
+      <Icon name="add" />
+      {hint ? <Kbd>a</Kbd> : null}
+    </button>
+  );
+}
+
+export function Library({ data, add, cursor, focused, onPick }: { data: SpotifyData; add: PlaylistAdd; cursor: number; focused: boolean; onPick(index: number): void }) {
   const list = useRef<HTMLUListElement>(null);
   const playlists = ordered(data.playlists);
   useNearest(list, [cursor, focused]);
@@ -54,7 +76,7 @@ export function Library({ data, cursor, focused, onPick }: { data: SpotifyData; 
     const playing = data.player.context?.uri === playlist.uri;
     const classes = [playlist.readable ? "" : "w-fol", data.selection.playlist?.id === playlist.id ? "w-on" : "", focused && index === cursor ? "w-cur" : ""].join(" ");
     return (
-      <li key={playlist.id} className={classes} onClick={() => onPick(index)} title={playlist.readable ? playlist.name : `${playlist.name} · followed, play only`}>
+      <li key={playlist.id} {...add.target(playlist)} className={classes} onClick={() => onPick(index)} title={playlist.readable ? playlist.name : `${playlist.name} · followed, play only`}>
         <span className="w-nm">{playlist.name}</span>
         {playing ? <i className="w-ring" title="playing" /> : null}
         <span className="w-c">{playlist.trackCount.toLocaleString()}</span>
@@ -73,7 +95,7 @@ export function Library({ data, cursor, focused, onPick }: { data: SpotifyData; 
   );
 }
 
-export function Tracks({ props, tracks, cursor, focused, results, onPick }: { props: SkinProps; tracks: Track[]; cursor: number; focused: boolean; results: boolean; onPick(index: number): void }) {
+export function Tracks({ props, add, tracks, cursor, focused, results, onPick }: { props: SkinProps; add: PlaylistAdd; tracks: Track[]; cursor: number; focused: boolean; results: boolean; onPick(index: number): void }) {
   const { data, actions } = props;
   const box = useRef<HTMLDivElement>(null);
   const current = data.player.track?.id;
@@ -87,7 +109,7 @@ export function Tracks({ props, tracks, cursor, focused, results, onPick }: { pr
   return (
     <div ref={box} className={`w-tl ${results ? "w-results" : ""}`}>
       {tracks.map((track, index) => (
-        <div key={`${track.id}-${index}`} className={`w-tr ${track.id === current ? "w-now" : ""} ${focused && index === cursor ? "w-cur" : ""}`} onClick={() => onPick(index)} title={`Play ${track.name}`}>
+        <div key={`${track.id}-${index}`} {...add.song(track)} className={`w-tr ${track.id === current ? "w-now" : ""} ${focused && index === cursor ? "w-cur" : ""}`} onClick={() => onPick(index)} title={`Play ${track.name}`}>
           <span className="w-i">{String(index + 1).padStart(2, "0")}</span>
           <span className="w-n">{track.name}</span>
           <span className="w-a">{artists(track)}</span>
@@ -105,6 +127,7 @@ export function Tracks({ props, tracks, cursor, focused, results, onPick }: { pr
               queue
             </button>
           ) : null}
+          <Add track={track} add={add} />
         </div>
       ))}
     </div>
@@ -217,7 +240,7 @@ export function Session({ data }: { data: SpotifyData }) {
   );
 }
 
-export function UpNext({ props, cursor, focused, limit, onPick }: { props: SkinProps; cursor: number; focused: boolean; limit?: number; onPick(track: Track): void }) {
+export function UpNext({ props, add, cursor, focused, limit, onPick }: { props: SkinProps; add: PlaylistAdd; cursor: number; focused: boolean; limit?: number; onPick(track: Track): void }) {
   const { data } = props;
   const list = useRef<HTMLOListElement>(null);
   useNearest(list, [cursor, focused]);
@@ -233,7 +256,7 @@ export function UpNext({ props, cursor, focused, limit, onPick }: { props: SkinP
       {upcoming.map((entry, index) => {
         const tag = tagFor(entry.reason, vibe);
         return (
-          <li key={`${entry.track.id}-${index}`} className={focused && index === cursor ? "w-cur" : ""} onClick={() => onPick(entry.track)} title={`Play ${entry.track.name}`}>
+          <li key={`${entry.track.id}-${index}`} {...add.song(entry.track)} className={focused && index === cursor ? "w-cur" : ""} onClick={() => onPick(entry.track)} title={`Play ${entry.track.name}`}>
             <Cover album={entry.track.album.name} imageUrl={entry.track.album.imageUrl} demo={data.demo} size={26} />
             <div className="w-upn-b">
               <div className="w-t">
@@ -247,6 +270,7 @@ export function UpNext({ props, cursor, focused, limit, onPick }: { props: SkinP
                 </div>
               )}
             </div>
+            <Add track={entry.track} add={add} />
           </li>
         );
       })}

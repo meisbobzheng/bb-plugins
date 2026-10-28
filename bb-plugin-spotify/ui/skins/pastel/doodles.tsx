@@ -74,6 +74,7 @@ const ICONS = {
   ),
   search: <path className="k-hollow" d="M10.5 4.5a6 6 0 1 1 0 12 6 6 0 0 1 0-12zM15 15l5 5" />,
   plus: <path className="k-hollow" d="M12 6v12M6 12h12" />,
+  addto: <path className="k-hollow" d="M4 6.5h11M4 11.5h11M4 16.5h6M17 13.5v7M13.5 17h7" />,
   speaker: (
     <>
       <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
