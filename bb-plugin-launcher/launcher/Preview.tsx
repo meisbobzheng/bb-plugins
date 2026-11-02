@@ -9,6 +9,7 @@ import { useAsync, useDebounced, type OutlineItem } from "./data";
 import { ProjectIcon, ThreadIcon, relativeTime } from "./items";
 import { PluginIcon, pluginStatusLabel } from "./plugins";
 import { isRunning, needsAttention, visibleThreads } from "./rank";
+import { telecomKind } from "./telecom";
 import type { Item } from "./types";
 
 const OUTLINE_LIMIT = 6;
@@ -84,7 +85,7 @@ function ThreadPreview({ threadId }: { threadId: string }) {
   const settledId = useDebounced(threadId, SETTLE_MS);
   const settled = settledId === threadId;
   const { pullRequest } = useSidebarThreadPullRequest(settledId);
-  const thread = ctx.threads.find((candidate) => candidate.id === threadId);
+  const thread = ctx.threadsById.get(threadId);
   if (thread === undefined) return null;
   const environment = thread.environment;
   return (
@@ -181,6 +182,23 @@ export function PreviewPane({ item }: { item: Item }) {
               ["Command", plugin.cliCommand ? `bb ${plugin.cliCommand.name}` : null],
               ["Settings", plugin.hasSettings ? "Yes" : "None"],
               ["Detail", plugin.statusDetail],
+            ]}
+          />
+        </div>
+      );
+    }
+    case "telecom": {
+      const { hit } = preview;
+      return (
+        <div className="space-y-4 p-4">
+          <Heading icon={item.icon} title={hit.title} detail={hit.name === hit.title ? telecomKind(hit) : hit.name} />
+          {hit.summary ? <p className="text-xs text-foreground">{hit.summary}</p> : null}
+          <Facts
+            rows={[
+              ["Kind", telecomKind(hit)],
+              ["Flow", hit.flow],
+              ["Spec", hit.spec],
+              ["ID", hit.id],
             ]}
           />
         </div>

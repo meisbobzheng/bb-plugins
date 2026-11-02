@@ -1,27 +1,63 @@
+import { useMemo } from "react";
 import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { z } from "zod";
+import type { ZodType } from "zod";
 import { useLauncher, type LauncherContextValue } from "./context";
-import { errorMessage, useAsync, useDebounced, type PluginEntry } from "./data";
+import { errorMessage, useAsync, useDebounced, useFreshOnOpen, type PluginEntry, type SourceMethod } from "./data";
 import { PluginIcon } from "./plugins";
 import type { Item, Section } from "./types";
 
 export const SEARCH_METHOD = "launcher.search";
 export const RUN_METHOD = "launcher.run";
 
-const sourceItemSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  subtitle: z.string().nullable(),
-  section: z.string(),
-  actions: z.array(z.object({ id: z.string(), title: z.string() })).min(1),
-  keywords: z.array(z.string()),
-});
+interface SourceItem {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  section: string;
+  actions: Array<{ id: string; title: string }>;
+  keywords: string[];
+}
 
-const searchOutput = z.object({ items: z.array(sourceItemSchema) });
-const runOutput = z.object({ message: z.string().nullable(), navigate: z.string().nullable() });
+interface RunResult {
+  message: string | null;
+  navigate: string | null;
+}
 
-type SourceItem = z.infer<typeof sourceItemSchema>;
+type Fields = Record<string, unknown>;
+
+const isFields = (value: unknown): value is Fields => typeof value === "object" && value !== null;
+const isString = (value: unknown): value is string => typeof value === "string";
+const isNullableString = (value: unknown) => value === null || isString(value);
+
+const isSourceItem = (value: unknown): value is SourceItem =>
+  isFields(value) &&
+  isString(value.id) &&
+  isString(value.title) &&
+  isNullableString(value.subtitle) &&
+  isString(value.section) &&
+  Array.isArray(value.keywords) &&
+  value.keywords.every(isString) &&
+  Array.isArray(value.actions) &&
+  value.actions.length > 0 &&
+  value.actions.every((action) => isFields(action) && isString(action.id) && isString(action.title));
+
+function parser<T>(guard: (value: unknown) => value is T, what: string): ZodType<T> {
+  const parse = (value: unknown): T => {
+    if (guard(value)) return value;
+    throw new Error(`Unexpected ${what}`);
+  };
+  return { parse } as unknown as ZodType<T>;
+}
+
+const searchOutput = parser(
+  (value): value is { items: SourceItem[] } => isFields(value) && Array.isArray(value.items) && value.items.every(isSourceItem),
+  `${SEARCH_METHOD} result`,
+);
+const runOutput = parser(
+  (value): value is RunResult => isFields(value) && isNullableString(value.message) && isNullableString(value.navigate),
+  `${RUN_METHOD} result`,
+);
 
 function sourceItem(ctx: LauncherContextValue, pluginId: string, plugin: PluginEntry | undefined, item: SourceItem): Item {
   const key = `source:${pluginId}:${item.id}`;
@@ -52,13 +88,16 @@ function sourceItem(ctx: LauncherContextValue, pluginId: string, plugin: PluginE
   };
 }
 
+const NO_SECTIONS: Section[] = [];
+
+export function useSourceMethods(open: boolean): readonly SourceMethod[] | undefined {
+  return useFreshOnOpen(open, (sdk, signal) => sdk.plugins.experimental_discoverRpc({ method: SEARCH_METHOD, signal }).catch(() => [])).data;
+}
+
 export function useSourceSections(query: string, plugins: readonly PluginEntry[] | undefined): Section[] {
   const ctx = useLauncher();
+  const { sources } = ctx;
   const debounced = useDebounced(query.trim(), 200);
-  const { data: sources } = useAsync(
-    (signal) => ctx.sdk.plugins.experimental_discoverRpc({ method: SEARCH_METHOD, signal }).catch(() => []),
-    [ctx.sdk],
-  );
   const { data: results } = useAsync(
     (signal) =>
       debounced === "" || sources === undefined
@@ -75,15 +114,18 @@ export function useSourceSections(query: string, plugins: readonly PluginEntry[]
           ),
     [ctx.sdk, sources, debounced],
   );
-  if (query.trim() === "" || results === undefined) return [];
-  const sections = new Map<string, Item[]>();
-  for (const { pluginId, items } of results) {
-    const plugin = plugins?.find((entry) => entry.id === pluginId);
-    for (const item of items) {
-      const list = sections.get(item.section) ?? [];
-      if (list.length < 8) list.push(sourceItem(ctx, pluginId, plugin, item));
-      sections.set(item.section, list);
+  const empty = query.trim() === "";
+  return useMemo(() => {
+    if (empty || results === undefined) return NO_SECTIONS;
+    const sections = new Map<string, Item[]>();
+    for (const { pluginId, items } of results) {
+      const plugin = plugins?.find((entry) => entry.id === pluginId);
+      for (const item of items) {
+        const list = sections.get(item.section) ?? [];
+        if (list.length < 8) list.push(sourceItem(ctx, pluginId, plugin, item));
+        sections.set(item.section, list);
+      }
     }
-  }
-  return [...sections].map(([title, items]) => ({ title, items }));
+    return sections.size === 0 ? NO_SECTIONS : [...sections].map(([title, items]) => ({ title, items }));
+  }, [ctx, plugins, results, empty]);
 }

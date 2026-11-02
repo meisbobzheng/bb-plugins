@@ -11,6 +11,7 @@ export type PluginSettings = Awaited<ReturnType<Sdk["plugins"]["getSettings"]>>;
 export type ThemeCatalog = Awaited<ReturnType<Sdk["theme"]["catalog"]>>;
 export type SearchHit = Awaited<ReturnType<Sdk["threads"]["search"]>>["active"]["results"][number];
 export type OutlineItem = Awaited<ReturnType<Sdk["threads"]["conversationOutline"]>>["items"][number];
+export type SourceMethod = Awaited<ReturnType<Sdk["plugins"]["experimental_discoverRpc"]>>[number];
 
 export function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
@@ -82,15 +83,21 @@ export function useLauncherState() {
   return { state, recordUse, setProjectPinned };
 }
 
-export function useAppConfig(open: boolean): AsyncState<AppConfig> {
+export function useFreshOnOpen<T>(open: boolean, load: (sdk: Sdk, signal: AbortSignal) => Promise<T>): AsyncState<T> {
   const sdk = useSdk();
-  const config = useAsync((signal) => sdk.system.config({ signal }), [sdk]);
-  const { reload } = config;
+  const state = useAsync((signal) => load(sdk, signal), [sdk]);
+  const { reload } = state;
   useEffect(() => {
     if (open) reload();
   }, [open, reload]);
-  return config;
+  return state;
 }
+
+export function useAppConfig(open: boolean): AsyncState<AppConfig> {
+  return useFreshOnOpen(open, (sdk, signal) => sdk.system.config({ signal }));
+}
+
+const NO_HITS: SearchHit[] = [];
 
 export function useMessageSearch(query: string): SearchHit[] {
   const sdk = useSdk();
@@ -108,5 +115,5 @@ export function useMessageSearch(query: string): SearchHit[] {
             ),
     [sdk, debounced],
   );
-  return query.trim().length < 3 ? [] : (data ?? []);
+  return query.trim().length < 3 ? NO_HITS : (data ?? NO_HITS);
 }

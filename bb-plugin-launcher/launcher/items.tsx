@@ -33,7 +33,7 @@ import { reportError } from "./data";
 import { isRunning, projectKey, threadKey } from "./rank";
 import type { Action, Item, Shortcut } from "./types";
 
-const COPY_ID_SHORTCUT: Shortcut = { key: "c", mod: true, shift: true };
+export const COPY_SHORTCUT: Shortcut = { key: "c", mod: true, shift: true };
 
 export function relativeTime(at: number, now: number): string {
   const minutes = Math.round((now - at) / 60_000);
@@ -80,7 +80,7 @@ export function threadSubtitle(thread: PluginSidebarThread, ctx: LauncherContext
   return [project, branch].filter(Boolean).join(" · ");
 }
 
-function copyAction(id: string, title: string, text: string, icon = Copy, shortcut?: Shortcut): Action {
+export function copyAction(id: string, title: string, text: string, icon = Copy, shortcut?: Shortcut): Action {
   return {
     id,
     title,
@@ -230,7 +230,7 @@ function threadActions(thread: PluginSidebarThread, ctx: LauncherContextValue): 
     );
   }
   actions.push(
-    copyAction("copy-id", "Copy thread ID", threadId, Copy, COPY_ID_SHORTCUT),
+    copyAction("copy-id", "Copy thread ID", threadId, Copy, COPY_SHORTCUT),
     copyAction("copy-link", "Copy link", new URL(thread.href, window.location.origin).toString(), Link),
     {
       id: "archive",
@@ -268,9 +268,7 @@ export function threadItem(thread: PluginSidebarThread, ctx: LauncherContextValu
 
 export function projectItem(project: PluginSidebarProject, ctx: LauncherContextValue): Item {
   const pinned = ctx.state.pinnedProjectIds.includes(project.id);
-  const count = ctx.threads.filter(
-    (thread) => thread.projectId === project.id && !thread.isArchived && !thread.isHidden,
-  ).length;
+  const count = ctx.threadCounts.get(project.id) ?? 0;
   return {
     id: projectKey(project.id),
     title: project.name,
@@ -279,6 +277,7 @@ export function projectItem(project: PluginSidebarProject, ctx: LauncherContextV
     accessory: pinned ? <Pin className="size-3 text-muted-foreground" aria-label="Pinned" /> : null,
     preview: { kind: "project", projectId: project.id },
     usageKey: projectKey(project.id),
+    drill: { title: "Open project", page: { kind: "project", projectId: project.id } },
     actions: [
       {
         id: "threads",
@@ -303,7 +302,7 @@ export function projectItem(project: PluginSidebarProject, ctx: LauncherContextV
         icon: Settings,
         run: () => ctx.controls.goTo(project.settingsHref),
       },
-      copyAction("copy-id", "Copy project ID", project.id, Copy, COPY_ID_SHORTCUT),
+      copyAction("copy-id", "Copy project ID", project.id, Copy, COPY_SHORTCUT),
     ],
   };
 }

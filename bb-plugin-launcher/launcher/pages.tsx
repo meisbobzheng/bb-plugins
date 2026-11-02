@@ -8,6 +8,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Archive,
   ArrowRight,
+  BookOpen,
   Check,
   Cpu,
   ExternalLink,
@@ -26,10 +27,24 @@ import { useMessageSearch, type SearchHit } from "./data";
 import { ActionIcon, newThreadAction, projectItem, spawnAction, threadItem } from "./items";
 import { shortcutLabel } from "./keys";
 import { pluginItem, pluginKey, pluginTerms } from "./plugins";
-import { commandKey, isRunning, needsAttention, projectKey, rank, rootGroups, threadKey, visibleThreads } from "./rank";
+import {
+  commandKey,
+  isRunning,
+  needsAttention,
+  projectKey,
+  rank,
+  rankScored,
+  remoteScore,
+  rootGroups,
+  threadKey,
+  visibleThreads,
+  withTopHit,
+  type Ranked,
+} from "./rank";
 import { Results } from "./Results";
 import { useSourceSections } from "./sources";
 import { generalToggleItems, settingLinkItems } from "./settings";
+import { TELECOM_SECTION, telecomItem, telecomPlugin, useTelecomHits } from "./telecom";
 import { actionTarget, registryActions } from "./threadMenu";
 import type { Action, Item, Page, Section } from "./types";
 
@@ -39,6 +54,7 @@ interface PageProps {
 }
 
 const PROJECT_THREAD_LIMIT = 100;
+const TELECOM_SECTION_LIMIT = 6;
 
 const icon = (Glyph: LucideIcon) => <Glyph className="size-4 text-muted-foreground" aria-hidden />;
 const itemTerms = (item: Item) => item.terms ?? [];
@@ -53,14 +69,22 @@ function threadTerms(ctx: LauncherContextValue) {
 }
 
 function rankThreads(ctx: LauncherContextValue, threads: readonly PluginSidebarThread[], query: string, limit = 25) {
-  return rank(threads, query, threadTerms(ctx), (thread) => threadKey(thread.id), ctx.state.usage, ctx.now, limit);
+  const title = (thread: PluginSidebarThread) => [thread.displayTitle];
+  return rankScored(threads, query, threadTerms(ctx), (thread) => threadKey(thread.id), ctx.state.usage, ctx.now, limit, title);
 }
 
-function rankProjects(ctx: LauncherContextValue, query: string) {
+function rankProjects(ctx: LauncherContextValue, query: string, limit = 50) {
   const pinned = new Set(ctx.state.pinnedProjectIds);
-  const ranked = rank(ctx.projects, query, (project) => [project.name], (project) => projectKey(project.id), ctx.state.usage, ctx.now, 50);
-  return query.trim() === "" ? [...ranked.filter((p) => pinned.has(p.id)), ...ranked.filter((p) => !pinned.has(p.id))] : ranked;
+  const ranked = rankScored(ctx.projects, query, (project) => [project.name], (project) => projectKey(project.id), ctx.state.usage, ctx.now, limit);
+  if (query.trim() !== "") return ranked;
+  return [...ranked.filter(({ candidate }) => pinned.has(candidate.id)), ...ranked.filter(({ candidate }) => !pinned.has(candidate.id))];
 }
+
+function toItems<T>(entries: readonly Ranked<T>[], toItem: (candidate: T) => Item): Ranked<Item>[] {
+  return entries.map(({ candidate, score }) => ({ candidate: toItem(candidate), score }));
+}
+
+const unranked = (candidate: Item): Ranked<Item> => ({ candidate, score: 0 });
 
 function pushAction(ctx: LauncherContextValue, title: string, Glyph: LucideIcon, page: Page): Action {
   return { id: "open", title, icon: Glyph, keepOpen: true, run: () => ctx.controls.push(page) };
@@ -77,6 +101,10 @@ function command(id: string, title: string, Glyph: LucideIcon, actions: Action[]
   };
 }
 
+function pageCommand(ctx: LauncherContextValue, id: string, title: string, Glyph: LucideIcon, actionTitle: string, page: Page, terms: string[]): Item {
+  return { ...command(id, title, Glyph, [pushAction(ctx, actionTitle, ArrowRight, page)], terms), drill: { title: actionTitle, page } };
+}
+
 function commandItems(ctx: LauncherContextValue): Item[] {
   const project = ctx.currentProjectId === null ? undefined : ctx.projectsById.get(ctx.currentProjectId);
   return [
@@ -87,17 +115,22 @@ function commandItems(ctx: LauncherContextValue): Item[] {
       [newThreadAction(ctx, project?.id ?? null)],
       ["compose", "create", "start"],
     ),
-    command(
+    pageCommand(
+      ctx,
       "new-thread-in",
       "New thread in project…",
       MessageSquarePlus,
-      [pushAction(ctx, "Choose project", ArrowRight, { kind: "pick-project", prompt: null })],
+      "Choose project",
+      { kind: "pick-project", prompt: null },
       ["compose", "create", "start"],
     ),
-    command("settings", "Settings…", SlidersHorizontal, [pushAction(ctx, "Show settings", ArrowRight, { kind: "settings" })], ["preferences", "toggle"]),
-    command("themes", "Change theme…", Palette, [pushAction(ctx, "Show themes", ArrowRight, { kind: "themes" })], ["appearance", "colors", "dark"]),
-    command("providers", "Change default agent…", Cpu, [pushAction(ctx, "Show agents", ArrowRight, { kind: "providers" })], ["provider", "model"]),
-    command("plugins", "Plugins…", Puzzle, [pushAction(ctx, "Show plugins", ArrowRight, { kind: "plugins" })], ["extensions"]),
+    pageCommand(ctx, "settings", "Settings…", SlidersHorizontal, "Show settings", { kind: "settings" }, ["preferences", "toggle"]),
+    pageCommand(ctx, "themes", "Change theme…", Palette, "Show themes", { kind: "themes" }, ["appearance", "colors", "dark"]),
+    pageCommand(ctx, "providers", "Change default agent…", Cpu, "Show agents", { kind: "providers" }, ["provider", "model"]),
+    pageCommand(ctx, "plugins", "Plugins…", Puzzle, "Show plugins", { kind: "plugins" }, ["extensions"]),
+    ...(telecomPlugin(ctx) === undefined
+      ? []
+      : [pageCommand(ctx, "telecom", "Telecom reference…", BookOpen, "Search telecom reference", { kind: "telecom" }, ["3gpp", "spec"])]),
     command("open-settings", "Open bb Settings", Settings, [
       { id: "open", title: "Open", icon: ExternalLink, run: () => ctx.controls.goTo("/settings") },
     ], ["preferences"]),
@@ -123,12 +156,14 @@ function quickPromptItems(ctx: LauncherContextValue, prompt: string): Item[] {
       actions: [spawnAction(ctx, project.id, prompt), newThreadAction(ctx, project.id, prompt)],
     });
   }
+  const pick: Page = { kind: "pick-project", prompt };
   items.push({
     id: "prompt:pick",
     title: "Ask in project…",
     subtitle: quoted,
     icon: icon(MessageSquarePlus),
-    actions: [pushAction(ctx, "Choose project", ArrowRight, { kind: "pick-project", prompt })],
+    drill: { title: "Choose project", page: pick },
+    actions: [pushAction(ctx, "Choose project", ArrowRight, pick)],
   });
   return items;
 }
@@ -158,7 +193,7 @@ function Snippet({ hit }: { hit: SearchHit }) {
 }
 
 function messageItem(ctx: LauncherContextValue, hit: SearchHit): Item {
-  const thread = ctx.threads.find((candidate) => candidate.id === hit.thread.id);
+  const thread = ctx.threadsById.get(hit.thread.id);
   const base = thread === undefined ? undefined : threadItem(thread, ctx);
   return {
     id: `message:${hit.thread.id}`,
@@ -177,6 +212,7 @@ export function RootPage({ query, showPreview }: PageProps) {
   const ctx = useLauncher();
   const hits = useMessageSearch(query);
   const sources = useSourceSections(query, ctx.plugins.data);
+  const telecom = useTelecomHits(query, TELECOM_SECTION_LIMIT);
   const previous = ctx.previousThread;
   const tab = useMemo(
     () => (previous === undefined || query.trim() !== "" ? undefined : { label: `Back to ${previous.displayTitle}`, item: threadItem(previous, ctx) }),
@@ -197,25 +233,36 @@ export function RootPage({ query, showPreview }: PageProps) {
         { title: "Commands", items: commands },
       ];
     }
+    const { usage } = ctx.state;
     const rankItems = (items: Item[], limit = 8) =>
-      rank(items, query, itemTerms, (item) => item.usageKey ?? item.id, ctx.state.usage, ctx.now, limit);
+      rankScored(items, query, itemTerms, (item) => item.usageKey ?? item.id, usage, ctx.now, limit);
+    const remote = (item: Item, exact?: boolean): Ranked<Item> => ({ candidate: item, score: remoteScore(query, itemTerms(item), exact) });
     const { plugins } = ctx;
-    return [
-      { title: "Threads", items: rankThreads(ctx, visibleThreads(ctx.threads), query).map(toThread) },
-      { title: "Projects", items: rankProjects(ctx, query).slice(0, 8).map(toProject) },
+    const telecomEntry = telecomPlugin(ctx);
+    return withTopHit<Item>([
+      { title: "Threads", items: toItems(rankThreads(ctx, visibleThreads(ctx.threads), query), toThread) },
+      { title: "Projects", items: toItems(rankProjects(ctx, query, 8), toProject) },
       { title: "Commands", items: rankItems(commands) },
-      ...sources,
+      ...sources.map(({ title, items }) => ({ title, items: items.map((item) => remote(item)) })),
+      {
+        title: TELECOM_SECTION,
+        items:
+          telecomEntry === undefined
+            ? []
+            : (telecom ?? []).map((hit) => remote(telecomItem(ctx, telecomEntry, hit, query.trim()), hit.match === "exact")),
+      },
       { title: "Settings", items: rankItems([...generalToggleItems(ctx), ...settingLinkItems(ctx)], 6) },
       {
         title: "Plugins",
-        items: rank(plugins.data ?? [], query, pluginTerms, (plugin) => pluginKey(plugin.id), ctx.state.usage, ctx.now, 6).map(
+        items: toItems(
+          rankScored(plugins.data ?? [], query, pluginTerms, (plugin) => pluginKey(plugin.id), usage, ctx.now, 6),
           (plugin) => pluginItem(ctx, plugin, plugins.reload),
         ),
       },
-      { title: "Ask an agent", items: quickPromptItems(ctx, query.trim()) },
-      { title: "Messages", items: hits.map((hit) => messageItem(ctx, hit)) },
-    ];
-  }, [ctx, query, hits, sources]);
+      { title: "Ask an agent", items: quickPromptItems(ctx, query.trim()).map(unranked), fallback: true },
+      { title: "Messages", items: hits.map((hit) => unranked(messageItem(ctx, hit))), fallback: true },
+    ]);
+  }, [ctx, query, hits, sources, telecom]);
   return <Results sections={sections} query={query} showPreview={showPreview} tab={tab} />;
 }
 
@@ -229,7 +276,7 @@ export function ProjectPage({ projectId, query, showPreview }: PageProps & { pro
     const prompt = query.trim();
     if (prompt !== "") {
       return [
-        { title: "Threads", items: rankThreads(ctx, threads, prompt, 50).map(toThread) },
+        { title: "Threads", items: rankThreads(ctx, threads, prompt, 50).map(({ candidate }) => toThread(candidate)) },
         {
           title: "Ask an agent",
           items: [
@@ -280,7 +327,7 @@ export function ProjectPage({ projectId, query, showPreview }: PageProps & { pro
 
 export function PickProjectPage({ prompt, query, showPreview }: PageProps & { prompt: string | null }) {
   const ctx = useLauncher();
-  const items = rankProjects(ctx, query).map((project): Item => {
+  const items = rankProjects(ctx, query).map(({ candidate: project }): Item => {
     const base = projectItem(project, ctx);
     const actions =
       prompt === null
@@ -342,7 +389,7 @@ function ThreadActionsPage({ item, thread, query }: PageProps & { item: Item; th
 export function ActionsPage({ item, query }: PageProps & { item: Item }) {
   const ctx = useLauncher();
   const preview = item.preview;
-  const thread = preview?.kind === "thread" ? ctx.threads.find((candidate) => candidate.id === preview.threadId) : undefined;
+  const thread = preview?.kind === "thread" ? ctx.threadsById.get(preview.threadId) : undefined;
   if (thread !== undefined) return <ThreadActionsPage item={item} thread={thread} query={query} showPreview={false} />;
   return <ActionsResults sections={[{ title: "Actions", items: actionItems(item, item.actions, ctx) }]} query={query} showPreview={false} />;
 }

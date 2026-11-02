@@ -2,7 +2,7 @@ import type { Shortcut } from "./types";
 
 export const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
-interface KeyLike {
+export interface KeyLike {
   key: string;
   metaKey: boolean;
   ctrlKey: boolean;
@@ -26,6 +26,16 @@ export function matchesShortcut(event: KeyLike, shortcut: Shortcut): boolean {
 export const MOD_K: Shortcut = { key: "k", mod: true };
 export const MOD_ENTER: Shortcut = { key: "Enter", mod: true };
 
+const DIGIT = /^[1-9]$/;
+
+export function isDigitChord(event: KeyLike): boolean {
+  return (event.metaKey || event.ctrlKey) && DIGIT.test(event.key);
+}
+
+export function digitIndex(event: KeyLike): number | null {
+  return DIGIT.test(event.key) && matchesShortcut(event, { key: event.key, mod: true }) ? Number(event.key) - 1 : null;
+}
+
 const KEY_LABELS: Record<string, string> = {
   enter: "↵",
   backspace: "⌫",
@@ -39,3 +49,5 @@ export function shortcutLabel(shortcut: Shortcut): string {
   const shift = shortcut.shift ? (IS_MAC ? "⇧" : "Shift+") : "";
   return `${shift}${mod}${key}`;
 }
+
+export const DIGIT_LABELS = Array.from({ length: 9 }, (_, index) => shortcutLabel({ key: String(index + 1), mod: true }));

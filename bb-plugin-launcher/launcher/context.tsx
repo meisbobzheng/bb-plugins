@@ -6,7 +6,7 @@ import type {
   PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import type { LauncherState } from "../model";
-import type { AppConfig, AsyncState, PluginEntry, Sdk } from "./data";
+import type { AppConfig, AsyncState, PluginEntry, Sdk, SourceMethod } from "./data";
 import type { Controls } from "./types";
 
 export type ProviderInfo = PluginProvidersState["providers"][number];
@@ -21,6 +21,8 @@ export interface LauncherContextValue {
   recordUse(key: string): void;
   setProjectPinned(projectId: string, pinned: boolean): Promise<void>;
   threads: readonly PluginSidebarThread[];
+  threadsById: ReadonlyMap<string, PluginSidebarThread>;
+  threadCounts: ReadonlyMap<string, number>;
   projects: readonly PluginSidebarProject[];
   projectsById: ReadonlyMap<string, PluginSidebarProject>;
   currentProjectId: string | null;
@@ -28,6 +30,7 @@ export interface LauncherContextValue {
   providers: ReadonlyMap<string, ProviderInfo>;
   config: AsyncState<AppConfig>;
   plugins: AsyncState<PluginEntry[]>;
+  sources: readonly SourceMethod[] | undefined;
 }
 
 export const LauncherContext = createContext<LauncherContextValue | null>(null);

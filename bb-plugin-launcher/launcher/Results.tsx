@@ -8,7 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
   type MutableRefObject,
   type ReactNode,
   type RefObject,
@@ -18,12 +17,12 @@ import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport
 import { cn } from "@/lib/utils";
 import { useLauncher } from "./context";
 import { errorMessage } from "./data";
-import { MOD_ENTER, MOD_K, hasMod, matchesShortcut, shortcutLabel } from "./keys";
+import { DIGIT_LABELS, MOD_ENTER, MOD_K, digitIndex, hasMod, matchesShortcut, shortcutLabel, type KeyLike } from "./keys";
 import { matchRanges, queryTerms } from "./match";
 import { PreviewPane } from "./Preview";
 import type { Action, Item, Section } from "./types";
 
-export type KeyHandler = (event: KeyboardEvent<HTMLInputElement>) => boolean;
+export type KeyHandler = (event: KeyLike) => boolean;
 
 export interface ResultsHost {
   keyHandler: MutableRefObject<KeyHandler | null>;
@@ -115,6 +114,7 @@ interface RowProps {
 }
 
 const Row = memo(function Row({ id, item, index, active, terms, onSelect, onRun }: RowProps) {
+  const digit = DIGIT_LABELS[index];
   return (
     <div
       id={id}
@@ -138,6 +138,7 @@ const Row = memo(function Row({ id, item, index, active, terms, onSelect, onRun 
         ) : null}
       </span>
       {item.accessory ? <span className="shrink-0">{item.accessory}</span> : null}
+      {digit === undefined ? null : <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/60">{digit}</span>}
     </div>
   );
 });
@@ -184,7 +185,18 @@ export function Results({ sections, query, emptyText = "No results", showPreview
   const openActions = (item: Item) =>
     ctx.controls.push({ kind: "actions", item });
 
-  const actionFor = (event: KeyboardEvent<HTMLInputElement>): Action | undefined => {
+  const runFirst = (item: Item | undefined) => {
+    const action = item?.actions[0];
+    if (item !== undefined && action !== undefined) runAction(item, action);
+  };
+
+  const drill = selected?.drill;
+  const tabTarget =
+    tab === undefined
+      ? drill && { label: drill.title, run: () => ctx.controls.push(drill.page, drill.query) }
+      : { label: tab.label, run: () => runFirst(tab.item) };
+
+  const actionFor = (event: KeyLike): Action | undefined => {
     if (selected === undefined) return undefined;
     if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
       return hasMod(event) ? selected.actions[1] : selected.actions[0];
@@ -204,9 +216,13 @@ export function Results({ sections, query, emptyText = "No results", showPreview
       move(-1);
       return true;
     }
-    const tabAction = tab?.item.actions[0];
-    if (tab !== undefined && tabAction !== undefined && event.key === "Tab" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
-      runAction(tab.item, tabAction);
+    if (tabTarget !== undefined && event.key === "Tab" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      tabTarget.run();
+      return true;
+    }
+    const digit = digitIndex(event);
+    if (digit !== null) {
+      runFirst(items[digit]);
       return true;
     }
     if (selected === undefined) return false;
@@ -277,9 +293,7 @@ export function Results({ sections, query, emptyText = "No results", showPreview
         onMouseDown={(event) => event.preventDefault()}
         className="flex h-10 shrink-0 items-center justify-end gap-4 border-t border-border px-3 text-xs text-muted-foreground"
       >
-        {tab !== undefined && tab.item.actions[0] !== undefined ? (
-          <Hint label={tab.label} keys="⇥" className="mr-auto" onClick={() => runAction(tab.item, tab.item.actions[0]!)} />
-        ) : null}
+        {tabTarget === undefined ? null : <Hint label={tabTarget.label} keys="⇥" className="mr-auto" onClick={tabTarget.run} />}
         {selected !== undefined && primary !== undefined ? (
           <Hint label={primary.title} keys="↵" onClick={() => runAction(selected, primary)} />
         ) : null}

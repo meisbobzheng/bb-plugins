@@ -1,9 +1,9 @@
-import { experimental_Icon as Icon, experimental_copyToClipboard as copyToClipboard, useSdk } from "@get-bb/plugin-sdk/app";
+import { experimental_Icon as Icon, experimental_copyToClipboard as copyToClipboard } from "@get-bb/plugin-sdk/app";
 import { ArrowRight, Check, Copy, ExternalLink, Pencil, Power, PowerOff, Puzzle, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { Toggle, ValueBadge } from "./badges";
 import { useLauncher, type LauncherContextValue } from "./context";
-import { errorMessage, useAsync, type AsyncState, type PluginEntry, type PluginSettings } from "./data";
+import { errorMessage, useAsync, useFreshOnOpen, type AsyncState, type PluginEntry, type PluginSettings } from "./data";
 import { ActionIcon } from "./items";
 import { rank } from "./rank";
 import { Results } from "./Results";
@@ -35,9 +35,8 @@ export function PluginIcon({ plugin }: { plugin: PluginEntry }) {
   return <Puzzle className="size-4 text-muted-foreground" aria-hidden />;
 }
 
-export function usePlugins(): AsyncState<PluginEntry[]> {
-  const sdk = useSdk();
-  return useAsync((signal) => sdk.plugins.list({ signal }).then(({ plugins }) => plugins), [sdk]);
+export function usePlugins(open: boolean): AsyncState<PluginEntry[]> {
+  return useFreshOnOpen(open, (sdk, signal) => sdk.plugins.list({ signal }).then(({ plugins }) => plugins));
 }
 
 function pluginsEmptyText({ data, error }: AsyncState<PluginEntry[]>, loaded: string): string {
@@ -76,6 +75,7 @@ export function pluginItem(ctx: LauncherContextValue, plugin: PluginEntry, reloa
     accessory: <ValueBadge tone={plugin.status === "running" ? "on" : plugin.enabled ? "warn" : "off"}>{STATUS_LABELS[plugin.status]}</ValueBadge>,
     preview: { kind: "plugin", plugin },
     usageKey: pluginKey(plugin.id),
+    drill: { title: "Open plugin", page: { kind: "plugin", pluginId: plugin.id } },
     actions: [
       {
         id: "details",

@@ -1,4 +1,5 @@
 const WORD_BOUNDARY = /[\s\-_/.:@#]/;
+const EXACT_BONUS = 200;
 
 function termScore(term: string, text: string): number | null {
   const at = text.indexOf(term);
@@ -36,6 +37,14 @@ export function matchTerms(terms: readonly string[], fields: readonly string[]):
 
 export function matchScore(query: string, fields: readonly string[]): number | null {
   return matchTerms(queryTerms(query), fields);
+}
+
+export function isExact(phrase: string, fields: readonly string[]): boolean {
+  return phrase !== "" && fields.some((field) => field.length <= phrase.length + 2 && field.replace(/…$/, "").trim().toLowerCase() === phrase);
+}
+
+export function exactBonus(terms: readonly string[]): number {
+  return EXACT_BONUS * terms.length;
 }
 
 export function matchRanges(terms: readonly string[], text: string): Array<[number, number]> {

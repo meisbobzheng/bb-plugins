@@ -33,6 +33,25 @@ describe("launcher server", () => {
     expect(harness.inspection.realtimeSignals.filter((signal) => signal.channel === STATE_CHANGED)).toHaveLength(6);
   });
 
+  it("searches telecom-ref through its CLI and returns nothing when the CLI fails", async () => {
+    const runs: (readonly string[])[] = [];
+    const { bb, harness } = createFakePluginHost({ pluginId: "launcher" });
+    await plugin(bb, async (args) => {
+      runs.push(args);
+      if (args.at(-1) === "boom") throw new Error("exit 1");
+      return JSON.stringify([
+        { id: "if/S6a", score: 1006, match: "exact", entity: { kind: "if", name: "S6a", description: "The interface between the MME and the HSS. It carries more.", spec: [{ doc: "TS 23.401", clause: "4.2" }] } },
+      ]);
+    });
+    const search = (query: string) => harness.behavior.callRpc("telecom_search", { query, limit: 6 });
+    expect(await search(" S6a ")).toEqual([
+      { id: "if/S6a", kind: "if", title: "S6a", name: "S6a", code: null, summary: "The interface between the MME and the HSS.", spec: "TS 23.401 §4.2", flow: null, match: "exact", score: 1006 },
+    ]);
+    await search("S6a");
+    expect(runs).toEqual([["telecom-ref", "search", "--json", "--limit", "6", "--", "S6a"]]);
+    expect(await search("boom")).toEqual([]);
+  });
+
   it("serializes concurrent writes", async () => {
     const { call } = await setup();
     await Promise.all(Array.from({ length: 5 }, () => call("usage_record", { key: "command:settings" })));

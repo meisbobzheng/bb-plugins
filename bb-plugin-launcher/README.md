@@ -11,12 +11,29 @@ window for threads, projects, quick prompts, settings, and plugins.
   can be bound in Settings → Keyboard.
 - **Home:** with an empty query you see Needs attention (waiting for input,
   errors, unread), Running, Pinned (projects and threads), Recent, Projects,
-  and Commands. Recent and Projects are ranked by how often and how recently
-  you open them. `Tab` jumps back to the thread you were in before this one;
-  the footer names it.
+  and Commands. Needs attention, Running, and Pinned share the first six rows,
+  so Recent always starts within the first nine. Recent and Projects are ranked
+  by how often and how recently you open them. `Tab` jumps back to the thread
+  you were in before this one; the footer names it.
 - **Search:** typing searches thread titles, projects, branches, commands,
-  settings, and plugins. Once the query is three characters or longer, the
-  Messages section shows threads whose messages match.
+  settings, plugins, and the telecom reference. Once the query is three
+  characters or longer, the Messages section shows threads whose messages
+  match.
+- **Top hit:** the best match from every section comes first and is selected,
+  so `↵` runs it. A title, abbreviation, or keyword equal to the whole query
+  beats any partial match. Ask an agent and Messages are top hit only when
+  nothing else matches.
+- **No arrow keys needed:** `⌘1`–`⌘9` (Ctrl+1–9 elsewhere) run the first nine
+  rows, whose numbers show on the right. While the launcher is open these keys
+  are its own, not bb's thread jump. `Tab` on a project, plugin, page command,
+  or telecom entry opens its page; the footer says where it goes.
+- **Telecom reference:** when the [telecom-ref](https://github.com/benwaffle/bb-plugins)
+  plugin is running, the launcher searches its 3GPP Diameter commands, AVPs,
+  applications, interfaces, and network functions. An exact match such as
+  `SAR` is the top hit. `↵` opens the entry in Telecom reference, `⌘↵`
+  searches there, `⇧⌘C` copies a citation, and `Tab` lists more matches in the
+  launcher. The preview shows the summary, code, request flow, and spec
+  clause.
 - **Plugin results:** plugins that publish a `launcher.search` RPC add their
   own sections, such as Spotify playlists and songs. `↵` runs the first action
   and `⌘K` lists the rest; see [Plugin results](#plugin-results).
@@ -36,7 +53,9 @@ window for threads, projects, quick prompts, settings, and plugins.
 | `↑` `↓` / `Ctrl+N` `Ctrl+P` | Move |
 | `↵` | Primary action |
 | `⌘↵` | Secondary action (open in split, new thread) |
+| `⌘1`–`⌘9` | Primary action of that row |
 | `⌘K` | Actions for the selected item |
+| `Tab` | Open the selected item's page |
 | `Tab` on an empty query | Back to the previous thread |
 | `⇧⌘P` | Pin or unpin |
 | `⇧⌘U` | Mark read or unread |
@@ -83,11 +102,15 @@ Any plugin can add results by registering two RPC methods with
 
 ## Layout
 
-- `server.ts`: settings, pinned projects, and usage counts in `bb.storage.kv`
+- `server.ts`: settings, pinned projects, and usage counts in `bb.storage.kv`,
+  and `telecom_search`, which runs `bb telecom-ref search --json` (3 s
+  timeout, recent queries cached)
+- `telecom.ts`: maps the telecom-ref CLI's JSON to compact results
 - `model.ts`: shared state types and the frecency score
 - `app.tsx`: registers the overlay and the "Launcher: open" command
 - `launcher/`: the window (`Launcher.tsx`), results list (`Results.tsx`),
-  preview pane, pages, ranking, and plugin result sources (`sources.tsx`)
+  preview pane, pages, ranking and the top hit (`rank.ts`), plugin result
+  sources (`sources.tsx`), and telecom results (`telecom.tsx`)
 
 ## Develop
 

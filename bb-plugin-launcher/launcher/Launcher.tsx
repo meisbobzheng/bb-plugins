@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject, type RefObject } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   experimental_usePluginId,
@@ -12,8 +12,8 @@ import {
 import { ArrowLeft, Search } from "lucide-react";
 import { usePortalScopeProps } from "@/lib/portal-scope";
 import { LauncherContext, type LauncherContextValue } from "./context";
-import { useAppConfig, useLauncherState, type AppConfig, type AsyncState } from "./data";
-import { MOD_K, matchesShortcut } from "./keys";
+import { useAppConfig, useLauncherState, type AppConfig, type AsyncState, type PluginEntry, type SourceMethod } from "./data";
+import { MOD_K, isDigitChord, matchesShortcut } from "./keys";
 import {
   ActionsPage,
   ChoicesPage,
@@ -23,10 +23,12 @@ import {
   RootPage,
 } from "./pages";
 import { PluginPage, PluginsPage, usePlugins } from "./plugins";
-import { projectKey } from "./rank";
+import { projectKey, visibleThreads } from "./rank";
 import { ResultsHostContext, type KeyHandler, type ResultsHost } from "./Results";
 import { ProvidersPage, SettingsPage, ThemesPage } from "./settings";
+import { useSourceMethods } from "./sources";
 import { launcher, useLauncherOpen } from "./store";
+import { TelecomPage } from "./telecom";
 import { previousThread, useThreadVisits } from "./visits";
 import type { Controls, Page } from "./types";
 
@@ -45,6 +47,7 @@ const PLACEHOLDERS: Record<Page["kind"], string> = {
   providers: "Search agents…",
   plugins: "Search plugins…",
   plugin: "Search plugin settings…",
+  telecom: "Search the telecom reference…",
   choices: "Search…",
   input: "",
 };
@@ -61,6 +64,19 @@ function useModKInterceptor(enabled: boolean) {
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [enabled]);
+}
+
+function useDigitInterceptor(keyHandler: MutableRefObject<KeyHandler | null>) {
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!isDigitChord(event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) keyHandler.current?.(event);
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [keyHandler]);
 }
 
 function navigateInApp(anchor: HTMLAnchorElement, path: string) {
@@ -96,6 +112,8 @@ function pageTitle(page: Page, ctx: LauncherContextValue): string | null {
       return "Plugins";
     case "plugin":
       return "Plugin";
+    case "telecom":
+      return "Telecom reference";
     case "choices":
     case "input":
       return page.title;
@@ -124,6 +142,8 @@ function PageView({ frame, showPreview }: { frame: Frame; showPreview: boolean }
       return <PluginsPage {...props} />;
     case "plugin":
       return <PluginPage {...props} pluginId={page.pluginId} />;
+    case "telecom":
+      return <TelecomPage {...props} />;
     case "choices":
       return <ChoicesPage {...props} sections={page.sections} />;
     case "input":
@@ -135,14 +155,16 @@ interface LauncherWindowProps {
   showPreview: boolean;
   launcherState: ReturnType<typeof useLauncherState>;
   config: AsyncState<AppConfig>;
+  plugins: AsyncState<PluginEntry[]>;
+  sources: readonly SourceMethod[] | undefined;
   visits: readonly string[];
+  anchorRef: RefObject<HTMLAnchorElement | null>;
 }
 
-function LauncherWindow({ showPreview, launcherState, config, visits }: LauncherWindowProps) {
+function LauncherWindow({ showPreview, launcherState, config, plugins, sources, visits, anchorRef }: LauncherWindowProps) {
   const [stack, setStack] = useState<Frame[]>([{ page: { kind: "root" }, query: "" }]);
   const top = stack[stack.length - 1]!;
   const inputRef = useRef<HTMLInputElement>(null);
-  const anchorRef = useRef<HTMLAnchorElement>(null);
   const keyHandler = useRef<KeyHandler | null>(null);
   const listboxId = useId();
   const [selections] = useState(() => new WeakMap<Page, string>());
@@ -155,8 +177,8 @@ function LauncherWindow({ showPreview, launcherState, config, visits }: Launcher
   const { threads, projects } = experimental_useSidebarThreads();
   const { providers } = experimental_useProviders();
   const { state, recordUse, setProjectPinned } = launcherState;
-  const plugins = usePlugins();
   const [now] = useState(Date.now);
+  useDigitInterceptor(keyHandler);
 
   const controls = useMemo<Controls>(
     () => ({
@@ -168,12 +190,19 @@ function LauncherWindow({ showPreview, launcherState, config, visits }: Launcher
         launcher.close();
       },
     }),
-    [],
+    [anchorRef],
   );
 
+  const threadIndex = useMemo(() => {
+    const threadCounts = new Map<string, number>();
+    for (const thread of visibleThreads(threads)) threadCounts.set(thread.projectId, (threadCounts.get(thread.projectId) ?? 0) + 1);
+    return { threadsById: new Map(threads.map((thread) => [thread.id, thread])), threadCounts };
+  }, [threads]);
+  const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
+  const providersById = useMemo(() => new Map(providers.map((provider) => [provider.id, provider])), [providers]);
+
   const ctx = useMemo((): LauncherContextValue => {
-    const projectsById = new Map(projects.map((project) => [project.id, project]));
-    const activeThreadProject = threads.find((thread) => thread.id === bbContext.threadId)?.projectId;
+    const activeThreadProject = bbContext.threadId === null ? undefined : threadIndex.threadsById.get(bbContext.threadId)?.projectId;
     const frecentProject = [...projects].sort(
       (a, b) => (state.usage[projectKey(b.id)]?.lastUsedAt ?? 0) - (state.usage[projectKey(a.id)]?.lastUsedAt ?? 0),
     )[0]?.id;
@@ -187,15 +216,17 @@ function LauncherWindow({ showPreview, launcherState, config, visits }: Launcher
       recordUse,
       setProjectPinned,
       threads,
+      ...threadIndex,
       projects,
       projectsById,
       currentProjectId: bbContext.projectId ?? activeThreadProject ?? frecentProject ?? null,
-      previousThread: previousThread(visits, threads, bbContext.threadId),
-      providers: new Map(providers.map((provider) => [provider.id, provider])),
+      previousThread: previousThread(visits, threadIndex.threadsById, bbContext.threadId),
+      providers: providersById,
       config,
       plugins,
+      sources,
     };
-  }, [sdk, navigate, controls, pluginId, now, state, recordUse, setProjectPinned, threads, projects, providers, bbContext, config, plugins, visits]);
+  }, [sdk, navigate, controls, pluginId, now, state, recordUse, setProjectPinned, threads, threadIndex, projects, projectsById, providersById, bbContext, config, plugins, sources, visits]);
 
   const host = useMemo(
     (): ResultsHost => ({
@@ -289,7 +320,6 @@ function LauncherWindow({ showPreview, launcherState, config, visits }: Launcher
           <PageView key={stack.length} frame={top} showPreview={showPreview} />
         </ResultsHostContext.Provider>
       </LauncherContext.Provider>
-      <a ref={anchorRef} href="/" hidden tabIndex={-1} aria-hidden />
     </Dialog.Content>
   );
 }
@@ -300,14 +330,28 @@ export function LauncherOverlay() {
   const scopeProps = usePortalScopeProps();
   const launcherState = useLauncherState();
   const config = useAppConfig(open);
+  const plugins = usePlugins(open);
+  const sources = useSourceMethods(open);
   const visits = useThreadVisits();
+  const anchorRef = useRef<HTMLAnchorElement>(null);
   useModKInterceptor(values?.replaceShortcut !== false);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => (next ? launcher.open() : launcher.close())}>
       <Dialog.Portal>
         <Dialog.Overlay {...scopeProps} className="fixed inset-0 z-50 bg-black/30" />
-        {open ? <LauncherWindow showPreview={values?.showPreview !== false} launcherState={launcherState} config={config} visits={visits} /> : null}
+        {open ? (
+          <LauncherWindow
+            showPreview={values?.showPreview !== false}
+            launcherState={launcherState}
+            config={config}
+            plugins={plugins}
+            sources={sources}
+            visits={visits}
+            anchorRef={anchorRef}
+          />
+        ) : null}
       </Dialog.Portal>
+      <a ref={anchorRef} href="/" hidden tabIndex={-1} aria-hidden />
     </Dialog.Root>
   );
 }

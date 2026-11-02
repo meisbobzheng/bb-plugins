@@ -18,13 +18,12 @@ export function parseVisits(value: string | null): string[] {
 
 export function previousThread(
   visits: readonly string[],
-  threads: readonly PluginSidebarThread[],
+  threadsById: ReadonlyMap<string, PluginSidebarThread>,
   currentThreadId: string | null,
 ): PluginSidebarThread | undefined {
-  const byId = new Map(threads.map((thread) => [thread.id, thread]));
   for (const id of visits) {
     if (id === currentThreadId) continue;
-    const thread = byId.get(id);
+    const thread = threadsById.get(id);
     if (thread !== undefined && !thread.isArchived) return thread;
   }
   return undefined;

@@ -8,6 +8,7 @@ import { makeProject, makeThread } from "./fixtures";
 import { launcher } from "./launcher/store";
 import type { LauncherState } from "./model";
 import type { rpcContract } from "./server";
+import type { TelecomHit } from "./telecom";
 
 declare const jsdom: { window: Window };
 vi.stubGlobal("localStorage", jsdom.window.localStorage);
@@ -53,6 +54,34 @@ const THREADS = [
   makeThread({ id: "thr_old", displayTitle: "Old cleanup", updatedAt: 1 }),
 ];
 
+const TELECOM_PLUGIN = { id: "telecom-ref", name: "Telecom reference", status: "running", enabled: true, version: "0.1.0", icon: null, iconUrl: null };
+
+const SAR: TelecomHit = {
+  id: "diam.cmd/301",
+  kind: "cmd",
+  title: "SAR / SAA",
+  name: "Server-Assignment",
+  code: "301",
+  summary: "The S-CSCF sends a SAR to the HSS to store or clear itself as the serving S-CSCF of a user.",
+  spec: "TS 29.229 §6.1.3",
+  flow: "S-CSCF → HSS",
+  match: "exact",
+  score: 1011,
+};
+
+const SAR_FLAGS: TelecomHit = {
+  id: "diam.avp/10415/655",
+  kind: "avp",
+  title: "SAR-Flags",
+  name: "SAR-Flags",
+  code: "655",
+  summary: "A bit mask that the S-CSCF sends in a SAR.",
+  spec: "TS 29.229 §6.3.63",
+  flow: null,
+  match: "prefix",
+  score: 641.5,
+};
+
 const CER_OUTLINE = {
   items: [{ id: "m1", role: "user", preview: "Please check the CER", attachmentSummary: null }],
   maxSeq: 1,
@@ -66,6 +95,8 @@ interface RenderOptions {
   pullRequests?: Record<string, PluginSidebarPullRequest>;
   threadId?: string | null;
   threadActions?: TestThreadActionsResolver;
+  plugins?: object[];
+  telecom?: (query: string) => TelecomHit[];
 }
 
 async function renderLauncher({
@@ -76,6 +107,8 @@ async function renderLauncher({
   pullRequests,
   threadId = null,
   threadActions,
+  plugins = [],
+  telecom = (query) => (query.toLowerCase().startsWith("sar") ? [SAR, SAR_FLAGS] : []),
 }: RenderOptions = {}) {
   const app = await loadPluginApp(() => import("./app"));
   const overlay = app.appOverlays[0]!;
@@ -86,7 +119,7 @@ async function renderLauncher({
       updateGeneralSettings: async () => ({}),
     },
     plugins: {
-      list: async () => ({ plugins: [] }),
+      list: async () => ({ plugins }),
       experimental_discoverRpc: async () => [{ pluginId: "spotify", method: "launcher.search", displayName: "Spotify", methodDescription: null, registrationDescription: null, inputSchema: {}, outputSchema: {} }],
       callRpc: async ({ method, input }: { method: string; input: { query?: string } }) =>
         method === "launcher.search"
@@ -123,6 +156,7 @@ async function renderLauncher({
         state = { ...state, pinnedProjectIds: pinned ? [projectId] : [] };
         return state;
       },
+      telecom_search: ({ query }) => telecom(query),
     },
   });
   return slot;
@@ -257,7 +291,7 @@ describe("launcher", () => {
     pressModK();
     const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "go-diameter" } });
-    fireEvent.mouseMove(within(slot.getByRole("group", { name: "Projects" })).getByText("go-diameter"));
+    expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("go-diameter");
     fireEvent.keyDown(input, { key: "Enter" });
     const latest = await slot.findByRole("group", { name: "Threads · latest 100 of 120" });
     expect(within(latest).getAllByRole("option")).toHaveLength(100);
@@ -283,9 +317,7 @@ describe("launcher", () => {
     pressModK();
     const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "deep" } });
-    const group = await slot.findByRole("group", { name: "Spotify playlists" });
-    expect(group.textContent).toContain("Deep Work");
-    fireEvent.mouseMove(within(group).getByRole("option", { name: /Deep Work/ }));
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("Deep Work"));
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => {
       const run = slot.inspection.sdkCalls.find((call) => call.method === "plugins.callRpc" && (call.args[0] as { method: string }).method === "launcher.run");
@@ -333,10 +365,10 @@ describe("launcher", () => {
     pressModK();
     const input = await slot.findByRole("combobox");
     fireEvent.change(input, { target: { value: "plugins" } });
-    fireEvent.mouseMove(within(await slot.findByRole("group", { name: "Commands" })).getByRole("option"));
+    expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("Plugins…");
     fireEvent.keyDown(input, { key: "Enter" });
     await slot.findByText("Plugins", { selector: "span" });
-    expect(callCount(slot.inspection.sdkCalls, "plugins.list")).toBe(1);
+    expect(callCount(slot.inspection.sdkCalls, "plugins.list")).toBe(2);
     fireEvent.keyDown(slot.getByRole("combobox"), { key: "Escape" });
     await waitFor(() => expect(slot.getByRole("combobox").getAttribute("placeholder")).toContain("Search threads"));
     fireEvent.keyDown(slot.getByRole("combobox"), { key: "Escape" });
@@ -435,5 +467,124 @@ describe("launcher", () => {
     const input = await slot.findByRole("combobox");
     expect(slot.queryByRole("button", { name: /Back to/ })).toBeNull();
     expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(true);
+  });
+
+  it("selects the best match across sections as Top hit and lists it once", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "settings" } });
+    const top = slot.getByRole("group", { name: "Top hit" });
+    expect(within(top).getByRole("option", { selected: true }).textContent).toContain("Settings…");
+    expect(slot.queryByRole("group", { name: "Commands" })?.textContent ?? "").not.toContain("Settings…");
+    expect(slot.getByRole("group", { name: "Ask an agent" })).toBeTruthy();
+  });
+
+  it("navigates to bb pages from results that close the launcher", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "keyboard shortcuts" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/keyboard"));
+    expect(slot.queryByRole("dialog")).toBeNull();
+  });
+
+  it("runs the Nth result with ⌘N while open and leaves the keys to bb while closed", async () => {
+    const jumps: string[] = [];
+    const onKeyDown = (event: KeyboardEvent) => jumps.push(event.key);
+    window.addEventListener("keydown", onKeyDown);
+    try {
+      const slot = await renderLauncher();
+      fireEvent.keyDown(window, { key: "1", ctrlKey: true });
+      expect(jumps).toEqual(["1"]);
+      pressModK();
+      const input = await slot.findByRole("combobox");
+      const second = slot.getAllByRole("option")[1]!;
+      expect(second.textContent).toContain("Pinned rollout plan");
+      expect(second.textContent).toContain("Ctrl+2");
+      expect(slot.getAllByRole("option")[9]?.textContent ?? "").not.toMatch(/Ctrl\+\d/);
+      expect(fireEvent.keyDown(input, { key: "2", ctrlKey: true })).toBe(false);
+      await waitFor(() => expect(slot.inspection.navigateCalls).toContainEqual({ method: "toThread", threadId: "thr_pin" }));
+      expect(jumps).toEqual(["1"]);
+      expect(slot.queryByRole("dialog")).toBeNull();
+    } finally {
+      window.removeEventListener("keydown", onKeyDown);
+    }
+  });
+
+  it("drills into the selected project with Tab", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "go-diameter" } });
+    expect(slot.getByRole("button", { name: "Open project ⇥" })).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Tab" });
+    await waitFor(() => expect(slot.getByRole("combobox").getAttribute("placeholder")).toContain("this project"));
+    expect(slot.getByRole("combobox")).toHaveProperty("value", "");
+    expect(slot.getByRole("group", { name: "Pinned" }).textContent).toContain("Pinned rollout plan");
+  });
+
+  it("asks telecom-ref only while it is running", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    fireEvent.change(await slot.findByRole("combobox"), { target: { value: "SAR" } });
+    await wait(200);
+    expect(callCount(slot.inspection.rpcCalls, "telecom_search")).toBe(0);
+    expect(slot.queryByRole("group", { name: "Telecom reference" })).toBeNull();
+  });
+
+  it("puts an exact telecom match first, above threads that only start with the query", async () => {
+    const threads = [...THREADS, makeThread({ id: "thr_sar", displayTitle: "SAR retry handling" })];
+    const slot = await renderLauncher({ threads, plugins: [TELECOM_PLUGIN] });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "SAR" } });
+    expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("SAR retry handling");
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("SAR / SAA"));
+    expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("Server-Assignment · command 301 · TS 29.229 §6.1.3");
+    expect(slot.getByRole("group", { name: "Telecom reference" }).textContent).toContain("SAR-Flags");
+    expect(slot.getByRole("group", { name: "Threads" }).textContent).toContain("SAR retry handling");
+    const preview = slot.getByRole("complementary", { name: "Preview" });
+    expect(preview.textContent).toContain("S-CSCF → HSS");
+    expect(preview.textContent).toContain("store or clear itself");
+    expect(slot.inspection.rpcCalls.find((call) => call.method === "telecom_search")?.input).toEqual({ query: "SAR", limit: 6 });
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(window.location.pathname).toBe("/plugins/telecom-ref/ref/diam.cmd/301"));
+  });
+
+  it("copies a telecom entry's citation", async () => {
+    const slot = await renderLauncher({ plugins: [TELECOM_PLUGIN] });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "SAR" } });
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("SAR / SAA"));
+    fireEvent.keyDown(input, { key: "c", ctrlKey: true, shiftKey: true });
+    await waitFor(() =>
+      expect(slot.inspection.experimental_clipboardWrites).toContainEqual({
+        text: "SAR / SAA · Server-Assignment (command 301) · TS 29.229 §6.1.3",
+      }),
+    );
+  });
+
+  it("searches Telecom reference with ⌘↵ and drills into more telecom results with Tab", async () => {
+    const slot = await renderLauncher({ plugins: [TELECOM_PLUGIN] });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "SAR" } });
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("SAR / SAA"));
+    expect(slot.getByRole("button", { name: "More telecom results ⇥" })).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Tab" });
+    const page = await slot.findByRole("group", { name: "Telecom reference" });
+    expect(slot.getByRole("combobox")).toHaveProperty("value", "SAR");
+    expect(within(page).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      expect.stringContaining("SAR / SAA"),
+      expect.stringContaining("SAR-Flags"),
+    ]);
+    expect(slot.inspection.rpcCalls.at(-1)?.input).toEqual({ query: "SAR", limit: 20 });
+
+    fireEvent.keyDown(slot.getByRole("combobox"), { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(window.location.pathname).toBe("/plugins/telecom-ref/ref/q/SAR"));
   });
 });

@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import type { TelecomHit } from "../telecom";
 import type { PluginEntry } from "./data";
 
 export interface Shortcut {
@@ -22,7 +23,14 @@ export type Preview =
   | { kind: "thread"; threadId: string }
   | { kind: "project"; projectId: string }
   | { kind: "plugin"; plugin: PluginEntry }
+  | { kind: "telecom"; hit: TelecomHit }
   | { kind: "note"; title: string; body: string };
+
+export interface Drill {
+  title: string;
+  page: Page;
+  query?: string;
+}
 
 export interface Item {
   id: string;
@@ -33,6 +41,7 @@ export interface Item {
   accessory?: ReactNode;
   preview?: Preview;
   usageKey?: string;
+  drill?: Drill;
   actions: readonly Action[];
 }
 
@@ -51,6 +60,7 @@ export type Page =
   | { kind: "providers" }
   | { kind: "plugins" }
   | { kind: "plugin"; pluginId: string }
+  | { kind: "telecom" }
   | { kind: "choices"; title: string; sections: readonly Section[] }
   | { kind: "input"; title: string; placeholder: string; submitLabel: string; submit(value: string): void | Promise<void> };
 

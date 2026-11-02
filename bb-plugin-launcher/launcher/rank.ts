@@ -1,6 +1,6 @@
 import type { PluginSidebarProject, PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { frecency, type Usage } from "../model";
-import { matchTerms, queryTerms } from "./match";
+import { exactBonus, isExact, matchTerms, queryTerms } from "./match";
 
 type Thread = PluginSidebarThread;
 type Project = PluginSidebarProject;
@@ -9,6 +9,8 @@ export const threadKey = (id: string) => `thread:${id}`;
 export const projectKey = (id: string) => `project:${id}`;
 export const commandKey = (id: string) => `command:${id}`;
 
+const EARLY_SLOTS = 6;
+const SECTION_SLOTS = 3;
 const ATTENTION_INDICATORS = new Set(["waiting-for-input", "unread-error", "queued-failed"]);
 const RUNNING_STATUSES = new Set(["active", "starting", "pending"]);
 
@@ -49,22 +51,22 @@ export function rootGroups(
 ): RootGroups {
   const visible = visibleThreads(threads);
   const shown = new Set<string>();
-  const take = (candidates: Thread[], limit: number) => {
+  let budget = EARLY_SLOTS;
+  const slots = () => Math.min(SECTION_SLOTS, budget);
+  const take = (candidates: Thread[], limit = slots()) => {
     const picked = candidates.filter((thread) => !shown.has(thread.id)).slice(0, limit);
     for (const thread of picked) shown.add(thread.id);
+    budget -= picked.length;
     return picked;
   };
   const score = (key: string) => frecency(usage[key], now);
 
-  const attention = take(
-    visible.filter(needsAttention).sort((a, b) => b.latestAttentionAt - a.latestAttentionAt),
-    6,
-  );
-  const running = take(
-    visible.filter(isRunning).sort((a, b) => b.updatedAt - a.updatedAt),
-    6,
-  );
-  const pinnedThreads = take(visible.filter((thread) => thread.isPinned).sort(byPinOrder), 20);
+  const attention = take(visible.filter(needsAttention).sort((a, b) => b.latestAttentionAt - a.latestAttentionAt));
+  const running = take(visible.filter(isRunning).sort((a, b) => b.updatedAt - a.updatedAt));
+  const projectsById = new Map(projects.map((project) => [project.id, project]));
+  const pinnedProjects = pinnedProjectIds.flatMap((id) => projectsById.get(id) ?? []).slice(0, slots());
+  budget -= pinnedProjects.length;
+  const pinnedThreads = take(visible.filter((thread) => thread.isPinned).sort(byPinOrder));
   const recent = take(
     visible
       .map((thread) => ({ thread, score: score(threadKey(thread.id)) }))
@@ -73,21 +75,25 @@ export function rootGroups(
     8,
   );
 
-  const projectsById = new Map(projects.map((project) => [project.id, project]));
-  const pinned = new Set(pinnedProjectIds);
+  const listed = new Set(pinnedProjects.map((project) => project.id));
   return {
     attention,
     running,
     pinnedThreads,
-    pinnedProjects: pinnedProjectIds.flatMap((id) => projectsById.get(id) ?? []),
+    pinnedProjects,
     recent,
     projects: projects
-      .filter((project) => !pinned.has(project.id))
+      .filter((project) => !listed.has(project.id))
       .sort((a, b) => score(projectKey(b.id)) - score(projectKey(a.id))),
   };
 }
 
-export function rank<T>(
+export interface Ranked<T> {
+  candidate: T;
+  score: number;
+}
+
+export function rankScored<T>(
   candidates: readonly T[],
   query: string,
   fields: (candidate: T) => readonly string[],
@@ -95,15 +101,47 @@ export function rank<T>(
   usage: Record<string, Usage>,
   now: number,
   limit = 30,
-): T[] {
+  exact = fields,
+): Ranked<T>[] {
   const terms = queryTerms(query);
+  const phrase = terms.join(" ");
   return candidates
     .flatMap((candidate) => {
       const score = terms.length === 0 ? 0 : matchTerms(terms, fields(candidate));
       if (score === null) return [];
-      return [{ candidate, score: score + Math.min(frecency(usage[key(candidate)], now) / 20, 40) }];
+      const bonus = isExact(phrase, exact(candidate)) ? exactBonus(terms) : 0;
+      return [{ candidate, score: score + bonus + Math.min(frecency(usage[key(candidate)], now) / 20, 40) }];
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map(({ candidate }) => candidate);
+    .slice(0, limit);
+}
+
+export function rank<T>(...args: Parameters<typeof rankScored<T>>): T[] {
+  return rankScored(...args).map(({ candidate }) => candidate);
+}
+
+export function remoteScore(query: string, fields: readonly string[], exact?: boolean): number {
+  const terms = queryTerms(query);
+  return (matchTerms(terms, fields) ?? 0) + ((exact ?? isExact(terms.join(" "), fields)) ? exactBonus(terms) : 0);
+}
+
+export const TOP_HIT = "Top hit";
+
+export interface RankedSection<T> {
+  title: string;
+  items: readonly Ranked<T>[];
+  fallback?: boolean;
+}
+
+export function withTopHit<T>(sections: readonly RankedSection<T>[]): Array<{ title: string; items: T[] }> {
+  const best = (fallback: boolean) =>
+    sections
+      .filter((section) => (section.fallback ?? false) === fallback)
+      .flatMap((section) => section.items)
+      .reduce<Ranked<T> | undefined>((top, entry) => (top === undefined || entry.score > top.score ? entry : top), undefined);
+  const top = best(false) ?? best(true);
+  return [
+    { title: TOP_HIT, items: top === undefined ? [] : [top.candidate] },
+    ...sections.map(({ title, items }) => ({ title, items: items.filter((entry) => entry !== top).map((entry) => entry.candidate) })),
+  ];
 }
