@@ -1,0 +1,40 @@
+{
+  "name": "bb-plugin-chime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Plays a sound when a thread needs your approval or an answer, and optionally when one finishes or fails.",
+  "license": "MIT",
+  "engines": {
+    "bb": ">=0.46",
+    "bbPluginSdk": ">=0.6.37"
+  },
+  "bb": {
+    "name": "Chime",
+    "description": "Plays a sound when a thread needs your approval or an answer, and optionally when one finishes or fails.",
+    "branding": {
+      "icon": "./assets/icon.svg"
+    },
+    "server": "./server.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "0.6.37",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "better-sqlite3": "^12.0.0",
+    "cron-parser": "^5.5.0",
+    "hono": "^4.11.9",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.12"
+  },
+  "scripts": {
+    "build": "env -u BB_CLI bb plugin build .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build"
+  }
+}
