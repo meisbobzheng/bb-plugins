@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Plays a sound when a thread needs your approval or an answer, and optionally when one finishes or fails.",
+  "description": "Plays a sound when a thread needs your approval or an answer or hits 1Password's SSH agent, and optionally when one finishes or fails.",
   "license": "MIT",
   "engines": {
     "bb": ">=0.46",
@@ -11,7 +11,7 @@
   },
   "bb": {
     "name": "Chime",
-    "description": "Plays a sound when a thread needs your approval or an answer, and optionally when one finishes or fails.",
+    "description": "Plays a sound when a thread needs your approval or an answer or hits 1Password's SSH agent, and optionally when one finishes or fails.",
     "branding": {
       "icon": "./assets/icon.svg"
     },

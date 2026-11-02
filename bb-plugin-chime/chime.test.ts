@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { COALESCE_MS, commands, createChime, type ChimeEvent } from "./chime";
+import { COALESCE_MS, commands, createChime, usesOnePasswordAgent, type ChimeEvent } from "./chime";
 
 function setup({
   platform = "darwin" as NodeJS.Platform,
-  sounds = { input: "Glass", finished: "None", failed: "Basso" } as Record<ChimeEvent, string>,
+  sounds = { input: "Glass", ssh: "Hero", finished: "None", failed: "Basso" } as Record<ChimeEvent, string>,
   volumePercent = 60,
   failing = [] as string[],
   files = ["/usr/share/sounds/freedesktop/stereo/message-new-instant.oga"],
@@ -50,6 +50,12 @@ describe("chime", () => {
     const muted = setup({ volumePercent: 0 });
     expect(await muted.chime.play("input")).toBeNull();
     expect([...none.runs, ...muted.runs]).toEqual([]);
+  });
+
+  it("spots commands that use 1Password's SSH agent socket", () => {
+    expect(usesOnePasswordAgent(`SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" git push`)).toBe(true);
+    expect(usesOnePasswordAgent("SSH_AUTH_SOCK=~/.1password/agent.sock ssh host")).toBe(true);
+    expect(usesOnePasswordAgent("git push origin bob/chime")).toBe(false);
   });
 
   it("maps the volume to afplay and paplay levels", () => {

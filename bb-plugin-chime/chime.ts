@@ -1,14 +1,16 @@
 export const SOUNDS = ["None", "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"];
 
-export const EVENTS = ["input", "finished", "failed"] as const;
+export const EVENTS = ["input", "ssh", "finished", "failed"] as const;
 
 export type ChimeEvent = (typeof EVENTS)[number];
 
-export const EVENT_LABELS: Record<ChimeEvent, string> = { input: "Needs input", finished: "Thread finished", failed: "Thread failed" };
+export const EVENT_LABELS: Record<ChimeEvent, string> = { input: "Needs input", ssh: "1Password SSH", finished: "Thread finished", failed: "Thread failed" };
 
-const FREEDESKTOP: Record<ChimeEvent, string> = { input: "message-new-instant", finished: "complete", failed: "dialog-error" };
+const FREEDESKTOP: Record<ChimeEvent, string> = { input: "message-new-instant", ssh: "dialog-warning", finished: "complete", failed: "dialog-error" };
 
 export const COALESCE_MS = 2_000;
+
+export const usesOnePasswordAgent = (command: string) => /1password\/(t\/)?agent\.sock/i.test(command);
 
 export interface System {
   platform: NodeJS.Platform;

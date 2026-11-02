@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { PluginCliError, cliCommand, defineCli, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
-import { createChime, EVENT_LABELS, EVENTS, SOUNDS, type ChimeEvent, type System } from "./chime";
+import { createChime, EVENT_LABELS, EVENTS, SOUNDS, usesOnePasswordAgent, type ChimeEvent, type System } from "./chime";
 
 const sound = (label: string, description: string, fallback: string) => ({ type: "select" as const, label, description, options: SOUNDS, default: fallback });
 
@@ -13,6 +13,7 @@ export function createPlugin(system: System) {
   return async function plugin(bb: BbPluginApi) {
     const settings = bb.settings.define({
       inputSound: sound("Needs input sound", "Plays when a thread asks for your approval or an answer.", "Glass"),
+      sshSound: sound("1Password SSH sound", "Plays when a thread runs a command through 1Password's SSH agent, which asks you to approve.", "Hero"),
       finishedSound: sound("Thread finished sound", "Plays when a thread finishes its turn.", "None"),
       failedSound: sound("Thread failed sound", "Plays when a thread stops with an error.", "None"),
       volume: { type: "number", label: "Volume (%)", default: 60, experimental_schema: z.number().int().min(0).max(100) },
@@ -20,14 +21,26 @@ export function createPlugin(system: System) {
 
     const current = async () => {
       const values = await settings.get();
-      return { sounds: { input: values.inputSound, finished: values.finishedSound, failed: values.failedSound }, volumePercent: values.volume };
+      return { sounds: { input: values.inputSound, ssh: values.sshSound, finished: values.finishedSound, failed: values.failedSound }, volumePercent: values.volume };
     };
 
     const chime = createChime({ ...system, settings: current, now: Date.now, log: (message) => bb.log.warn(message) });
     const running = new Set<string>();
+    const seen = new Map<string, number>();
+    const startedAt = Date.now();
 
     bb.events.on("interaction.pending", ({ thread }) => {
       if (thread.visibility === "visible") void chime.notify("input");
+    });
+    bb.events.on("experimental_thread.events", async ({ thread, sequence }) => {
+      const after = seen.get(thread.id);
+      seen.set(thread.id, sequence);
+      if ((await current()).sounds.ssh === "None") return;
+      const started = await bb.sdk.threads.events.list({ threadId: thread.id, types: ["item/started"], order: "desc", limit: "20", ...(after === undefined ? {} : { afterSeq: String(after) }) });
+      const prompts = started.some(
+        (event) => event.seq <= sequence && event.createdAt >= startedAt && event.type === "item/started" && event.data.item.type === "commandExecution" && usesOnePasswordAgent(event.data.item.command),
+      );
+      if (prompts) void chime.notify("ssh");
     });
     bb.events.on("thread.active", ({ thread }) => void running.add(thread.id));
     bb.events.on("thread.idle", ({ thread }) => {
@@ -37,8 +50,12 @@ export function createPlugin(system: System) {
       running.delete(thread.id);
       if (thread.visibility === "visible") void chime.notify("failed");
     });
-    bb.events.on("thread.archived", ({ thread }) => void running.delete(thread.id));
-    bb.events.on("thread.deleted", ({ thread }) => void running.delete(thread.id));
+    const forget = ({ thread }: { thread: { id: string } }) => {
+      running.delete(thread.id);
+      seen.delete(thread.id);
+    };
+    bb.events.on("thread.archived", forget);
+    bb.events.on("thread.deleted", forget);
 
     bb.cli.register(
       defineCli({
