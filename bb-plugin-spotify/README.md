@@ -2,8 +2,8 @@
 
 Spotify inside bb: a mini player on a hotkey, your playlists, a smarter
 shuffle, sharing into threads, a private listening history, and music that
-steps aside when an agent needs you. Pick one of eight looks, each with its own
-palettes.
+can step aside when an agent needs you. Pick one of eight looks, each with its
+own palettes.
 
 ## Set up
 
@@ -82,9 +82,11 @@ the up-next list shows why each song is there.
 
 **When an agent needs you**
 
-When a thread asks for your approval, the plugin lowers the volume (20% by
-default) or pauses, and restores it once no thread is waiting. It leaves the
-volume alone if you changed it in the meantime.
+The plugin can lower the volume (to 20% by default) or pause while a thread
+waits for your approval, and restore it once no thread is waiting. It leaves
+the volume alone if you changed it in the meantime. This is off by default,
+since the [Chime](../bb-plugin-chime) plugin plays a sound instead; turn it on
+in the plugin settings.
 
 **History and stats**
 
@@ -134,7 +136,7 @@ single pane with a `1` playlists tab.
 | Spotify app Client ID | (empty) | The app you registered for sign-in |
 | Look | Console | Which of the eight looks to show |
 | Palette per look | the first one | Colors for each look |
-| When an agent thread needs your approval | Lower the volume | Lower, pause, or do nothing |
+| When an agent thread needs your approval | Do nothing | Lower, pause, or do nothing; Chime plays a sound instead |
 | Lowered volume (%) | 20 | Volume while ducked |
 | Keep a listening history | on | Powers stats and the Fresh and No-skips shuffles |
 | Model for vibe shuffles | `sonnet` | Passed to `claude --model` |

@@ -223,8 +223,17 @@ describe("adding to playlists", () => {
 });
 
 describe("agent-aware music", () => {
-  it("lowers the volume while a thread waits for approval and restores it after", async () => {
+  it("leaves the volume alone by default while a thread waits for approval", async () => {
     const { harness, interactions } = await start();
+    await connect(harness);
+    interactions.push({ id: "int_1" });
+    await harness.behavior.emitThreadEvent("interaction.pending", { thread: makeThreadResponse({ id: "thr_1" }), interaction: {} as never });
+    await vi.waitFor(async () => expect(await harness.behavior.callRpc("player_get", { fresh: false })).toMatchObject({ duck: { active: false, mode: "off" } }));
+    expect(calls("PUT", "/v1/me/player/volume")).toEqual([]);
+  });
+
+  it("lowers the volume while a thread waits for approval and restores it after", async () => {
+    const { harness, interactions } = await start({ clientId: CLIENT_ID, duckMode: "lower" });
     await connect(harness);
     interactions.push({ id: "int_1" });
     const thread = makeThreadResponse({ id: "thr_1", title: "Deploy to prod" });

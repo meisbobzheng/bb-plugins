@@ -11,8 +11,8 @@ Spotify in bb, with a mini player you can open anywhere with ⌘⇧S.
   by your local `claude` CLI.
 - **Sharing**: copy a song link or URI, make a share card, or @-mention the song
   in a thread so the agent gets its details.
-- **Agent-aware music** that lowers the volume or pauses while a thread waits
-  for your approval.
+- **Agent-aware music** that can lower the volume or pause while a thread
+  waits for your approval. It's off by default; Chime plays a sound instead.
 - **Listening history and stats**: top artists and songs, listening by hour,
   skip rate, and playlists you've forgotten.
 - **Launcher results**: find and play Spotify playlists and songs from ⌘K.

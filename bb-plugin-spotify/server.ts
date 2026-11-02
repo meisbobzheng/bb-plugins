@@ -64,7 +64,7 @@ export default async function plugin(bb: BbPluginApi) {
       label: "When an agent thread needs your approval",
       options: ["lower", "pause", "off"],
       experimental_optionLabels: { lower: "Lower the volume", pause: "Pause the music", off: "Do nothing" },
-      default: "lower",
+      default: "off",
     },
     duckVolume: { type: "number", label: "Lowered volume (%)", default: 20, experimental_schema: z.number().int().min(0).max(100) },
     historyEnabled: { type: "boolean", label: "Keep a listening history", description: "Powers stats and the Fresh and No-skips shuffles. Stored only in this plugin's database.", default: true },
