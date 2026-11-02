@@ -3,6 +3,7 @@
   "schemaVersion": 1,
   "name": "meisbobzheng-bb-plugins",
   "plugins": [
+    { "name": "chime", "source": "./bb-plugin-chime" },
     { "name": "database", "source": "./bb-plugin-database" },
     { "name": "launcher", "source": "./bb-plugin-launcher" },
     { "name": "library", "source": "./bb-plugin-library" },
@@ -12,6 +13,7 @@
     { "name": "spotify", "source": "./bb-plugin-spotify" },
     { "name": "thread-meter", "source": "./bb-plugin-thread-meter" },
     { "name": "thread-router", "source": "./bb-plugin-thread-router" },
+    { "name": "thread-sidebar", "source": "./bb-plugin-thread-sidebar" },
     { "name": "vim", "source": "./bb-plugin-vim" }
   ]
 }
