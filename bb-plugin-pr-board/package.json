@@ -13,7 +13,10 @@
     "name": "PR Board",
     "description": "A kanban board of open GitHub PRs with agent review threads, a side-by-side diff explorer, inline review comments, and go-to-definition.",
     "branding": {
-      "icon": "GitPullRequest"
+      "icon": "GitPullRequest",
+      "experimental_icons": {
+        "video": "./assets/video.svg"
+      }
     },
     "server": "./server.ts",
     "app": "./app.tsx"

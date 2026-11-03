@@ -126,6 +126,7 @@ const STATE: ReviewState = {
   drafts: [{ id: "d1", path: "cmd/main.go", side: "additions", startLine: 4, endLine: 4, body: "Pending note" }],
   addressAgent: { threadId: null, running: false },
   suggestions: [],
+  video: null,
 };
 
 const NEW_FILE = "package main\n\nfunc a() int { return b() }\nfunc b() int { return 1 }\n";
@@ -697,8 +698,9 @@ describe("comments", () => {
     );
     expect(await slot.findByText("Add thing")).toBeTruthy();
     const buttons = ["Run review", "Submit review", "Address comments", "Submit Address"].map((name) => slot.getByRole("button", { name: new RegExp(`^${name}`) }));
-    expect([...(buttons[0]?.parentElement?.children ?? [])]).toEqual(buttons);
-    expect(buttons[0]?.parentElement?.className).toContain("grid-cols-2");
+    const grid = buttons[1]?.parentElement;
+    expect([...(grid?.children ?? [])]).toEqual([buttons[0]?.parentElement, ...buttons.slice(1)]);
+    expect(grid?.className).toContain("grid-cols-2");
     await waitFor(() => expect(buttons[3]?.hasAttribute("disabled")).toBe(false));
     fireEvent.click(buttons[3]!);
     const dialog = await slot.findByRole("dialog");
@@ -710,6 +712,44 @@ describe("comments", () => {
     await waitFor(() =>
       expect(slot.inspection.rpcCalls.filter((call) => call.method === "submitAddress").map((call) => call.input)).toEqual([{ repo: "acme/app", number: 10 }]),
     );
+  });
+});
+
+describe("video", () => {
+  it("asks the review thread for a video from Run review's menu", async () => {
+    const slot = renderSlot(
+      boardPanel(),
+      { subPath: "pr/acme/app/7" },
+      { rpc: workspaceRpc(STATE, { explainPull: () => ({ threadId: "thr_7", delivery: "sent" }) }) },
+    );
+    expect(await slot.findByText("Add thing")).toBeTruthy();
+    expect(slot.queryByRole("button", { name: "Video" })).toBeNull();
+    const trigger = slot.getByRole("button", { name: "More review actions" });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Explain in a video/ }));
+    await waitFor(() =>
+      expect(slot.inspection.rpcCalls.filter((call) => call.method === "explainPull").map((call) => call.input)).toEqual([{ repo: "acme/app", number: 7 }]),
+    );
+  });
+
+  it("plays the recorded video in a sandboxed frame and says when the PR moved on", async () => {
+    const video = { title: "Add thing", scenes: 6, headSha: "9".repeat(40), createdAt: "2026-10-02T00:00:00Z" };
+    const slot = renderSlot(
+      boardPanel(),
+      { subPath: "pr/acme/app/7" },
+      { rpc: workspaceRpc({ ...STATE, video }, { video: () => ({ html: "<p>scene</p>" }) }) },
+    );
+    fireEvent.click(await slot.findByRole("button", { name: "Video" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("6 scenes");
+    expect(dialog.textContent).toContain("outdated");
+    const frame = await waitFor(() => {
+      const found = dialog.querySelector("iframe");
+      if (found === null) throw new Error("no frame yet");
+      return found;
+    });
+    expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(frame.getAttribute("srcdoc")).toBe("<p>scene</p>");
   });
 });
 

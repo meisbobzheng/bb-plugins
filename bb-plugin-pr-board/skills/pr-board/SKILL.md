@@ -1,6 +1,6 @@
 ---
 name: pr-board
-description: List open PRs by board column, open or re-run a PR's review thread or address-comments thread, and read the review findings and comment suggestions PR Board shows in its review page, with the bb pr-board commands and the pr_board_record_findings and pr_board_record_suggestions tools.
+description: List open PRs by board column, open or re-run a PR's review thread or address-comments thread, ask for a PR's explainer video, and read the review findings and comment suggestions PR Board shows in its review page, with the bb pr-board commands and the pr_board_record_findings, pr_board_record_video, and pr_board_record_suggestions tools.
 ---
 
 # PR Board
@@ -11,7 +11,7 @@ head, summarizes the PR, then runs `/thermo-nuclear-code-quality-review`. A
 separate address-comments thread suggests code changes and replies for the PR's
 comments without changing files. A check every 15 minutes archives the idle
 review and address threads of a PR that merged or closed and drops its
-findings, suggestions, and pending comments.
+findings, suggestions, pending comments, and video.
 
 ## Commands
 
@@ -20,6 +20,7 @@ bb pr-board board [--repo owner/repo] [--refresh] [--json]
 bb pr-board open <n | owner/repo#n | PR URL> [--json]
 bb pr-board review <n | owner/repo#n | PR URL> [--json]
 bb pr-board findings <n | owner/repo#n | PR URL> [--json]
+bb pr-board video <n | owner/repo#n | PR URL> [--json]
 bb pr-board address <n | owner/repo#n | PR URL> [--json]
 bb pr-board submit-address <n | owner/repo#n | PR URL> [--json]
 bb pr-board suggestions <n | owner/repo#n | PR URL> [--json]
@@ -38,6 +39,10 @@ bb pr-board suggestions <n | owner/repo#n | PR URL> [--json]
 - `review` sends the review command to the PR's thread again; it is queued if
   the agent is busy.
 - `findings` prints `severity  path:start-end  side  open|dismissed  title`.
+- `video` asks the PR's review thread for a narrated explainer video, starting
+  the thread when there is none and queueing the request behind its review. It
+  prints `sent` or `queued` with the thread id. It runs the agent, so only run
+  it when the user asks.
 - `address` starts the PR's address-comments thread, or sends it the current
   comments again, and prints `started`, `sent`, or `queued` with the thread id.
   It spawns an agent, so only run it when the user asks.
@@ -68,6 +73,21 @@ In a PR Board review thread, after a code review, call
 A call replaces the findings recorded earlier for the PR. Pass
 `replace: false` to append instead. The tool exists only in threads PR Board
 started.
+
+## Recording a video
+
+In a PR Board review thread, when asked for a video, call
+`pr_board_record_video` once with a `title` and 2 to 16 `scenes`, each with:
+
+- `title`: the scene's heading.
+- `narration`: one to three short sentences, shown as the caption and read
+  aloud when the viewer turns the voice on. It sets how long the scene plays.
+- `visual`: an HTML fragment, usually an inline SVG diagram with a `viewBox`.
+  `data-step="1"`, `"2"`, … reveal elements in order; class `draw` draws SVG
+  lines and paths in. The page blocks the network, so use no external images,
+  fonts, scripts, or stylesheets.
+
+A call replaces the PR's earlier video.
 
 ## Recording comment suggestions
 

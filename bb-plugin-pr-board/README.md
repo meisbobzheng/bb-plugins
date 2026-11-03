@@ -100,10 +100,10 @@ thread.
 Every 15 minutes the server checks each PR that has a review or address
 thread. When the PR has left the open list and GitHub reports it merged or
 closed, both threads are archived, which retires their worktrees, and the
-plugin forgets them along with the PR's findings, suggestions, and pending
-comments. If either thread's agent is still running, the PR is archived on a
-later check. Unarchiving a thread afterwards keeps it, and reopening the PR
-starts a new review thread.
+plugin forgets them along with the PR's findings, suggestions, pending
+comments, and video. If either thread's agent is still running, the PR is
+archived on a later check. Unarchiving a thread afterwards keeps it, and
+reopening the PR starts a new review thread.
 
 A PR's page also opens from the cache when you come back to it, on the file
 you last viewed, and refreshes in the background. The server keeps each PR it
@@ -147,9 +147,30 @@ The page has:
   lines outside the shown hunks, and outdated GitHub comments, are listed
   above the diff.
 - **Description**: the PR body.
-- **Run review**: sends the review command to the thread again.
+- **Run review**: sends the review command to the thread again. Its ▾ menu
+  has **Explain in a video** (see below).
 - **Address comments** (under Run review) and **Submit Address** (under Submit
   review): see below.
+
+### Explainer video
+
+**Explain in a video**, in the menu beside **Run review**, asks the review
+thread for a short narrated video of the PR. When the review thread is new, the
+request is queued behind the summary and the review. The agent reads the diff,
+the worktree, and its findings, and records 5 to 10 scenes with the
+`pr_board_record_video` tool: the problem, the approach as a diagram of the
+components and flows it touches, the key changes, the findings by severity, and
+what to check closely.
+
+Once it is recorded, **Video** in the header plays it in a dialog. Scenes
+advance with their narration as captions, and diagram parts appear in order.
+Space or the stage pauses, ← and → change scenes, the progress bar jumps to a
+scene, and **Voice** (v) reads the narration aloud with the system voice. The
+dialog says **outdated** when the PR has commits newer than the video. **Make
+a new video** in the menu replaces it.
+
+The video is one self-contained page in a sandboxed frame that cannot reach the
+network, so diagrams are inline SVG.
 
 ### Addressing comments
 
@@ -281,6 +302,7 @@ bb pr-board board [--repo owner/repo] [--refresh] [--json]
 bb pr-board open <n | owner/repo#n | PR URL> [--json]
 bb pr-board review <n | owner/repo#n | PR URL> [--json]
 bb pr-board findings <n | owner/repo#n | PR URL> [--json]
+bb pr-board video <n | owner/repo#n | PR URL> [--json]
 bb pr-board address <n | owner/repo#n | PR URL> [--json]
 bb pr-board submit-address <n | owner/repo#n | PR URL> [--json]
 bb pr-board suggestions <n | owner/repo#n | PR URL> [--json]
@@ -291,10 +313,10 @@ See `skills/pr-board/SKILL.md` for the output formats.
 ## Storage
 
 The plugin database keeps the PR of each review and address thread, the
-findings, the comment suggestions, pending comments, and the last loaded copy of
-each opened PR. Accepted changes go only to the address thread's worktree.
-Everything kept for a PR is removed once its threads are archived after a merge
-or close. Nothing reaches GitHub until you post a comment, reply,
+findings, the comment suggestions, pending comments, each PR's video, and the
+last loaded copy of each opened PR. Accepted changes go only to the address
+thread's worktree. Everything kept for a PR is removed once its threads are
+archived after a merge or close. Nothing reaches GitHub until you post a comment, reply,
 resolve a thread, mark a file viewed, or submit a review.
 
 ## Limits

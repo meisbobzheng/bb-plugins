@@ -196,12 +196,21 @@ const addressAgentSchema = z.object({
   running: z.boolean(),
 });
 
+const videoSummarySchema = z.object({
+  title: z.string(),
+  scenes: z.number().int().positive(),
+  headSha: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type VideoSummary = z.infer<typeof videoSummarySchema>;
+
 const reviewStateSchema = z.object({
   agent: agentSchema,
   findings: z.array(findingSchema),
   drafts: z.array(draftSchema),
   addressAgent: addressAgentSchema,
   suggestions: z.array(suggestionSchema),
+  video: videoSummarySchema.nullable(),
 });
 export type ReviewState = z.infer<typeof reviewStateSchema>;
 
@@ -277,6 +286,14 @@ export const rpcContract = defineRpcContract({
   runReview: {
     input: z.object(pullRef).strict(),
     output: z.object({ threadId: z.string(), delivery: z.enum(["sent", "queued"]) }),
+  },
+  explainPull: {
+    input: z.object(pullRef).strict(),
+    output: z.object({ threadId: z.string(), delivery: z.enum(["sent", "queued"]) }),
+  },
+  video: {
+    input: z.object(pullRef).strict(),
+    output: z.object({ html: z.string() }).nullable(),
   },
   definition: {
     input: z

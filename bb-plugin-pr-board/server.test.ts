@@ -5,7 +5,17 @@ import { join } from "node:path";
 import { createFakePluginHost, makePluginAgentConfigurationContext, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { Board } from "./contract";
 import type { RunOptions } from "./github";
-import { FINDINGS_TOOL, REVIEW_SKILL, SUGGESTIONS_TOOL, askMessage, createPlugin, parsePullArgument, reviewMessage, summaryPrompt } from "./server";
+import {
+  FINDINGS_TOOL,
+  REVIEW_SKILL,
+  SUGGESTIONS_TOOL,
+  VIDEO_TOOL,
+  askMessage,
+  createPlugin,
+  parsePullArgument,
+  reviewMessage,
+  summaryPrompt,
+} from "./server";
 
 const HEAD = "1".repeat(40);
 const BASE = "2".repeat(40);
@@ -186,6 +196,14 @@ function setup({
 
 type Harness = ReturnType<typeof setup>["harness"];
 type Runner = ReturnType<typeof setup>["runner"];
+
+const VIDEO_INPUT = {
+  title: "Add thing",
+  scenes: [
+    { title: "Before <b>", narration: "The thing was missing.", visual: '<svg viewBox="0 0 10 10"><rect data-step="1"/></svg>' },
+    { title: "After", narration: "Now it is added.", visual: "<div class=\"card\">thing</div>" },
+  ],
+};
 
 describe("board", () => {
   let clock = 0;
@@ -680,10 +698,11 @@ describe("archiving finished reviews", () => {
     expect(logged()).toEqual(["info", "warn", "warn"]);
   });
 
-  it("archives the address thread too and forgets the PR's suggestions and pending comments", async () => {
+  it("archives the address thread too and forgets the PR's suggestions, pending comments, and video", async () => {
     const { harness, runner, advance } = await reviewed();
     const pull = { repo: "acme/app", number: 7 };
     await harness.behavior.callRpc("addressComments", pull);
+    await harness.behavior.callAgentTool(VIDEO_TOOL, VIDEO_INPUT, { threadId: "thr_review" });
     await harness.behavior.callRpc("saveDraft", { ...pull, id: null, path: "a.go", side: "additions", startLine: 2, endLine: 2, body: "Why?" });
     runner.board.pop();
     runner.states[7] = "CLOSED";
@@ -691,7 +710,8 @@ describe("archiving finished reviews", () => {
     await harness.behavior.runSchedule("archive-finished-reviews");
     expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([[{ threadId: "thr_review" }], [{ threadId: "thr_address" }]]);
     expect(await harness.behavior.callRpc("pullForThread", { threadId: "thr_address" })).toBeNull();
-    expect(await harness.behavior.callRpc("reviewState", pull)).toMatchObject({ drafts: [], suggestions: [] });
+    expect(await harness.behavior.callRpc("video", pull)).toBeNull();
+    expect(await harness.behavior.callRpc("reviewState", pull)).toMatchObject({ drafts: [], suggestions: [], video: null });
   });
 
   it("archives a PR's address thread when it has no review thread", async () => {
@@ -746,7 +766,7 @@ describe("findings tool", () => {
       makePluginAgentConfigurationContext({ pluginMetadata: { repo: "acme/app", number: 7 } }),
     );
     const other = await harness.behavior.resolveAgentConfiguration(makePluginAgentConfigurationContext());
-    expect(review.tools.map((tool) => tool.name)).toEqual([FINDINGS_TOOL]);
+    expect(review.tools.map((tool) => tool.name)).toEqual([FINDINGS_TOOL, VIDEO_TOOL]);
     expect(other.tools).toEqual([]);
     expect(other.skills).toEqual(["pr-board"]);
   });
@@ -795,6 +815,49 @@ describe("findings tool", () => {
       { threadId: "thr_other" },
     );
     expect(result).toMatchObject({ isError: true });
+  });
+});
+
+describe("video", () => {
+  const pull = { repo: "acme/app", number: 7 };
+  const sent = (harness: Harness) => harness.inspection.sdk.callsTo("threads.send").map((call) => JSON.stringify(call[0]));
+
+  it("queues the video request behind the review of a new review thread", async () => {
+    const { harness } = setup();
+    expect(await harness.behavior.callRpc("explainPull", pull)).toEqual({ threadId: "thr_review", delivery: "queued" });
+    await vi.waitFor(() => expect(sent(harness)).toHaveLength(2));
+    expect(sent(harness)[0]).toContain(`${REVIEW_SKILL} review pr 7`);
+    expect(sent(harness)[1]).toContain(`record it with the ${VIDEO_TOOL} tool`);
+    expect(sent(harness)[1]).toContain(FINDINGS_TOOL);
+  });
+
+  it("asks an existing review thread for the video at once", async () => {
+    const { harness } = setup();
+    await harness.behavior.callRpc("openReview", pull);
+    await vi.waitFor(() => expect(sent(harness)).toHaveLength(1));
+    expect(await harness.behavior.callRpc("explainPull", pull)).toEqual({ threadId: "thr_review", delivery: "queued" });
+    expect(sent(harness)).toHaveLength(2);
+    expect(harness.inspection.sdk.callsTo("threads.spawn")).toHaveLength(1);
+  });
+
+  it("records the review thread's video, replaces it on a new one, and plays it as a locked-down page", async () => {
+    const { harness } = setup();
+    await harness.behavior.callRpc("openReview", pull);
+    await harness.behavior.callAgentTool(VIDEO_TOOL, { ...VIDEO_INPUT, title: "First" }, { threadId: "thr_review" });
+    const result = await harness.behavior.callAgentTool(VIDEO_TOOL, VIDEO_INPUT, { threadId: "thr_review" });
+    expect(result).toContain("Recorded a 2-scene video for acme/app#7");
+
+    const state = (await harness.behavior.callRpc("reviewState", pull)) as { video: unknown };
+    expect(state.video).toEqual({ title: "Add thing", scenes: 2, headSha: HEAD, createdAt: expect.any(String) });
+    const { html } = (await harness.behavior.callRpc("video", pull)) as { html: string };
+    expect(html).toContain("default-src 'none'");
+    expect(html).toContain("<h2>Before &#60;b&#62;</h2>");
+    expect(html).toContain('<svg viewBox="0 0 10 10"><rect data-step="1"/></svg>');
+  });
+
+  it("refuses threads that are not review threads", async () => {
+    const { harness } = setup();
+    expect(await harness.behavior.callAgentTool(VIDEO_TOOL, VIDEO_INPUT, { threadId: "thr_other" })).toMatchObject({ isError: true });
   });
 });
 

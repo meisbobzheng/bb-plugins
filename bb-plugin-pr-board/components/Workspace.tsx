@@ -30,6 +30,7 @@ import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { usePreference } from "./use-preference";
 import { useUpdates } from "./use-updates";
+import { VideoDialog } from "./VideoDialog";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { useWidth } from "./use-width";
 
@@ -145,6 +146,7 @@ const EMPTY_STATE: ReviewState = {
   drafts: [],
   addressAgent: { threadId: null, running: false },
   suggestions: [],
+  video: null,
 };
 
 function Workspace({
@@ -193,6 +195,8 @@ function Workspace({
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitAddressOpen, setSubmitAddressOpen] = useState(false);
   const [running, setRunning] = useState(false);
+  const [explaining, setExplaining] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
   const [addressing, setAddressing] = useState(false);
   const seq = useRef(0);
   const nextSeq = () => ++seq.current;
@@ -436,6 +440,21 @@ function Workspace({
       .finally(() => setRunning(false));
   };
 
+  const explain = () => {
+    setExplaining(true);
+    rpc
+      .call("explainPull", pull)
+      .then((result) =>
+        toast.success(
+          result.delivery === "queued"
+            ? "Video queued in the review thread. Video appears in the header when it is ready."
+            : "Asked the review thread for a video. Video appears in the header when it is ready.",
+        ),
+      )
+      .catch((error: unknown) => toast.error(errorMessage(error)))
+      .finally(() => setExplaining(false));
+  };
+
   const addressComments = () => {
     const starting = review.addressAgent.threadId === null;
     setAddressing(true);
@@ -583,6 +602,7 @@ function Workspace({
         refreshing={refreshing}
         error={error}
         running={running}
+        explaining={explaining}
         addressing={addressing}
         onRefresh={() => {
           refreshDetail();
@@ -593,6 +613,8 @@ function Workspace({
           setFilesOpen(true);
         }}
         onRunReview={runReview}
+        onExplain={explain}
+        onWatchVideo={() => setVideoOpen(true)}
         onAddressComments={addressComments}
         submittingAddress={submitAddressOpen}
         onSubmitAddress={() => setSubmitAddressOpen(true)}
@@ -755,6 +777,7 @@ function Workspace({
         isAuthor={detail.author.login === detail.viewer}
         onSubmit={submitReview}
       />
+      <VideoDialog pull={pull} video={review.video} headSha={detail.headSha} open={videoOpen} onOpenChange={setVideoOpen} />
       <SubmitAddressDialog
         open={submitAddressOpen}
         onOpenChange={setSubmitAddressOpen}

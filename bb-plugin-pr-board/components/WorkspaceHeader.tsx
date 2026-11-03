@@ -5,6 +5,7 @@ import { BOARD_PANEL } from "../routes";
 import { cn } from "../lib/utils";
 import { Avatar, ToolbarToggle } from "./bits";
 import { Button } from "./ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Icon } from "./ui/icon";
 
 export function WorkspaceHeader({
@@ -14,11 +15,14 @@ export function WorkspaceHeader({
   refreshing,
   error,
   running,
+  explaining,
   addressing,
   submittingAddress,
   onRefresh,
   onShowFindings,
   onRunReview,
+  onExplain,
+  onWatchVideo,
   onAddressComments,
   onSubmit,
   onSubmitAddress,
@@ -29,11 +33,14 @@ export function WorkspaceHeader({
   refreshing: boolean;
   error: string | null;
   running: boolean;
+  explaining: boolean;
   addressing: boolean;
   submittingAddress: boolean;
   onRefresh(): void;
   onShowFindings(): void;
   onRunReview(): void;
+  onExplain(): void;
+  onWatchVideo(): void;
   onAddressComments(): void;
   onSubmit(): void;
   onSubmitAddress(): void;
@@ -130,20 +137,42 @@ export function WorkspaceHeader({
             disabled={threadId === null}
             onClick={() => threadId !== null && navigate.toThread(threadId)}
           />
+          {review.video === null ? null : (
+            <ToolbarToggle pressed={false} label="Video" icon="pr-board/video" showLabel={!narrow} onClick={onWatchVideo} />
+          )}
           <ToolbarToggle pressed={false} label="GitHub" icon="Github" showLabel={!narrow} onClick={() => openUrl(detail.url)} />
           <span className={cn(narrow && "flex-1")} />
           <div className="grid shrink-0 grid-cols-2 gap-1">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 justify-start px-2 text-xs"
-              disabled={running}
-              onClick={onRunReview}
-              title="Send /thermo-nuclear-code-quality-review to the review thread"
-            >
-              <Icon name="Play" className="size-3.5" />
-              Run review
-            </Button>
+            <div className="flex">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 flex-1 justify-start rounded-r-none px-2 text-xs"
+                disabled={running}
+                onClick={onRunReview}
+                title="Send /thermo-nuclear-code-quality-review to the review thread"
+              >
+                <Icon name="Play" className="size-3.5" />
+                Run review
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7 rounded-l-none border-l-0 px-1" title="More review actions" aria-label="More review actions">
+                    <Icon name="ChevronDown" className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    disabled={explaining}
+                    onSelect={onExplain}
+                    title="Ask the review thread for a narrated video with diagrams of the problem, the implementation, and the findings"
+                  >
+                    <Icon name="pr-board/video" className="size-3.5" />
+                    {review.video === null ? "Explain in a video" : "Make a new video"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <Button size="sm" className="h-7 px-2.5 text-xs" onClick={onSubmit}>
               Submit review
               {review.drafts.length > 0 ? <span className="rounded-full bg-background/25 px-1.5 tabular-nums">{review.drafts.length}</span> : null}

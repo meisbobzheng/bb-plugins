@@ -30,8 +30,9 @@ import {
   submitAddressMessage,
   writePreviews,
 } from "./suggestions.js";
+import { VIDEO_TOOL, videoDocument, videoInputSchema } from "./video.js";
 
-export { SUGGESTIONS_TOOL, rpcContract };
+export { SUGGESTIONS_TOOL, VIDEO_TOOL, rpcContract };
 
 const WORKTREE_PROVIDER_ID = "git-worktree";
 const REVIEW_PROVIDER_ID = "claude-code";
@@ -130,6 +131,25 @@ export function reviewMessage(pull: Pick<PullDetail, "repo" | "number" | "baseRe
     `When the review is done, call the ${FINDINGS_TOOL} tool once with every finding: the repository-relative file path,`,
     `the line range on the PR's new code (side "additions") or on removed code (side "deletions"), a severity, a one-line title, and the explanation.`,
   ].join(" ");
+}
+
+export function videoMessage(pull: Pick<PullDetail, "repo" | "number" | "baseRefName">): string {
+  return [
+    `Make a short explainer video of ${pullKey(pull)} for me, the reviewer, and record it with the ${VIDEO_TOOL} tool. PR Board plays it as narrated scenes on the PR's review page.`,
+    `Base it on the PR's changes against the merge base with ${pull.baseRefName} (\`gh pr diff ${pull.number} -R ${pull.repo}\`), the code in this worktree, and the findings you recorded with ${FINDINGS_TOOL}. Do not guess about code you have not read.`,
+    "",
+    "Cover, in 5 to 10 scenes:",
+    "1. The problem: what was wrong or missing before this PR, and what it affected.",
+    "2. The approach: how the PR solves it, as a diagram of the components it touches and how calls or data flow between them.",
+    "3. The implementation: the key changes grouped by area, naming the files, with before/after diagrams or short code excerpts where they help.",
+    "4. The findings: each one by severity, most severe first, with its file and why it matters. Say so plainly if there are none.",
+    "5. What to check closely while reviewing.",
+    "",
+    "Each scene's visual is an HTML fragment on a dark 16:9 stage. Draw diagrams as inline SVG with a viewBox and no width or height: component and data-flow diagrams, sequence diagrams, state machines, before/after flows, and small bar charts.",
+    'Add data-step="1", "2", … to elements to reveal them in that order while the narration plays, and class "draw" to SVG lines and paths to draw them in.',
+    "Colors: var(--fg), var(--muted), var(--accent), var(--good), var(--bad), var(--warn), var(--panel), var(--line). Classes: row, col, grid2, card, pill, big, muted, good, bad, warn, accent, and pre for code of at most 12 lines.",
+    "The page blocks the network, so use no external images, fonts, scripts, or stylesheets. Narration is one to three short plain sentences per scene; it is the caption and is read aloud.",
+  ].join("\n");
 }
 
 export function askMessage(
@@ -687,6 +707,7 @@ export function createPlugin(deps: PluginDeps) {
     }
 
     const opening = new Map<string, Promise<{ threadId: string; created: boolean }>>();
+    const reviewStarts = new Map<string, Promise<unknown>>();
     async function openReviewOnce(pull: PullKey): Promise<{ threadId: string; created: boolean }> {
       const existing = await reviewThreadFor(pull);
       if (existing !== null) return { threadId: existing.id, created: false };
@@ -694,9 +715,10 @@ export function createPlugin(deps: PluginDeps) {
       const thread = await spawnPullThread(detail, reviewThreadTitle(detail), summaryPrompt(detail), { repo: pull.repo, number: pull.number });
       store.recordThread(thread.id, pull, deps.now());
       publish(pull);
-      void prepareThen(thread.id, detail, `review/pr-${pull.number}`, () => sendReview(thread.id, detail)).catch((error: unknown) =>
-        bb.log.warn(`could not start the review of ${pullKey(pull)} in ${thread.id}: ${errorMessage(error)}`),
-      );
+      const started = prepareThen(thread.id, detail, `review/pr-${pull.number}`, () => sendReview(thread.id, detail))
+        .catch((error: unknown) => bb.log.warn(`could not start the review of ${pullKey(pull)} in ${thread.id}: ${errorMessage(error)}`))
+        .finally(() => reviewStarts.delete(thread.id));
+      reviewStarts.set(thread.id, started);
       bb.log.info(`started review thread ${thread.id} for ${pullKey(pull)}`);
       return { threadId: thread.id, created: true };
     }
@@ -838,6 +860,33 @@ export function createPlugin(deps: PluginDeps) {
       return { threadId, delivery: await sendReview(threadId, await pullDetail(pull, false)) };
     }
 
+    async function sendVideo(threadId: string, pull: PullDetail): Promise<"sent" | "queued"> {
+      const result = await bb.sdk.threads.send({
+        threadId,
+        mode: "auto",
+        input: [{ type: "text", text: videoMessage(pull), mentions: [] }],
+      });
+      publish(pull);
+      return result.delivery;
+    }
+
+    async function explainPull(pull: PullKey): Promise<{ threadId: string; delivery: "sent" | "queued" }> {
+      const { threadId } = await openReview(pull);
+      const detail = await pullDetail(pull, false);
+      const starting = reviewStarts.get(threadId);
+      if (starting === undefined) return { threadId, delivery: await sendVideo(threadId, detail) };
+      void starting
+        .then(() => (disposed.signal.aborted ? undefined : sendVideo(threadId, detail)))
+        .catch((error: unknown) => bb.log.warn(`could not ask ${threadId} for a video of ${pullKey(pull)}: ${errorMessage(error)}`));
+      return { threadId, delivery: "queued" };
+    }
+
+    function videoSummary(pull: PullKey) {
+      const video = store.video(pull);
+      if (video === null) return null;
+      return { title: video.title, scenes: video.scenes.length, headSha: video.headSha, createdAt: new Date(video.createdAt).toISOString() };
+    }
+
     async function reviewState(pull: PullKey) {
       const findings = store.findings(pull);
       const [agent, address] = await Promise.all([
@@ -850,6 +899,7 @@ export function createPlugin(deps: PluginDeps) {
         drafts: store.drafts(pull),
         addressAgent: { threadId: address?.id ?? null, running: isRunning(address) },
         suggestions: address === null ? [] : store.suggestions(pull, address.id),
+        video: videoSummary(pull),
       };
     }
 
@@ -902,6 +952,11 @@ export function createPlugin(deps: PluginDeps) {
       pullForThread: ({ threadId }) => store.pullForThread(threadId) ?? store.pullForAddressThread(threadId),
       openReview: (pull) => openReview(pull),
       runReview: (pull) => runReview(pull),
+      explainPull: (pull) => explainPull(pull),
+      video: (pull) => {
+        const video = store.video(pull);
+        return video === null ? null : { html: videoDocument(video) };
+      },
       definition: (input) => definition(input),
       saveDraft: ({ repo, number, ...draft }) => {
         const saved = store.saveDraft({ repo, number }, draft, deps.now());
@@ -1092,10 +1147,31 @@ export function createPlugin(deps: PluginDeps) {
       },
     });
 
+    bb.agents.registerTool({
+      name: VIDEO_TOOL,
+      description:
+        "Record a narrated explainer video of this thread's pull request: scenes with a title, narration, and an HTML or inline SVG visual. PR Board plays it on the PR's review page. Each call replaces the video recorded before.",
+      instructions: `This thread reviews a pull request for PR Board. When asked for a video of the PR, call ${VIDEO_TOOL} once with every scene.`,
+      presentation: { label: { pending: "Recording the PR video", completed: "Recorded the PR video" } },
+      parameters: videoInputSchema,
+      async execute({ title, scenes }, { threadId }) {
+        const pull = store.pullForThread(threadId);
+        if (pull === null) {
+          return { content: [{ type: "text", text: "This thread is not a PR Board review thread." }], isError: true };
+        }
+        const headSha = await pullDetail(pull, false)
+          .then((detail) => detail.headSha)
+          .catch(() => null);
+        store.saveVideo(threadId, pull, { title, scenes, headSha, createdAt: deps.now() });
+        publish(pull);
+        return `Recorded a ${scenes.length}-scene video for ${pullKey(pull)}. PR Board plays it from the review page's Video button.`;
+      },
+    });
+
     bb.agents.configure((context) => {
       const { repo, number, kind } = context.pluginMetadata;
       const isPullThread = typeof repo === "string" && /^[\w.-]+\/[\w.-]+$/.test(repo) && typeof number === "number";
-      return { tools: !isPullThread ? [] : kind === "address" ? [SUGGESTIONS_TOOL] : [FINDINGS_TOOL], skills: [SKILL_NAME] };
+      return { tools: !isPullThread ? [] : kind === "address" ? [SUGGESTIONS_TOOL] : [FINDINGS_TOOL, VIDEO_TOOL], skills: [SKILL_NAME] };
     });
 
     const jsonOption = { json: { type: "boolean", description: "Print the result as JSON" } } as const;
@@ -1165,6 +1241,15 @@ export function createPlugin(deps: PluginDeps) {
             options: jsonOption,
             async run(input) {
               const result = await runReview(await pullArgument(input.positionals.pull));
+              return output(input.options.json, result, [`${result.delivery}\t${result.threadId}`]);
+            },
+          }),
+          video: cliCommand({
+            summary: "Ask a PR's review thread for a narrated explainer video of the PR, queued behind its review when the thread is new",
+            positionals: pullPositional,
+            options: jsonOption,
+            async run(input) {
+              const result = await explainPull(await pullArgument(input.positionals.pull));
               return output(input.options.json, result, [`${result.delivery}\t${result.threadId}`]);
             },
           }),

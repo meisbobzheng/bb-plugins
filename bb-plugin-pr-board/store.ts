@@ -14,6 +14,7 @@ import {
   type Suggestion,
   type SuggestionEdit,
 } from "./contract.js";
+import { videoSceneSchema, type Video } from "./video.js";
 
 export interface PullKey {
   repo: string;
@@ -50,6 +51,7 @@ interface SuggestionRow {
 }
 
 const editsSchema = z.array(suggestionEditSchema);
+const scenesSchema = z.array(videoSceneSchema);
 
 interface FindingRow {
   id: string;
@@ -171,6 +173,16 @@ export function createStore(storage: BbPluginApi["storage"]) {
       position INTEGER NOT NULL
     )`,
     `CREATE INDEX suggestions_pull ON suggestions (repo, number, position)`,
+    `CREATE TABLE videos (
+      repo TEXT NOT NULL,
+      number INTEGER NOT NULL,
+      thread_id TEXT NOT NULL,
+      head_sha TEXT,
+      title TEXT NOT NULL,
+      scenes TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (repo, number)
+    )`,
   ]);
 
   const statements = {
@@ -245,6 +257,11 @@ export function createStore(storage: BbPluginApi["storage"]) {
     maxSuggestionPosition: db.prepare("SELECT COALESCE(MAX(position), -1) AS position FROM suggestions WHERE repo = ? AND number = ?"),
     setReplyState: db.prepare("UPDATE suggestions SET reply_state = ? WHERE id = ?"),
     setChangeState: db.prepare("UPDATE suggestions SET change_state = ? WHERE id = ?"),
+    saveVideo: db.prepare(
+      "INSERT OR REPLACE INTO videos (repo, number, thread_id, head_sha, title, scenes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ),
+    video: db.prepare("SELECT head_sha, title, scenes, created_at FROM videos WHERE repo = ? AND number = ?"),
+    forgetVideo: db.prepare("DELETE FROM videos WHERE repo = ? AND number = ?"),
   };
 
   return {
@@ -268,6 +285,7 @@ export function createStore(storage: BbPluginApi["storage"]) {
         statements.forgetAddressThreads.run(pull.repo, pull.number);
         statements.forgetSuggestions.run(pull.repo, pull.number);
         statements.clearDrafts.run(pull.repo, pull.number);
+        statements.forgetVideo.run(pull.repo, pull.number);
       })();
     },
     findings(pull: PullKey): Finding[] {
@@ -386,6 +404,15 @@ export function createStore(storage: BbPluginApi["storage"]) {
     },
     setChangeState(id: string, state: Suggestion["changeState"]): void {
       statements.setChangeState.run(state, id);
+    },
+    saveVideo(threadId: string, pull: PullKey, video: Video): void {
+      statements.saveVideo.run(pull.repo, pull.number, threadId, video.headSha, video.title, JSON.stringify(video.scenes), video.createdAt);
+    },
+    video(pull: PullKey): Video | null {
+      const row = statements.video.get(pull.repo, pull.number) as { head_sha: string | null; title: string; scenes: string; created_at: number } | undefined;
+      if (row === undefined) return null;
+      const scenes = scenesSchema.safeParse(JSON.parse(row.scenes));
+      return scenes.success ? { title: row.title, scenes: scenes.data, headSha: row.head_sha, createdAt: row.created_at } : null;
     },
   };
 }
