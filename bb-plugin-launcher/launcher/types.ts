@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { TelecomHit } from "../telecom";
 import type { PluginEntry } from "./data";
+import type { SpecHit } from "./specs";
 
 export interface Shortcut {
   key: string;
@@ -24,6 +25,7 @@ export type Preview =
   | { kind: "project"; projectId: string }
   | { kind: "plugin"; plugin: PluginEntry }
   | { kind: "telecom"; hit: TelecomHit }
+  | { kind: "spec"; hit: SpecHit }
   | { kind: "note"; title: string; body: string };
 
 export interface Drill {
@@ -61,6 +63,7 @@ export type Page =
   | { kind: "plugins" }
   | { kind: "plugin"; pluginId: string }
   | { kind: "telecom" }
+  | { kind: "specs" }
   | { kind: "choices"; title: string; sections: readonly Section[] }
   | { kind: "input"; title: string; placeholder: string; submitLabel: string; submit(value: string): void | Promise<void> };
 

@@ -9,11 +9,14 @@ import { useAsync, useDebounced, type OutlineItem } from "./data";
 import { ProjectIcon, ThreadIcon, relativeTime } from "./items";
 import { PluginIcon, pluginStatusLabel } from "./plugins";
 import { isRunning, needsAttention, visibleThreads } from "./rank";
+import { specCitation, useSpecClause, type SpecHit } from "./specs";
 import { telecomKind } from "./telecom";
 import type { Item } from "./types";
 
 const OUTLINE_LIMIT = 6;
 const SETTLE_MS = 120;
+const SPEC_PREVIEW_CHARS = 1_500;
+const SPEC_PREVIEW_CHILDREN = 8;
 const outlineCache = new Map<string, readonly OutlineItem[]>();
 
 function Facts({ rows }: { rows: ReadonlyArray<readonly [string, ReactNode]> }) {
@@ -150,6 +153,42 @@ function ProjectPreview({ projectId }: { projectId: string }) {
   );
 }
 
+function SpecPreview({ icon, hit }: { icon: ReactNode; hit: SpecHit }) {
+  const settled = useDebounced(`${hit.spec} ${hit.clause}`, SETTLE_MS) === `${hit.spec} ${hit.clause}`;
+  const clause = useSpecClause(hit, settled);
+  const body = clause?.body ?? "";
+  return (
+    <div className="space-y-4 p-4">
+      <Heading icon={icon} title={`${specCitation(hit)} ${hit.title}`} detail={clause?.spec.title ?? `${hit.kind} ${hit.spec} V${hit.version}`} />
+      <Facts
+        rows={[
+          ["Version", clause === undefined || clause === null ? `V${hit.version}` : `V${clause.spec.version} (Release ${clause.spec.release})`],
+          ["Parent", clause?.parent ? `§${clause.parent.clause} ${clause.parent.title}` : null],
+          ["Subclauses", clause && clause.children.length > 0 ? String(clause.children.length) : null],
+        ]}
+      />
+      {clause === undefined ? (
+        <p className="text-xs text-muted-foreground">Loading clause…</p>
+      ) : clause === null ? (
+        <p className="text-xs text-muted-foreground">This clause is no longer indexed.</p>
+      ) : (
+        <>
+          <p className="whitespace-pre-line text-xs leading-relaxed text-foreground">
+            {body === "" ? "This clause has no text of its own." : body.length > SPEC_PREVIEW_CHARS ? `${body.slice(0, SPEC_PREVIEW_CHARS)}…` : body}
+          </p>
+          {clause.children.length === 0 ? null : (
+            <ul className="space-y-0.5 text-xs text-muted-foreground">
+              {clause.children.slice(0, SPEC_PREVIEW_CHILDREN).map((child) => (
+                <li key={child.clause} className="truncate">{`§${child.clause} ${child.title}`}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PreviewPane({ item }: { item: Item }) {
   const { preview } = item;
   if (preview === undefined) {
@@ -204,6 +243,8 @@ export function PreviewPane({ item }: { item: Item }) {
         </div>
       );
     }
+    case "spec":
+      return <SpecPreview icon={item.icon} hit={preview.hit} />;
     case "note":
       return (
         <div className="space-y-2 p-4">

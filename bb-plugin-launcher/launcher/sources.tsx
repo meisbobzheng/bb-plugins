@@ -42,7 +42,7 @@ const isSourceItem = (value: unknown): value is SourceItem =>
   value.actions.length > 0 &&
   value.actions.every((action) => isFields(action) && isString(action.id) && isString(action.title));
 
-function parser<T>(guard: (value: unknown) => value is T, what: string): ZodType<T> {
+export function parser<T>(guard: (value: unknown) => value is T, what: string): ZodType<T> {
   const parse = (value: unknown): T => {
     if (guard(value)) return value;
     throw new Error(`Unexpected ${what}`);

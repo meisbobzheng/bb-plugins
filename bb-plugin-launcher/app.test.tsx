@@ -7,6 +7,7 @@ import { loadPluginApp, renderSlot, type PluginSdkTestFakes, type TestThreadActi
 import { makeProject, makeThread } from "./fixtures";
 import { launcher } from "./launcher/store";
 import type { LauncherState } from "./model";
+import type { SpecHit } from "./launcher/specs";
 import type { rpcContract } from "./server";
 import type { TelecomHit } from "./telecom";
 
@@ -55,6 +56,42 @@ const THREADS = [
 ];
 
 const TELECOM_PLUGIN = { id: "telecom-ref", name: "Telecom reference", status: "running", enabled: true, version: "0.1.0", icon: null, iconUrl: null };
+
+const SPEC_PLUGIN = { id: "spec-search", name: "Spec Search", status: "running", enabled: true, version: "0.1.0", icon: null, iconUrl: null };
+
+const B1: SpecHit = {
+  spec: "29.228",
+  kind: "TS",
+  version: "19.2.0",
+  clause: "B.1",
+  title: "General description",
+  snippet: "The following picture gives an outline of the UML model of the user profile",
+  match: "clause",
+};
+
+const B1_CLAUSE = {
+  spec: { spec: "29.228", kind: "TS", title: "IP Multimedia (IM) Subsystem Cx and Dx interfaces", version: "19.2.0", release: 19 },
+  clause: "B.1",
+  title: "General description",
+  body: "The following picture gives an outline of the UML model of the user profile, which is downloaded from HSS to S-CSCF.",
+  parent: { clause: "B", title: "Annex B (informative): User profile UML model" },
+  children: [],
+};
+
+function specRpc(method: string, input: { query?: string; spec?: string }) {
+  if (method === "clause") return { clause: B1_CLAUSE };
+  if (method === "fetch") return { status: "done", note: `Indexed TS ${input.spec} V19.6.0: 412 clauses.` };
+  const query = input.query ?? "";
+  if (query.startsWith("29.272")) return { hits: [], missing: "29.272" };
+  if (query.startsWith("29.228")) return { hits: [B1], missing: null };
+  if (query.includes("profile")) {
+    return { hits: [{ ...B1, match: "text", snippet: "an outline of the UML model of the user \u0002profile\u0003" }], missing: null };
+  }
+  return { hits: [], missing: null };
+}
+
+const specCalls = (calls: readonly { method: string; args: readonly unknown[] }[], method: string) =>
+  calls.filter((call) => call.method === "plugins.callRpc" && (call.args[0] as { pluginId: string; method: string }).method === method && (call.args[0] as { pluginId: string }).pluginId === SPEC_PLUGIN.id);
 
 const SAR: TelecomHit = {
   id: "diam.cmd/301",
@@ -121,8 +158,10 @@ async function renderLauncher({
     plugins: {
       list: async () => ({ plugins }),
       experimental_discoverRpc: async () => [{ pluginId: "spotify", method: "launcher.search", displayName: "Spotify", methodDescription: null, registrationDescription: null, inputSchema: {}, outputSchema: {} }],
-      callRpc: async ({ method, input }: { method: string; input: { query?: string } }) =>
-        method === "launcher.search"
+      callRpc: async ({ pluginId, method, input }: { pluginId: string; method: string; input: { query?: string } }) =>
+        pluginId === SPEC_PLUGIN.id
+          ? specRpc(method, input)
+          : method === "launcher.search"
           ? {
               items: (input.query ?? "").includes("deep")
                 ? [{ id: "pl:spotify:playlist:p1", title: "Deep Work", subtitle: "Playlist · 42 songs", section: "Spotify playlists", actions: [{ id: "play", title: "Play" }], keywords: [] }]
@@ -586,5 +625,78 @@ describe("launcher", () => {
 
     fireEvent.keyDown(slot.getByRole("combobox"), { key: "Enter", ctrlKey: true });
     await waitFor(() => expect(window.location.pathname).toBe("/plugins/telecom-ref/ref/q/SAR"));
+  });
+
+  it("asks Spec Search only while it is running", async () => {
+    const slot = await renderLauncher();
+    pressModK();
+    fireEvent.change(await slot.findByRole("combobox"), { target: { value: "29.228 B.1" } });
+    await wait(200);
+    expect(specCalls(slot.inspection.sdkCalls, "search")).toHaveLength(0);
+    expect(slot.queryByRole("group", { name: "3GPP specs" })).toBeNull();
+  });
+
+  it("makes an exact clause the top hit, previews its text, and asks about it with Enter", async () => {
+    const slot = await renderLauncher({ plugins: [SPEC_PLUGIN] });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "29.228 B.1" } });
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("§B.1 General description"));
+    expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("TS 29.228 V19.2.0");
+    expect(specCalls(slot.inspection.sdkCalls, "search")[0]?.args[0]).toMatchObject({ input: { query: "29.228 B.1", limit: 5 } });
+    const preview = slot.getByRole("complementary", { name: "Preview" });
+    await waitFor(() => expect(preview.textContent).toContain("which is downloaded from HSS to S-CSCF"));
+    expect(preview.textContent).toContain("§B Annex B (informative): User profile UML model");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(slot.inspection.navigateCalls).toContainEqual({
+        method: "toCompose",
+        options: { projectId: "proj_a", initialPrompt: "Read 3GPP TS 29.228 §B.1 (General description, V19.2.0) and explain it.", focusPrompt: true },
+      }),
+    );
+  });
+
+  it("copies a clause's text with ⌘↵ and its citation with ⌘⇧C", async () => {
+    const slot = await renderLauncher({ plugins: [SPEC_PLUGIN] });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "29.228 B.1" } });
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("§B.1 General description"));
+    fireEvent.keyDown(input, { key: "c", ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(slot.inspection.experimental_clipboardWrites).toContainEqual({ text: "TS 29.228 §B.1 General description (V19.2.0)" }));
+    pressModK();
+    const reopened = await slot.findByRole("combobox");
+    fireEvent.change(reopened, { target: { value: "29.228 B.1" } });
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("§B.1 General description"));
+    fireEvent.keyDown(reopened, { key: "Enter", ctrlKey: true });
+    await waitFor(() =>
+      expect(slot.inspection.experimental_clipboardWrites).toContainEqual({ text: `TS 29.228 §B.1 General description (V19.2.0)\n\n${B1_CLAUSE.body}` }),
+    );
+  });
+
+  it("offers to fetch a spec that is not indexed", async () => {
+    const slot = await renderLauncher({ plugins: [SPEC_PLUGIN] });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "29.272 7.3.2" } });
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("Fetch 29.272 from 3GPP"));
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(specCalls(slot.inspection.sdkCalls, "fetch")[0]?.args[0]).toMatchObject({ input: { spec: "29.272" } }));
+  });
+
+  it("drills into more spec results with Tab and highlights the matched words", async () => {
+    const slot = await renderLauncher({ plugins: [SPEC_PLUGIN] });
+    pressModK();
+    const input = await slot.findByRole("combobox");
+    fireEvent.change(input, { target: { value: "user profile" } });
+    await waitFor(() => expect(slot.getByRole("group", { name: "Top hit" }).textContent).toContain("§B.1 General description"));
+    expect(within(slot.getByRole("group", { name: "Top hit" })).getByText("profile").tagName).toBe("MARK");
+    expect(slot.getByRole("button", { name: "More spec results ⇥" })).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Tab" });
+    await waitFor(() => expect(slot.getByRole("combobox").getAttribute("placeholder")).toContain("Search 3GPP specs"));
+    const page = await slot.findByRole("group", { name: "3GPP specs" });
+    expect(within(page).getAllByRole("option")).toHaveLength(1);
+    expect(specCalls(slot.inspection.sdkCalls, "search").at(-1)?.args[0]).toMatchObject({ input: { query: "user profile", limit: 30 } });
   });
 });

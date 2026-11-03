@@ -16,7 +16,7 @@ window for threads, projects, quick prompts, settings, and plugins.
   by how often and how recently you open them. `Tab` jumps back to the thread
   you were in before this one; the footer names it.
 - **Search:** typing searches thread titles, projects, branches, commands,
-  settings, plugins, and the telecom reference. Once the query is three
+  settings, plugins, the telecom reference, and 3GPP specs. Once the query is three
   characters or longer, the Messages section shows threads whose messages
   match.
 - **Top hit:** the best match from every section comes first and is selected,
@@ -26,7 +26,7 @@ window for threads, projects, quick prompts, settings, and plugins.
 - **No arrow keys needed:** `⌘1`–`⌘9` (Ctrl+1–9 elsewhere) run the first nine
   rows, whose numbers show on the right. While the launcher is open these keys
   are its own, not bb's thread jump. `Tab` on a project, plugin, page command,
-  or telecom entry opens its page; the footer says where it goes.
+  telecom entry, or spec clause opens its page; the footer says where it goes.
 - **Telecom reference:** when the [telecom-ref](https://github.com/benwaffle/bb-plugins)
   plugin is running, the launcher searches its 3GPP Diameter commands, AVPs,
   applications, interfaces, and network functions. An exact match such as
@@ -34,6 +34,14 @@ window for threads, projects, quick prompts, settings, and plugins.
   searches there, `⇧⌘C` copies a citation, and `Tab` lists more matches in the
   launcher. The preview shows the summary, code, request flow, and spec
   clause.
+- **3GPP specs:** when the [Spec Search](../bb-plugin-spec-search) plugin is
+  running, the launcher searches the clauses of the specs it has indexed. A
+  spec and clause such as `29.228 B.1` or `TS 29.272 §7.3.2` is the top hit;
+  words search clause titles and text, with the matched words in bold. `↵`
+  opens the composer with a prompt asking about the clause, `⌘↵` copies the
+  clause text, `⇧⌘C` copies its citation, and `Tab` lists more matches. The
+  preview shows the clause text, its parent, and its subclauses. A spec that
+  is not indexed yet shows **Fetch <spec> from 3GPP**.
 - **Plugin results:** plugins that publish a `launcher.search` RPC add their
   own sections, such as Spotify playlists and songs. `↵` runs the first action
   and `⌘K` lists the rest; see [Plugin results](#plugin-results).
@@ -110,7 +118,9 @@ Any plugin can add results by registering two RPC methods with
 - `app.tsx`: registers the overlay and the "Launcher: open" command
 - `launcher/`: the window (`Launcher.tsx`), results list (`Results.tsx`),
   preview pane, pages, ranking and the top hit (`rank.ts`), plugin result
-  sources (`sources.tsx`), and telecom results (`telecom.tsx`)
+  sources (`sources.tsx`), telecom results (`telecom.tsx`), and 3GPP spec
+  results (`specs.tsx`), which call Spec Search's `search`, `clause`, and
+  `fetch` RPC methods directly
 
 ## Develop
 

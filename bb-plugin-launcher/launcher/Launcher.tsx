@@ -28,6 +28,7 @@ import { ResultsHostContext, type KeyHandler, type ResultsHost } from "./Results
 import { ProvidersPage, SettingsPage, ThemesPage } from "./settings";
 import { useSourceMethods } from "./sources";
 import { launcher, useLauncherOpen } from "./store";
+import { SpecsPage } from "./specs";
 import { TelecomPage } from "./telecom";
 import { previousThread, useThreadVisits } from "./visits";
 import type { Controls, Page } from "./types";
@@ -48,6 +49,7 @@ const PLACEHOLDERS: Record<Page["kind"], string> = {
   plugins: "Search plugins…",
   plugin: "Search plugin settings…",
   telecom: "Search the telecom reference…",
+  specs: "Search 3GPP specs: 29.228 B.1, or words…",
   choices: "Search…",
   input: "",
 };
@@ -114,6 +116,8 @@ function pageTitle(page: Page, ctx: LauncherContextValue): string | null {
       return "Plugin";
     case "telecom":
       return "Telecom reference";
+    case "specs":
+      return "3GPP specs";
     case "choices":
     case "input":
       return page.title;
@@ -144,6 +148,8 @@ function PageView({ frame, showPreview }: { frame: Frame; showPreview: boolean }
       return <PluginPage {...props} pluginId={page.pluginId} />;
     case "telecom":
       return <TelecomPage {...props} />;
+    case "specs":
+      return <SpecsPage {...props} />;
     case "choices":
       return <ChoicesPage {...props} sections={page.sections} />;
     case "input":

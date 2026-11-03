@@ -12,6 +12,7 @@ import {
   Check,
   Cpu,
   ExternalLink,
+  FileSearch,
   Keyboard,
   MessageSquare,
   MessageSquarePlus,
@@ -44,6 +45,7 @@ import {
 import { Results } from "./Results";
 import { useSourceSections } from "./sources";
 import { generalToggleItems, settingLinkItems } from "./settings";
+import { SPEC_SECTION, fetchSpecItem, specItem, specPlugin, useSpecResults } from "./specs";
 import { TELECOM_SECTION, telecomItem, telecomPlugin, useTelecomHits } from "./telecom";
 import { actionTarget, registryActions } from "./threadMenu";
 import type { Action, Item, Page, Section } from "./types";
@@ -55,6 +57,7 @@ interface PageProps {
 
 const PROJECT_THREAD_LIMIT = 100;
 const TELECOM_SECTION_LIMIT = 6;
+const SPEC_SECTION_LIMIT = 5;
 
 const icon = (Glyph: LucideIcon) => <Glyph className="size-4 text-muted-foreground" aria-hidden />;
 const itemTerms = (item: Item) => item.terms ?? [];
@@ -131,6 +134,9 @@ function commandItems(ctx: LauncherContextValue): Item[] {
     ...(telecomPlugin(ctx) === undefined
       ? []
       : [pageCommand(ctx, "telecom", "Telecom reference…", BookOpen, "Search telecom reference", { kind: "telecom" }, ["3gpp", "spec"])]),
+    ...(specPlugin(ctx) === undefined
+      ? []
+      : [pageCommand(ctx, "specs", "3GPP specs…", FileSearch, "Search 3GPP specs", { kind: "specs" }, ["3gpp", "spec", "clause", "ts"])]),
     command("open-settings", "Open bb Settings", Settings, [
       { id: "open", title: "Open", icon: ExternalLink, run: () => ctx.controls.goTo("/settings") },
     ], ["preferences"]),
@@ -213,6 +219,7 @@ export function RootPage({ query, showPreview }: PageProps) {
   const hits = useMessageSearch(query);
   const sources = useSourceSections(query, ctx.plugins.data);
   const telecom = useTelecomHits(query, TELECOM_SECTION_LIMIT);
+  const specs = useSpecResults(query, SPEC_SECTION_LIMIT);
   const previous = ctx.previousThread;
   const tab = useMemo(
     () => (previous === undefined || query.trim() !== "" ? undefined : { label: `Back to ${previous.displayTitle}`, item: threadItem(previous, ctx) }),
@@ -239,6 +246,7 @@ export function RootPage({ query, showPreview }: PageProps) {
     const remote = (item: Item, exact?: boolean): Ranked<Item> => ({ candidate: item, score: remoteScore(query, itemTerms(item), exact) });
     const { plugins } = ctx;
     const telecomEntry = telecomPlugin(ctx);
+    const specEntry = specPlugin(ctx);
     return withTopHit<Item>([
       { title: "Threads", items: toItems(rankThreads(ctx, visibleThreads(ctx.threads), query), toThread) },
       { title: "Projects", items: toItems(rankProjects(ctx, query, 8), toProject) },
@@ -251,6 +259,15 @@ export function RootPage({ query, showPreview }: PageProps) {
             ? []
             : (telecom ?? []).map((hit) => remote(telecomItem(ctx, telecomEntry, hit, query.trim()), hit.match === "exact")),
       },
+      {
+        title: SPEC_SECTION,
+        items:
+          specEntry === undefined || specs === undefined
+            ? []
+            : specs.missing !== null
+              ? [remote(fetchSpecItem(ctx, specEntry, specs.missing), true)]
+              : specs.hits.map((hit) => remote(specItem(ctx, specEntry, hit, query.trim()), hit.match === "clause")),
+      },
       { title: "Settings", items: rankItems([...generalToggleItems(ctx), ...settingLinkItems(ctx)], 6) },
       {
         title: "Plugins",
@@ -262,7 +279,7 @@ export function RootPage({ query, showPreview }: PageProps) {
       { title: "Ask an agent", items: quickPromptItems(ctx, query.trim()).map(unranked), fallback: true },
       { title: "Messages", items: hits.map((hit) => unranked(messageItem(ctx, hit))), fallback: true },
     ]);
-  }, [ctx, query, hits, sources, telecom]);
+  }, [ctx, query, hits, sources, telecom, specs]);
   return <Results sections={sections} query={query} showPreview={showPreview} tab={tab} />;
 }
 
