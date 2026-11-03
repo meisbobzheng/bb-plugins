@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { processFile, type DiffLineAnnotation, type FileDiffMetadata, type SelectedLineRange } from "@pierre/diffs";
 import { FileDiff, type FileDiffProps } from "@pierre/diffs/react";
 import { experimental_useCodeTheme, useBbNavigate, useRpc, type PluginRpcClient } from "@get-bb/plugin-sdk/app";
@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { Draft, Finding, PullDetail, PullFile, ReviewThread, Side, rpcContract } from "../contract";
 import { highlightCss, type DiffStyle } from "../highlight";
 import { isCommentable } from "../patch";
+import { lineLabel } from "./bits";
 import { AnnotationView, annotationKey, FindingCard, ThreadCard, type AnnotationData, type Composer, type ReviewActions } from "./Annotations";
 import { identifierAt, isModifierClick, useModifierUnderline, useScrollToLine, type LineFocus } from "./code";
 import { Button } from "./ui/button";
@@ -52,6 +53,10 @@ async function loadContents(rpc: PluginRpcClient<typeof rpcContract>, detail: Pu
     old: file.status === "added" ? "" : (old?.content ?? null),
     new: file.status === "removed" ? "" : (next?.content ?? null),
   };
+}
+
+function lineCount(contents: string): number {
+  return contents.split("\n").length - (contents.endsWith("\n") ? 1 : 0);
 }
 
 function linesOf(contents: string | null, startLine: number, endLine: number): string | null {
@@ -126,8 +131,15 @@ export function DiffPane({
   }, [contents.error, detail.headSha, detail.repo, file, loaded, oldPath]);
 
   const canExpand = fileDiff !== null && !fileDiff.isPartial;
+  const inFile = useCallback(
+    (side: Side, line: number) => {
+      const contents = loaded === null ? null : side === "additions" ? loaded.new : loaded.old;
+      return contents === null || line <= lineCount(contents);
+    },
+    [loaded],
+  );
   const { inlineFindings, fileFindings, inlineThreads, otherThreads } = useMemo(() => {
-    const visible = (side: Side, line: number) => (fullFile && canExpand) || isCommentable(file.patch, side, line, line);
+    const visible = (side: Side, line: number) => (fullFile && canExpand && inFile(side, line)) || isCommentable(file.patch, side, line, line);
     const anchored = (finding: Finding): finding is Finding & { endLine: number } =>
       finding.endLine !== null && visible(finding.side, finding.endLine);
     const inlineThreads: Array<{ thread: ReviewThread; line: number }> = [];
@@ -142,7 +154,7 @@ export function DiffPane({
       inlineThreads,
       otherThreads,
     };
-  }, [canExpand, file.patch, findings, fullFile, threads]);
+  }, [canExpand, file.patch, findings, fullFile, inFile, threads]);
 
   const annotations = useMemo((): DiffLineAnnotation<AnnotationData>[] => {
     const outdated = (finding: Finding) => finding.headSha !== null && finding.headSha !== detail.headSha;
@@ -223,13 +235,17 @@ export function DiffPane({
     [codeTheme.mode, codeTheme.name, css, diffStyle, fullFile, underline, wrap],
   );
 
+  const reachable = focus !== null && inFile(focus.side, focus.line) ? focus : null;
   const selectedLines = useMemo(
-    () => (focus === null ? null : { start: focus.line, end: focus.endLine, side: focus.side, endSide: focus.side }),
-    [focus],
+    () => (reachable === null ? null : { start: reachable.line, end: reachable.endLine, side: reachable.side, endSide: reachable.side }),
+    [reachable],
   );
-  useScrollToLine(host, focus, `${diffStyle}:${fullFile}`, diffStyle, () => {
+  useScrollToLine(host, reachable, `${diffStyle}:${fullFile}`, diffStyle, () => {
     if (!fullFile && canExpand) onShowFullFile();
   });
+  useEffect(() => {
+    if (focus !== null && reachable === null) host.current?.scrollIntoView({ block: "start" });
+  }, [focus, reachable]);
 
   if (file.patch === null) {
     return (
@@ -256,8 +272,13 @@ export function DiffPane({
         <div className="space-y-1 border-b border-border py-2">
           {fileFindings.map((finding) => (
             <div key={finding.id} className="relative">
+              {finding.endLine !== null && !inFile(finding.side, finding.endLine) ? (
+                <p className="px-3 pt-1 text-[11px] text-muted-foreground">
+                  Finding on {lineLabel(finding.startLine, finding.endLine)}, past the end of this file at this commit
+                </p>
+              ) : null}
               <FindingCard finding={finding} outdated={finding.headSha !== null && finding.headSha !== detail.headSha} actions={actions} />
-              {finding.endLine !== null && canExpand && !fullFile ? (
+              {finding.endLine !== null && canExpand && !fullFile && inFile(finding.side, finding.endLine) ? (
                 <Button size="sm" variant="ghost" className="absolute right-4 top-3 h-6 text-xs" onClick={onShowFullFile}>
                   <Icon name="Maximize2" className="size-3" />
                   Show in full file

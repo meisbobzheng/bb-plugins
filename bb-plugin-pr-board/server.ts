@@ -963,9 +963,8 @@ export function createPlugin(deps: PluginDeps) {
         publish(pull);
         return { threadId, delivery: result.delivery };
       },
-      dismissFinding: ({ id, dismissed }) => {
-        const pull = store.dismissFinding(id, dismissed);
-        if (pull !== null) publish(pull);
+      dismissFindings: ({ ids, dismissed }) => {
+        for (const pull of store.dismissFindings(ids, dismissed)) publish(pull);
         return {};
       },
       addressComments: (pull) => addressComments(pull),

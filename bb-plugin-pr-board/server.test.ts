@@ -744,6 +744,25 @@ describe("findings tool", () => {
     expect(state.agent.findings).toBe(1);
   });
 
+  it("dismisses and restores several findings at once", async () => {
+    const { harness } = setup();
+    await harness.behavior.callRpc("openReview", { repo: "acme/app", number: 7 });
+    const finding = { path: "a.go", severity: "major", title: "First", body: "" };
+    await harness.behavior.callAgentTool(FINDINGS_TOOL, { findings: [finding, { ...finding, title: "Second" }] }, { threadId: "thr_review" });
+    const state = async () =>
+      (await harness.behavior.callRpc("reviewState", { repo: "acme/app", number: 7 })) as {
+        findings: Array<{ id: string; dismissed: boolean }>;
+        agent: { findings: number };
+      };
+    const ids = (await state()).findings.map((recorded) => recorded.id);
+
+    await harness.behavior.callRpc("dismissFindings", { ids, dismissed: true });
+    expect((await state()).findings.map((recorded) => recorded.dismissed)).toEqual([true, true]);
+    expect((await state()).agent.findings).toBe(0);
+    await harness.behavior.callRpc("dismissFindings", { ids: [ids[0]], dismissed: false });
+    expect((await state()).findings.map((recorded) => recorded.dismissed)).toEqual([false, true]);
+  });
+
   it("refuses threads that PR Board did not start", async () => {
     const { harness } = setup();
     const result = await harness.behavior.callAgentTool(

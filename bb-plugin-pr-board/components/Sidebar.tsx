@@ -109,6 +109,7 @@ export function Sidebar({
   onSelectFile,
   onToggleViewed,
   onSelectFinding,
+  onDismissAllFindings,
   onSelectComment,
 }: {
   files: readonly PullFile[];
@@ -126,6 +127,7 @@ export function Sidebar({
   onSelectFile(path: string): void;
   onToggleViewed(file: PullFile): void;
   onSelectFinding(finding: Finding): void;
+  onDismissAllFindings(): void;
   onSelectComment(id: string): void;
 }) {
   const [filter, setFilter] = useState("");
@@ -211,9 +213,21 @@ export function Sidebar({
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+          {open.length === 0 ? null : (
+            <div className="flex items-center justify-between px-2 pb-1 text-[11px] text-muted-foreground">
+              <span>{open.length} open</span>
+              <button
+                type="button"
+                className="rounded px-1 py-0.5 font-medium outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+                onClick={onDismissAllFindings}
+              >
+                Dismiss all
+              </button>
+            </div>
+          )}
           {listed.length === 0 ? (
             <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-              No findings yet. They appear here when the review thread records them.
+              {dismissed > 0 ? "Every finding is dismissed." : "No findings yet. They appear here when the review thread records them."}
             </p>
           ) : (
             <ul className="space-y-1">

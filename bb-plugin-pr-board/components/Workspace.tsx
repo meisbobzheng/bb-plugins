@@ -387,7 +387,7 @@ function Workspace({
       refreshDetail();
     },
     async dismissFinding(id, dismissed) {
-      await rpc.call("dismissFinding", { id, dismissed });
+      await rpc.call("dismissFindings", { ids: [id], dismissed });
       reloadState();
     },
     composeFromFinding(finding) {
@@ -500,6 +500,18 @@ function Workspace({
     reloadState();
   };
 
+  const dismissAllFindings = () => {
+    const ids = review.findings.filter((finding) => !finding.dismissed).map((finding) => finding.id);
+    const setDismissed = (dismissed: boolean) => rpc.call("dismissFindings", { ids, dismissed }).then(reloadState);
+    setDismissed(true).then(
+      () =>
+        toast(`Dismissed ${ids.length} finding${ids.length === 1 ? "" : "s"}`, {
+          action: { label: "Undo", onClick: () => void setDismissed(false).catch((error: unknown) => toast.error(errorMessage(error))) },
+        }),
+      (error: unknown) => toast.error(errorMessage(error)),
+    );
+  };
+
   const submitReview = async (event: ReviewEvent, body: string) => {
     const result = await rpc.call("submitReview", { ...pull, headSha: detail.headSha, event, body });
     toast.success(`Review submitted${result.comments > 0 ? ` with ${result.comments} comment${result.comments === 1 ? "" : "s"}` : ""}`);
@@ -557,6 +569,7 @@ function Workspace({
       onSelectFile={selectFile}
       onToggleViewed={toggleViewed}
       onSelectFinding={selectFinding}
+      onDismissAllFindings={dismissAllFindings}
       onSelectComment={selectComment}
     />
   );

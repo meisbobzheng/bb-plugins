@@ -293,9 +293,16 @@ export function createStore(storage: BbPluginApi["storage"]) {
         });
       })();
     },
-    dismissFinding(id: string, dismissed: boolean): PullKey | null {
-      statements.dismissFinding.run(dismissed ? 1 : 0, id);
-      return (statements.pullForFinding.get(id) as PullKey | undefined) ?? null;
+    dismissFindings(ids: readonly string[], dismissed: boolean): PullKey[] {
+      return db.transaction(() => {
+        const pulls = new Map<string, PullKey>();
+        for (const id of ids) {
+          statements.dismissFinding.run(dismissed ? 1 : 0, id);
+          const pull = statements.pullForFinding.get(id) as PullKey | undefined;
+          if (pull !== undefined) pulls.set(`${pull.repo}#${pull.number}`, pull);
+        }
+        return [...pulls.values()];
+      })();
     },
     drafts(pull: PullKey): Draft[] {
       return (statements.drafts.all(pull.repo, pull.number) as DraftRow[]).map(toDraft);

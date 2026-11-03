@@ -12,6 +12,7 @@ globalThis.ResizeObserver ??= class {
   unobserve() {}
   disconnect() {}
 };
+Element.prototype.scrollIntoView ??= () => {};
 
 const stored = new Map<string, string>();
 Object.defineProperty(window, "localStorage", {
@@ -496,6 +497,42 @@ describe("review workspace", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
     await waitFor(() =>
       expect(saved).toEqual([{ repo: "acme/app", number: 17, id: null, path: "cmd/main.go", side: "additions", startLine: 4, endLine: 4, body: "Pending note" }]),
+    );
+  });
+
+  it("keeps a finding on lines past the end of its file above the diff, even in the full file", async () => {
+    const pastEnd = { ...STATE.findings[0]!, id: "f2", startLine: 96, endLine: 119, severity: "blocker" as const, title: "Stale copy" };
+    const slot = renderSlot(
+      boardPanel(),
+      { subPath: "pr/acme/app/20" },
+      { rpc: workspaceRpc({ ...STATE, findings: [pastEnd], drafts: [] }, { pull: () => ({ ...DETAIL, number: 20 }) }) },
+    );
+    await slot.findByText("Add thing");
+    fireEvent.click(slot.getByRole("tab", { name: "Findings 1" }));
+    fireEvent.click(slot.getByRole("button", { name: /Stale copy/ }));
+    expect(await slot.findByText("Finding on L96–119, past the end of this file at this commit")).toBeTruthy();
+    expect(slot.queryByRole("button", { name: "Show in full file" })).toBeNull();
+    fireEvent.click(slot.getByRole("button", { name: "Full file" }));
+    expect(slot.getAllByText("Stale copy")).toHaveLength(2);
+  });
+
+  it("dismisses every open finding at once with an Undo that restores them", async () => {
+    render(<Toaster theme="light" />);
+    const second = { ...STATE.findings[0]!, id: "f2", title: "Second" };
+    const slot = renderSlot(
+      boardPanel(),
+      { subPath: "pr/acme/app/21" },
+      { rpc: workspaceRpc({ ...STATE, findings: [...STATE.findings, second] }, { pull: () => ({ ...DETAIL, number: 21 }), dismissFindings: () => ({}) }) },
+    );
+    await slot.findByText("Add thing");
+    fireEvent.click(slot.getByRole("tab", { name: "Findings 2" }));
+    fireEvent.click(slot.getByRole("button", { name: "Dismiss all" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() =>
+      expect(slot.inspection.rpcCalls.filter((call) => call.method === "dismissFindings").map((call) => call.input)).toEqual([
+        { ids: ["f1", "f2"], dismissed: true },
+        { ids: ["f1", "f2"], dismissed: false },
+      ]),
     );
   });
 
