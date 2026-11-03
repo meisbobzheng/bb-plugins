@@ -2,7 +2,8 @@ import { resolve } from "node:path";
 import { PluginCliError, cliCommand, defineCli, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { CATALOG, CATALOG_SPECS } from "./catalog.js";
-import { clauseDocument, hitLines, identifiedLines, jobLines, specLines } from "./format.js";
+import { rpcContract } from "./contract.js";
+import { CLAUSE_CHARS, clauseDocument, hitLines, identifiedLines, jobLines, specLines } from "./format.js";
 import { createFtp } from "./ftp.js";
 import { createIngest, type Ingest } from "./ingest.js";
 import { DEFAULT_RELEASE, normalizeClause, normalizeSpec, parseQuery } from "./specs.js";
@@ -78,6 +79,33 @@ export function specSearch(options: { fetch?: Fetch } = {}) {
     bb.background.schedule("refresh", "0 6 * * 1", () => {
       for (const spec of store.listSpecs()) if (spec.source === "3gpp") ingest.enqueue("fetch", spec.spec, spec.release);
       store.pruneJobs(Date.now() - JOB_HISTORY);
+    });
+
+    bb.rpc.register(rpcContract, {
+      search({ query, limit }) {
+        return store.search({ query, spec: null, limit });
+      },
+      clause({ spec, clause }) {
+        const number = normalizeSpec(spec);
+        const document = number === null ? null : store.clause(number, normalizeClause(clause), false);
+        if (document === null) return { clause: null };
+        const { spec: meta, ...rest } = document;
+        return {
+          clause: {
+            ...rest,
+            body: document.body.slice(0, CLAUSE_CHARS),
+            spec: { spec: meta.spec, kind: meta.kind, title: meta.title, version: meta.version, release: meta.release },
+          },
+        };
+      },
+      async fetch({ spec }) {
+        const number = normalizeSpec(spec);
+        if (number === null) return { status: "failed" as const, note: `"${spec}" is not a spec number like 29.228.` };
+        const [job] = fetchSpecs([number], DEFAULT_RELEASE);
+        const done = await settled(ingest, [job!], AbortSignal.timeout(FETCH_WAIT));
+        const result = done?.[0] ?? job!;
+        return { status: result.status, note: result.note };
+      },
     });
 
     bb.agents.registerTool({

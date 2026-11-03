@@ -101,6 +101,26 @@ describe("spec search plugin", () => {
     expect((await cli("list")).stdout).toBe("TS 29.228\tV19.2.0\t7 clauses\tIP Multimedia (IM) Subsystem Cx and Dx interfaces; Signalling flows and message contents\n");
   });
 
+  it("serves search, clause, and fetch over rpc for the Launcher", async () => {
+    const { harness, start } = await setup();
+    const call = (method: string, input: unknown) => harness.behavior.callRpc(method, input);
+    expect(await call("search", { query: "29.228 B.1" })).toEqual({ hits: [], missing: "29.228" });
+    start();
+    expect(await call("fetch", { spec: "TS 29.228" })).toEqual({ status: "done", note: "Indexed TS 29.228 V19.2.0: 7 clauses." });
+    const { hits } = (await call("search", { query: "29.228 B.1", limit: 2 })) as { hits: Array<{ clause: string; match: string }> };
+    expect(hits.map(({ clause, match }) => [clause, match])).toEqual([["B.1", "clause"]]);
+    expect(await call("clause", { spec: "29.228", clause: "b.2" })).toMatchObject({
+      clause: {
+        spec: { spec: "29.228", kind: "TS", version: "19.2.0", release: 19 },
+        clause: "B.2",
+        parent: { clause: "B" },
+        children: [{ clause: "B.2.1", title: "Public Identification" }],
+      },
+    });
+    expect(await call("clause", { spec: "29.228", clause: "Z.9" })).toEqual({ clause: null });
+    expect(await call("fetch", { spec: "nope" })).toEqual({ status: "failed", note: '"nope" is not a spec number like 29.228.' });
+  });
+
   it("refuses to follow a redirect off www.3gpp.org", async () => {
     const { start, tool } = await setup({
       routes: { [folderUrl(19, "29")]: () => new Response(null, { status: 302, headers: { location: "https://elsewhere.invalid/listing" } }) },

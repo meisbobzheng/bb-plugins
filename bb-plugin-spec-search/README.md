@@ -22,6 +22,10 @@ a time in the background.
   `bb spec search 29.272 purge`.
 - `bb spec identify "<passage>"` finds which clause a passage comes from and
   how much of it matches.
+- In the [Launcher](../bb-plugin-launcher) (⌘K), type `29.228 B.1` or words
+  from a spec: the clause is the top hit, the preview shows its text, `↵` asks
+  an agent about it, and `⌘↵` copies it. A spec that is not indexed yet offers
+  **Fetch <spec> from 3GPP**.
 
 ## CLI
 
@@ -60,6 +64,17 @@ one once it is fully indexed.
 
 The [skill](skills/spec-search/SKILL.md) tells agents to read a clause before
 citing it.
+
+## RPC
+
+Other plugins and the app call these through `sdk.plugins.callRpc` with
+`pluginId: "spec-search"`; [contract.ts](contract.ts) has the schemas.
+
+| Method | Takes | Returns |
+| --- | --- | --- |
+| `search` | `{ query, limit }` | `{ hits, missing }`; `missing` names a spec in the query that is not indexed |
+| `clause` | `{ spec, clause }` | `{ clause }` with its text, parent, and subclauses, or `null` |
+| `fetch` | `{ spec }` | `{ status, note }` after fetching, waiting up to two minutes |
 
 ## How it works
 
