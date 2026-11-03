@@ -10,7 +10,8 @@ opens one review thread per PR. A review thread works in a worktree on the PR's
 head, summarizes the PR, then runs `/thermo-nuclear-code-quality-review`. A
 separate address-comments thread suggests code changes and replies for the PR's
 comments without changing files. A check every 15 minutes archives the idle
-review thread of a PR that merged or closed and drops its findings.
+review and address threads of a PR that merged or closed and drops its
+findings, suggestions, and pending comments.
 
 ## Commands
 

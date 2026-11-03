@@ -459,13 +459,14 @@ export function createPlugin(deps: PluginDeps) {
       };
     }
 
-    async function archiveReview(pull: PullKey, state: PullState): Promise<void> {
-      const threads = (await Promise.all(store.threadsForPull(pull).map(liveThread))).filter((thread) => thread !== null);
+    async function archivePull(pull: PullKey, state: PullState): Promise<void> {
+      const threadIds = [...store.threadsForPull(pull), ...store.addressThreadsForPull(pull)];
+      const threads = (await Promise.all(threadIds.map(liveThread))).filter((thread) => thread !== null);
       if (threads.some(isRunning)) return;
       for (const thread of threads) await bb.sdk.threads.archive({ threadId: thread.id });
       store.forgetPull(pull);
       publish(pull);
-      bb.log.info(`${pullKey(pull)} is ${state.toLowerCase()}; archived ${threads.length} review thread(s)`);
+      bb.log.info(`${pullKey(pull)} is ${state.toLowerCase()}; archived ${threads.length} PR Board thread(s)`);
     }
 
     async function archiveFinishedReviewsIn(repo: string, pulls: readonly PullKey[]): Promise<void> {
@@ -478,8 +479,8 @@ export function createPlugin(deps: PluginDeps) {
       for (const pull of missing) {
         const state = states.get(pull.number);
         if (state === undefined || state === "OPEN") continue;
-        await archiveReview(pull, state).catch((error: unknown) =>
-          bb.log.warn(`could not archive the review thread of ${pullKey(pull)}: ${errorMessage(error)}`),
+        await archivePull(pull, state).catch((error: unknown) =>
+          bb.log.warn(`could not archive the threads of ${pullKey(pull)}: ${errorMessage(error)}`),
         );
       }
     }

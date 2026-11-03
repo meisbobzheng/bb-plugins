@@ -163,6 +163,7 @@ function setup({
 }: { now?: () => number; onGraphql?: Parameters<typeof fakeRunner>[1]; pullResponse?: unknown; repos?: string | null; status?: "idle" | "active" } = {}) {
   const runner = fakeRunner(pullResponse, onGraphql);
   const thread = makeThreadResponse({ id: "thr_review", environmentId: "env_1", status, deletedAt: null, archivedAt: null });
+  const addressThread = makeThreadResponse({ id: "thr_address", environmentId: "env_1", status: "idle", deletedAt: null, archivedAt: null });
   const { bb, harness } = createFakePluginHost({
     pluginId: "pr-board",
     agentSkillIds: ["pr-board"],
@@ -171,8 +172,8 @@ function setup({
       projects: { list: async () => [{ id: "proj_app", gitRemoteUrl: "git@github.com:acme/app.git" }] as never },
       system: { config: async () => ({ primaryHostId: "host_1" }) as never },
       threads: {
-        spawn: async () => thread as never,
-        get: async () => thread as never,
+        spawn: async (input) => (input.pluginMetadata?.kind === "address" ? addressThread : thread) as never,
+        get: async ({ threadId }) => (threadId === addressThread.id ? addressThread : thread) as never,
         send: async () => ({ delivery: "queued" }) as never,
         archive: async () => ({ ok: true, archivedThreadIds: ["thr_review"] }) as never,
       },
@@ -677,6 +678,29 @@ describe("archiving finished reviews", () => {
     failWith("gh api graphql: HTTP 401: Bad credentials");
     await check();
     expect(logged()).toEqual(["info", "warn", "warn"]);
+  });
+
+  it("archives the address thread too and forgets the PR's suggestions and pending comments", async () => {
+    const { harness, runner, advance } = await reviewed();
+    const pull = { repo: "acme/app", number: 7 };
+    await harness.behavior.callRpc("addressComments", pull);
+    await harness.behavior.callRpc("saveDraft", { ...pull, id: null, path: "a.go", side: "additions", startLine: 2, endLine: 2, body: "Why?" });
+    runner.board.pop();
+    runner.states[7] = "CLOSED";
+    advance(15 * 60_000);
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([[{ threadId: "thr_review" }], [{ threadId: "thr_address" }]]);
+    expect(await harness.behavior.callRpc("pullForThread", { threadId: "thr_address" })).toBeNull();
+    expect(await harness.behavior.callRpc("reviewState", pull)).toMatchObject({ drafts: [], suggestions: [] });
+  });
+
+  it("archives a PR's address thread when it has no review thread", async () => {
+    const { harness, runner } = setup();
+    await harness.behavior.callRpc("addressComments", { repo: "acme/app", number: 7 });
+    runner.states[7] = "MERGED";
+    await harness.behavior.runSchedule("archive-finished-reviews");
+    expect(runner.stateQueries).toEqual([[7]]);
+    expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([[{ threadId: "thr_address" }]]);
   });
 
   it("skips a repository whose open list could not be read", async () => {

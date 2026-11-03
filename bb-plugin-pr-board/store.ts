@@ -181,8 +181,12 @@ export function createStore(storage: BbPluginApi["storage"]) {
       "SELECT thread_id FROM review_threads WHERE repo = ? AND number = ? ORDER BY created_at DESC",
     ),
     pullForThread: db.prepare("SELECT repo, number FROM review_threads WHERE thread_id = ?"),
-    trackedPulls: db.prepare("SELECT DISTINCT repo, number FROM review_threads ORDER BY repo, number"),
+    trackedPulls: db.prepare(
+      "SELECT repo, number FROM review_threads UNION SELECT repo, number FROM address_threads ORDER BY repo, number",
+    ),
     forgetThreads: db.prepare("DELETE FROM review_threads WHERE repo = ? AND number = ?"),
+    forgetAddressThreads: db.prepare("DELETE FROM address_threads WHERE repo = ? AND number = ?"),
+    forgetSuggestions: db.prepare("DELETE FROM suggestions WHERE repo = ? AND number = ?"),
     findings: db.prepare(
       "SELECT id, path, side, start_line, end_line, severity, title, body, head_sha, dismissed FROM findings WHERE repo = ? AND number = ? ORDER BY position",
     ),
@@ -261,6 +265,9 @@ export function createStore(storage: BbPluginApi["storage"]) {
         statements.forgetThreads.run(pull.repo, pull.number);
         statements.clearFindings.run(pull.repo, pull.number);
         statements.forgetPullDetail.run(pull.repo, pull.number);
+        statements.forgetAddressThreads.run(pull.repo, pull.number);
+        statements.forgetSuggestions.run(pull.repo, pull.number);
+        statements.clearDrafts.run(pull.repo, pull.number);
       })();
     },
     findings(pull: PullKey): Finding[] {
