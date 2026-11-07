@@ -1,0 +1,400 @@
+.atlas-root {
+  --atlas-control: var(--file-accent, var(--primary));
+  --atlas-user: var(--success);
+  --atlas-api: var(--warning);
+  --atlas-data: var(--pr-merged, var(--primary));
+  --atlas-accent: var(--primary);
+  --atlas-trunk: var(--attention, var(--warning));
+}
+
+.atlas-viewport {
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.atlas-stage {
+  position: relative;
+  width: min(100cqw, 160cqh);
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-recessed, var(--background));
+}
+
+.atlas-stage.atlas-busy {
+  pointer-events: none;
+}
+
+.atlas-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+.atlas-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  font-family: var(--font-sans);
+}
+
+.atlas-bg {
+  fill: transparent;
+}
+
+.atlas-node {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.atlas-node-body {
+  fill: var(--card);
+  stroke: var(--border);
+  stroke-width: 1.2;
+  transition: stroke 0.15s;
+}
+
+.atlas-replica {
+  fill: var(--card);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.atlas-node:hover .atlas-node-body,
+.atlas-node.atlas-on .atlas-node-body {
+  stroke: var(--atlas-accent);
+  stroke-width: 2;
+}
+
+.atlas-node-accent {
+  fill: var(--atlas-accent);
+}
+
+.atlas-node-label {
+  font-size: 16px;
+  font-weight: 650;
+  fill: var(--card-foreground, var(--foreground));
+}
+
+.atlas-node-sub {
+  font-size: 12px;
+  fill: var(--muted-foreground);
+}
+
+.atlas-node-badge {
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--atlas-accent);
+  font-family: var(--font-mono);
+}
+
+.atlas-kind-external .atlas-node-body {
+  fill: transparent;
+}
+
+.atlas-kind-external .atlas-node-accent {
+  fill: var(--muted-foreground);
+}
+
+.atlas-kind-store .atlas-node-accent {
+  fill: var(--atlas-data);
+}
+
+.atlas-cylinder {
+  fill: none;
+  stroke: var(--atlas-data);
+  stroke-width: 1.4;
+}
+
+.atlas-kind-ref .atlas-node-body {
+  fill: transparent;
+  stroke: var(--muted-foreground);
+  stroke-dasharray: 5 4;
+}
+
+.atlas-kind-ref .atlas-node-label {
+  fill: var(--muted-foreground);
+  font-size: 14px;
+}
+
+.atlas-kind-ref .atlas-node-accent {
+  display: none;
+}
+
+.atlas-thumb {
+  fill: var(--background);
+  stroke: var(--border);
+  stroke-width: 0.8;
+}
+
+.atlas-draft .atlas-thumb {
+  stroke-dasharray: 4 3;
+}
+
+.atlas-thumb-empty {
+  font-size: 11px;
+  fill: var(--muted-foreground);
+}
+
+.atlas-thumb-cta {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--atlas-accent);
+}
+
+.atlas-mini rect {
+  fill: var(--card);
+  stroke: var(--atlas-accent);
+  stroke-width: 0.8;
+}
+
+.atlas-mini rect.atlas-mini-ref {
+  fill: transparent;
+  stroke: var(--muted-foreground);
+  stroke-dasharray: 2 2;
+}
+
+.atlas-mini line {
+  stroke: var(--muted-foreground);
+  stroke-width: 0.7;
+  opacity: 0.7;
+}
+
+.atlas-node.atlas-ping .atlas-node-body {
+  animation: atlas-ping 1s ease 2;
+}
+
+@keyframes atlas-ping {
+  50% {
+    stroke: var(--atlas-accent);
+    stroke-width: 5;
+  }
+}
+
+.atlas-edge {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.atlas-edge-hit {
+  stroke: transparent;
+  stroke-width: 18;
+}
+
+.atlas-edge-line {
+  stroke-width: 2;
+  opacity: 0.8;
+}
+
+.atlas-edge:hover .atlas-edge-line,
+.atlas-edge.atlas-on .atlas-edge-line {
+  stroke-width: 3.2;
+  opacity: 1;
+}
+
+.atlas-edge.atlas-live .atlas-edge-line {
+  stroke-width: 4;
+  opacity: 1;
+}
+
+.atlas-control .atlas-edge-line {
+  stroke: var(--atlas-control);
+  stroke-dasharray: 6 4;
+}
+
+.atlas-user .atlas-edge-line {
+  stroke: var(--atlas-user);
+}
+
+.atlas-api .atlas-edge-line {
+  stroke: var(--atlas-api);
+}
+
+.atlas-data .atlas-edge-line {
+  stroke: var(--atlas-data);
+}
+
+.atlas-pill {
+  fill: var(--background);
+  stroke-width: 1.2;
+}
+
+.atlas-control > .atlas-pill {
+  stroke: var(--atlas-control);
+}
+
+.atlas-user > .atlas-pill {
+  stroke: var(--atlas-user);
+}
+
+.atlas-api > .atlas-pill {
+  stroke: var(--atlas-api);
+}
+
+.atlas-data > .atlas-pill {
+  stroke: var(--atlas-data);
+}
+
+.atlas-pill-text {
+  font-size: 12px;
+  font-weight: 650;
+  fill: var(--foreground);
+  font-family: var(--font-mono);
+}
+
+.atlas-dot.atlas-control {
+  fill: var(--atlas-control);
+}
+
+.atlas-dot.atlas-user {
+  fill: var(--atlas-user);
+}
+
+.atlas-dot.atlas-api {
+  fill: var(--atlas-api);
+}
+
+.atlas-dot.atlas-data {
+  fill: var(--atlas-data);
+}
+
+.atlas-pulse {
+  stroke: var(--background);
+  stroke-width: 2;
+}
+
+.atlas-pulse.atlas-control {
+  fill: var(--atlas-control);
+}
+
+.atlas-pulse.atlas-user {
+  fill: var(--atlas-user);
+}
+
+.atlas-pulse.atlas-api {
+  fill: var(--atlas-api);
+}
+
+.atlas-pulse.atlas-data {
+  fill: var(--atlas-data);
+}
+
+.atlas-container-box {
+  stroke-width: 1.2;
+  fill: color-mix(in srgb, var(--foreground) 3%, transparent);
+  stroke: var(--border);
+}
+
+.atlas-container-title {
+  font-size: 12px;
+  font-weight: 700;
+  fill: var(--foreground);
+}
+
+.atlas-container-kind {
+  font-size: 11px;
+  fill: var(--muted-foreground);
+}
+
+.atlas-place-region .atlas-container-box,
+.atlas-place-site .atlas-container-box {
+  fill: color-mix(in srgb, var(--atlas-trunk) 4%, transparent);
+  stroke: color-mix(in srgb, var(--atlas-trunk) 55%, transparent);
+  stroke-dasharray: 7 5;
+}
+
+.atlas-place-region .atlas-container-title,
+.atlas-place-site .atlas-container-title {
+  fill: var(--atlas-trunk);
+}
+
+.atlas-place-namespace .atlas-container-box {
+  stroke-dasharray: 3 3;
+}
+
+.atlas-place-namespace .atlas-container-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  fill: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+.atlas-container.atlas-on .atlas-container-box {
+  stroke: var(--atlas-trunk);
+  stroke-width: 2;
+}
+
+.atlas-trunk {
+  cursor: pointer;
+}
+
+.atlas-trunk-pipe {
+  fill: none;
+  stroke: color-mix(in srgb, var(--atlas-trunk) 28%, transparent);
+  stroke-width: 14;
+  stroke-linecap: round;
+}
+
+.atlas-trunk:hover .atlas-trunk-pipe,
+.atlas-trunk.atlas-on .atlas-trunk-pipe {
+  stroke: color-mix(in srgb, var(--atlas-trunk) 45%, transparent);
+}
+
+.atlas-trunk-core {
+  fill: none;
+  stroke: var(--atlas-trunk);
+  stroke-width: 1.2;
+  opacity: 0.8;
+}
+
+.atlas-trunk > .atlas-pill {
+  stroke: var(--atlas-trunk);
+}
+
+.atlas-trunk > .atlas-pill-text {
+  fill: var(--atlas-trunk);
+}
+
+.atlas-focus .atlas-node:not(.atlas-on):not(.atlas-gone),
+.atlas-focus .atlas-edge:not(.atlas-on):not(.atlas-live):not(.atlas-gone),
+.atlas-focus .atlas-trunk:not(.atlas-on):not(.atlas-gone) {
+  opacity: 0.22 !important;
+}
+
+.atlas-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 2px solid;
+  vertical-align: middle;
+}
+
+.atlas-swatch-control {
+  border-color: var(--atlas-control);
+  border-top-style: dashed;
+}
+
+.atlas-swatch-user {
+  border-color: var(--atlas-user);
+}
+
+.atlas-swatch-api {
+  border-color: var(--atlas-api);
+}
+
+.atlas-swatch-data {
+  border-color: var(--atlas-data);
+}
+
+.atlas-swatch-trunk {
+  border-top: 8px solid color-mix(in srgb, var(--atlas-trunk) 40%, transparent);
+  border-radius: 4px;
+}
+
+.atlas-text-trunk {
+  color: var(--atlas-trunk);
+}

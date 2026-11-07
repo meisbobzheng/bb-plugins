@@ -3,6 +3,7 @@
   "schemaVersion": 1,
   "name": "meisbobzheng-bb-plugins",
   "plugins": [
+    { "name": "atlas", "source": "./bb-plugin-atlas" },
     { "name": "chime", "source": "./bb-plugin-chime" },
     { "name": "database", "source": "./bb-plugin-database" },
     { "name": "launcher", "source": "./bb-plugin-launcher" },

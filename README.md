@@ -6,6 +6,7 @@ one plugin with its own `package.json`, README, and tests. Themes live in
 
 | Plugin | What it does |
 | --- | --- |
+| [Atlas](bb-plugin-atlas) | Diagram docs you zoom through, from the whole network down to one service, with live traffic, step-by-step flows, and a view of where everything runs. |
 | [Chime](bb-plugin-chime) | Plays a sound when a thread needs your input, and optionally when one finishes or fails. |
 | [Database](bb-plugin-database) | A Postgres GUI: schema browser, SQL editor with autocomplete, plain-English queries, EXPLAIN plans, and RDS access through your AWS SSO session. |
 | [Launcher](bb-plugin-launcher) | A Raycast-style ⌘K for threads, projects, quick prompts, settings, and plugins. |
