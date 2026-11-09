@@ -1,11 +1,21 @@
+import { SSOClient, paginateListAccounts } from "@aws-sdk/client-sso";
 import { fromSSO } from "@aws-sdk/credential-providers";
 import { Signer } from "@aws-sdk/rds-signer";
-import { loadSharedConfigFiles } from "@smithy/shared-ini-file-loader";
+import { fromSso } from "@aws-sdk/token-providers";
+import { loadSharedConfigFiles, type SharedConfigFiles } from "@smithy/shared-ini-file-loader";
 import type { AwsProfile, QueryError } from "./contract.js";
 
-export async function listAwsProfiles(): Promise<AwsProfile[]> {
-  const { configFile } = await loadSharedConfigFiles({ ignoreCache: true }).catch(() => ({ configFile: {} }));
-  return Object.entries(configFile)
+export interface SsoSession {
+  name: string;
+  region: string;
+  profile: string;
+}
+
+export type AccountNameLookup = (sessions: readonly SsoSession[]) => Promise<ReadonlyMap<string, string>>;
+
+export async function listAwsProfiles(accountNames: AccountNameLookup): Promise<AwsProfile[]> {
+  const { configFile } = await loadSharedConfigFiles({ ignoreCache: true }).catch((): Pick<SharedConfigFiles, "configFile"> => ({ configFile: {} }));
+  const profiles = Object.entries(configFile)
     .filter(([name]) => !name.startsWith("sso-session.") && !name.startsWith("services."))
     .map(([name, section]) => ({
       name,
@@ -15,6 +25,43 @@ export async function listAwsProfiles(): Promise<AwsProfile[]> {
       region: section.region ?? null,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  const sessions = new Map<string, SsoSession>();
+  for (const { name, ssoSession } of profiles) {
+    const region = ssoSession === null ? undefined : configFile[`sso-session.${ssoSession}`]?.sso_region;
+    if (ssoSession !== null && region !== undefined && !sessions.has(ssoSession)) sessions.set(ssoSession, { name: ssoSession, region, profile: name });
+  }
+  const names = await accountNames([...sessions.values()]);
+  return profiles.map((profile) => ({ ...profile, accountName: profile.accountId === null ? null : (names.get(profile.accountId) ?? null) }));
+}
+
+export async function listSsoAccounts({ region, profile }: SsoSession): Promise<ReadonlyMap<string, string>> {
+  const { token } = await fromSso({ profile })();
+  const client = new SSOClient({ region, requestHandler: { connectionTimeout: 3_000, requestTimeout: 5_000 } });
+  const names = new Map<string, string>();
+  for await (const page of paginateListAccounts({ client }, { accessToken: token })) {
+    for (const { accountId, accountName } of page.accountList ?? []) if (accountId && accountName) names.set(accountId, accountName);
+  }
+  return names;
+}
+
+export const ACCOUNT_NAMES_REUSE_MS = 15 * 60_000;
+
+export function createAccountNameLookup(list: (session: SsoSession) => Promise<ReadonlyMap<string, string>> = listSsoAccounts, now: () => number = Date.now): AccountNameLookup {
+  const lists = new Map<string, { listedAt: number; names: Promise<ReadonlyMap<string, string>> }>();
+  const namesOf = (session: SsoSession): Promise<ReadonlyMap<string, string>> => {
+    const cached = lists.get(session.name);
+    if (cached !== undefined && now() - cached.listedAt < ACCOUNT_NAMES_REUSE_MS) return cached.names;
+    const entry = {
+      listedAt: now(),
+      names: list(session).catch(() => {
+        if (lists.get(session.name) === entry) lists.delete(session.name);
+        return new Map<string, string>();
+      }),
+    };
+    lists.set(session.name, entry);
+    return entry.names;
+  };
+  return async (sessions) => new Map((await Promise.all(sessions.map(namesOf))).flatMap((names) => [...names]));
 }
 
 export function ssoLoginCommand(profile: string, profiles: readonly AwsProfile[]): string {

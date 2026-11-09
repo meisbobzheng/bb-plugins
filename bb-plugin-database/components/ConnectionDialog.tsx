@@ -217,12 +217,15 @@ export function ConnectionDialog({ open, connection, onClose, onSaved }: Connect
                       <SelectValue placeholder="Choose a profile" />
                     </SelectTrigger>
                     <SelectContent>
-                      {profiles.map((profile) => (
-                        <SelectItem key={profile.name} value={profile.name}>
-                          <span className="font-mono">{profile.name}</span>
-                          {profile.roleName === null ? null : <span className="ml-2 text-muted-foreground">{profile.roleName}</span>}
-                        </SelectItem>
-                      ))}
+                      {profiles.map((profile) => {
+                        const detail = [profile.accountName ?? profile.accountId, profile.roleName].filter((part) => part !== null).join(" · ");
+                        return (
+                          <SelectItem key={profile.name} value={profile.name}>
+                            <span className="font-mono">{profile.name}</span>
+                            {detail === "" ? null : <span className="ml-2 text-muted-foreground">{detail}</span>}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 )}

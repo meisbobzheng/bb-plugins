@@ -4,19 +4,21 @@ import { toast } from "sonner";
 import type { Connection } from "../contract";
 import { Confirm } from "./bits";
 import { ConnectionDialog } from "./ConnectionDialog";
-import { errorMessage, refreshSession, useDbRpc, useSessionSync } from "./hooks";
-import { activeConnection } from "./session";
+import { errorMessage, refreshSession, useDbRpc, useSessionSync, useStatus } from "./hooks";
+import { activeConnection, groupByAccount } from "./session";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Icon } from "./ui/icon";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select";
 import { Switch } from "./ui/switch";
 
 export function DatabaseHeader(_props: PluginNavPanelProps) {
   const rpc = useDbRpc();
   const session = useSessionSync();
   const connection = activeConnection(session);
+  const status = useStatus();
+  const groups = groupByAccount(session.connections, status?.awsProfiles ?? []);
   const [dialog, setDialog] = useState<{ connection: Connection | null } | null>(null);
   const [databases, setDatabases] = useState<{ connectionId: string; names: string[] } | null>(null);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
@@ -83,10 +85,15 @@ export function DatabaseHeader(_props: PluginNavPanelProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {session.connections.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.name}
-                </SelectItem>
+              {groups.map((group) => (
+                <SelectGroup key={group.label}>
+                  <SelectLabel className="text-xs font-medium text-muted-foreground">{group.label}</SelectLabel>
+                  {group.connections.map((candidate) => (
+                    <SelectItem key={candidate.id} value={candidate.id}>
+                      {candidate.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
             </SelectContent>
           </Select>

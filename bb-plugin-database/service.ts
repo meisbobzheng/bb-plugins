@@ -1,4 +1,4 @@
-import { authError, createTokenCache, isCredentialError, listAwsProfiles } from "./auth.js";
+import { authError, createAccountNameLookup, createTokenCache, isCredentialError, listAwsProfiles } from "./auth.js";
 import { createAsker, extractSql, schemaText, type Asker } from "./ask.js";
 import type { ChangedKind } from "./channel.js";
 import type {
@@ -69,10 +69,11 @@ export function createService(deps: ServiceDeps) {
   const now = deps.now ?? (() => new Date());
   const transientPasswords = new Map<string, string>();
   let profileCache: { at: number; profiles: Promise<AwsProfile[]> } | null = null;
+  const accountNames = createAccountNameLookup();
 
   const profiles = (): Promise<AwsProfile[]> => {
     if (deps.profiles !== undefined) return deps.profiles();
-    if (profileCache === null || Date.now() - profileCache.at > PROFILE_TTL_MS) profileCache = { at: Date.now(), profiles: listAwsProfiles() };
+    if (profileCache === null || Date.now() - profileCache.at > PROFILE_TTL_MS) profileCache = { at: Date.now(), profiles: listAwsProfiles(accountNames) };
     return profileCache.profiles;
   };
 

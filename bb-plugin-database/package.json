@@ -20,8 +20,10 @@
     "app": "./app.tsx"
   },
   "dependencies": {
+    "@aws-sdk/client-sso": "^3.1155.0",
     "@aws-sdk/credential-providers": "^3.1155.0",
     "@aws-sdk/rds-signer": "^3.1155.0",
+    "@aws-sdk/token-providers": "^3.1155.0",
     "@codemirror/autocomplete": "^6.20.4",
     "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-sql": "^6.10.0",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOKEN_REUSE_MS, createTokenCache, type TokenRequest } from "./auth";
+import { ACCOUNT_NAMES_REUSE_MS, TOKEN_REUSE_MS, createAccountNameLookup, createTokenCache, type SsoSession, type TokenRequest } from "./auth";
 
 const request: TokenRequest = { host: "db.local", port: 5432, region: "us-east-1", user: "hss", profile: "nucleus-dev" };
 
@@ -44,5 +44,44 @@ describe("RDS token cache", () => {
     failing.value = false;
     expect(await token(request)).toBe("token-2");
     expect(minted).toHaveLength(2);
+  });
+});
+
+describe("SSO account names", () => {
+  const cape: SsoSession = { name: "cape-sso", region: "us-east-1", profile: "nucleus-dev" };
+  const other: SsoSession = { name: "other-sso", region: "eu-west-1", profile: "other" };
+
+  function lookup() {
+    const clock = { now: 0 };
+    const failing = { value: false };
+    const listed: string[] = [];
+    const names = createAccountNameLookup(
+      async (session) => {
+        listed.push(session.name);
+        if (failing.value) throw new Error("The SSO session has expired.");
+        return new Map([[`${session.name}-id`, `${session.name} account`]]);
+      },
+      () => clock.now,
+    );
+    return { names, clock, failing, listed };
+  }
+
+  it("merges every session's accounts and lists each session once per fifteen minutes", async () => {
+    const { names, clock, listed } = lookup();
+    expect(await names([cape, other])).toEqual(new Map([["cape-sso-id", "cape-sso account"], ["other-sso-id", "other-sso account"]]));
+    clock.now = ACCOUNT_NAMES_REUSE_MS - 1;
+    await names([cape]);
+    clock.now = ACCOUNT_NAMES_REUSE_MS;
+    await names([cape]);
+    expect(listed).toEqual(["cape-sso", "other-sso", "cape-sso"]);
+  });
+
+  it("returns no names while the session is expired and asks again next time", async () => {
+    const { names, failing, listed } = lookup();
+    failing.value = true;
+    expect(await names([cape])).toEqual(new Map());
+    failing.value = false;
+    expect(await names([cape])).toEqual(new Map([["cape-sso-id", "cape-sso account"]]));
+    expect(listed).toEqual(["cape-sso", "cape-sso"]);
   });
 });

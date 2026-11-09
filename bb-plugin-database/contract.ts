@@ -185,6 +185,7 @@ export const awsProfileSchema = z.object({
   name: z.string(),
   ssoSession: z.string().nullable(),
   accountId: z.string().nullable(),
+  accountName: z.string().nullable(),
   roleName: z.string().nullable(),
   region: z.string().nullable(),
 });
