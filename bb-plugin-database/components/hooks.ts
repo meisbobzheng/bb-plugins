@@ -3,6 +3,7 @@ import { useRealtime, useRealtimeConnectionState, useRpc, type PluginRpcClient }
 import { CHANGED_CHANNEL, type ChangedKind } from "../channel";
 import type { SchemaSnapshot, Status, rpcContract } from "../contract";
 import { readSession, updateSession, useSession, type Session } from "./session";
+import { cachedSchema, rememberSchema } from "./workbench";
 
 export type DbRpc = PluginRpcClient<typeof rpcContract>;
 
@@ -76,15 +77,15 @@ export interface SchemaState {
 
 export function useSchema(connectionId: string | null, fingerprint: string): SchemaState {
   const rpc = useDbRpc();
-  const [state, setState] = useState<{ key: string; snapshot: SchemaSnapshot | null; loading: boolean; error: string | null }>({
-    key: "",
-    snapshot: null,
+  const key = `${connectionId ?? ""}|${fingerprint}`;
+  const [state, setState] = useState<{ key: string; snapshot: SchemaSnapshot | null; loading: boolean; error: string | null }>(() => ({
+    key,
+    snapshot: cachedSchema(key),
     loading: false,
     error: null,
-  });
+  }));
   const [generation, setGeneration] = useState(0);
   const force = useRef(false);
-  const key = `${connectionId ?? ""}|${fingerprint}`;
 
   useEffect(() => {
     if (connectionId === null) {
@@ -94,9 +95,10 @@ export function useSchema(connectionId: string | null, fingerprint: string): Sch
     let live = true;
     const refresh = force.current;
     force.current = false;
-    setState((current) => ({ key, snapshot: current.key === key ? current.snapshot : null, loading: true, error: null }));
+    setState((current) => ({ key, snapshot: current.key === key ? current.snapshot : cachedSchema(key), loading: true, error: null }));
     rpc.call("schema_get", { connectionId, refresh }).then(
       (snapshot) => {
+        rememberSchema(key, snapshot);
         if (live) setState({ key, snapshot, loading: false, error: null });
       },
       (error: unknown) => {

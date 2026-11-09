@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { experimental_useAppPanel as useAppPanel, type PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import type { AskResult, Connection, ExplainResult, QueryRun, TableInfo } from "../contract";
+import type { Connection, QueryRun, TableInfo } from "../contract";
 import { cn } from "../lib/utils";
 import { HISTORY_TAB, SAVED_TAB } from "../panel";
 import { qualifiedName } from "../sql";
@@ -20,6 +20,7 @@ import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { Input } from "./ui/input";
 import { useWidth } from "./use-width";
+import { readWorkbench, updateWorkbench, useWorkbench, type WorkbenchPatch } from "./workbench";
 
 const EDITOR_HEIGHT_KEY = "database:editor-height";
 const SCHEMA_WIDTH_KEY = "database:schema-width";
@@ -85,15 +86,6 @@ function ToolLabel({ children }: { children: ReactNode }) {
   return <span className="hidden @md/toolbar:inline">{children}</span>;
 }
 
-type View = { kind: "results" } | { kind: "plan"; plan: ExplainResult; sql: string } | { kind: "table"; table: TableInfo };
-
-interface AskState {
-  prompt: string;
-  busy: boolean;
-  result: AskResult | null;
-  error: string | null;
-}
-
 function Workbench({ connection }: { connection: Connection }) {
   const rpc = useDbRpc();
   const status = useStatus();
@@ -101,12 +93,8 @@ function Workbench({ connection }: { connection: Connection }) {
   const editor = useRef<EditorHandle>(null);
   const [sql, setSql] = useLocalDraft(connection.id);
   const schema = useSchema(connection.id, connection.database);
-  const [run, setRun] = useState<QueryRun | null>(null);
-  const [ranSql, setRanSql] = useState("");
-  const [runningId, setRunningId] = useState<string | null>(null);
-  const [explaining, setExplaining] = useState(false);
-  const [view, setView] = useState<View>({ kind: "results" });
-  const [ask, setAsk] = useState<AskState>({ prompt: "", busy: false, result: null, error: null });
+  const { run, ranSql, runningId, explaining, view, ask } = useWorkbench(connection.id);
+  const patch = useCallback((next: WorkbenchPatch) => updateWorkbench(connection.id, next), [connection.id]);
   const [saveOpen, setSaveOpen] = useState(false);
   const [editorHeight, setEditorHeight] = useState(() => storedSize(EDITOR_HEIGHT_KEY, 220, MIN_EDITOR));
   const [schemaWidth, setSchemaWidth] = useState(() => storedSize(SCHEMA_WIDTH_KEY, 256, MIN_SCHEMA));
@@ -118,44 +106,42 @@ function Workbench({ connection }: { connection: Connection }) {
   const execute = useCallback(
     async (text?: string) => {
       const statement = (text ?? editor.current?.selectionOrAll() ?? sql).trim();
-      if (statement === "" || runningId !== null) return;
+      if (statement === "" || readWorkbench(connection.id).runningId !== null) return;
       const queryId = newQueryId();
-      setRunningId(queryId);
-      setRanSql(statement);
-      setView({ kind: "results" });
+      patch({ runningId: queryId, ranSql: statement, view: { kind: "results" } });
+      let result: QueryRun;
       try {
-        setRun(await rpc.call("query_run", { connectionId: connection.id, sql: statement, queryId }));
+        result = await rpc.call("query_run", { connectionId: connection.id, sql: statement, queryId });
       } catch (cause) {
-        setRun({
+        result = {
           id: queryId,
           results: [],
           error: { kind: "connection", message: errorMessage(cause), code: null, position: null, detail: null, hint: null },
           durationMs: 0,
           startedAt: new Date().toISOString(),
           readOnly: !connection.allowWrites,
-        });
-      } finally {
-        setRunningId(null);
+        };
       }
+      patch({ run: result, runningId: null });
     },
-    [rpc, connection.id, connection.allowWrites, sql, runningId],
+    [rpc, patch, connection.id, connection.allowWrites, sql],
   );
 
   const explain = useCallback(
     async (analyze: boolean) => {
       const statement = (editor.current?.selectionOrAll() ?? sql).trim();
-      if (statement === "" || explaining) return;
-      setExplaining(true);
+      if (statement === "" || readWorkbench(connection.id).explaining) return;
+      patch({ explaining: true });
       try {
         const plan = await rpc.call("query_explain", { connectionId: connection.id, sql: statement, analyze });
-        setView({ kind: "plan", plan, sql: statement });
+        patch({ view: { kind: "plan", plan, sql: statement } });
       } catch (cause) {
         toast.error(errorMessage(cause));
       } finally {
-        setExplaining(false);
+        patch({ explaining: false });
       }
     },
-    [rpc, connection.id, sql, explaining],
+    [rpc, patch, connection.id, sql],
   );
 
   const cancel = useCallback(() => {
@@ -190,18 +176,17 @@ function Workbench({ connection }: { connection: Connection }) {
     event.preventDefault();
     const prompt = ask.prompt.trim();
     if (prompt === "" || ask.busy) return;
-    setAsk((current) => ({ ...current, busy: true, error: null }));
+    patch((current) => ({ ask: { ...current.ask, busy: true, error: null } }));
     try {
       const result = await rpc.call("ask", { connectionId: connection.id, prompt, currentSql: sql.trim() === "" ? null : sql, run: true });
       setSql(result.sql);
-      setRanSql(result.sql);
-      if (result.run !== null) {
-        setRun(result.run);
-        setView({ kind: "results" });
-      }
-      setAsk({ prompt: "", busy: false, result, error: null });
+      patch({
+        ranSql: result.sql,
+        ask: { prompt: "", busy: false, result, error: null },
+        ...(result.run === null ? {} : { run: result.run, view: { kind: "results" } }),
+      });
     } catch (cause) {
-      setAsk((current) => ({ ...current, busy: false, result: null, error: errorMessage(cause) }));
+      patch((current) => ({ ask: { ...current.ask, busy: false, result: null, error: errorMessage(cause) } }));
     }
   };
 
@@ -269,7 +254,7 @@ function Workbench({ connection }: { connection: Connection }) {
           error={schema.error}
           onRefresh={() => schema.refresh(true)}
           onPreview={preview}
-          onDescribe={(table) => setView({ kind: "table", table })}
+          onDescribe={(table) => patch({ view: { kind: "table", table } })}
           onInsert={(text) => editor.current?.insert(text)}
         />
         <div
@@ -291,8 +276,8 @@ function Workbench({ connection }: { connection: Connection }) {
             <Icon name="AiContentGenerator01" className="size-4 shrink-0 text-violet-600 dark:text-violet-400" aria-hidden />
             <Input
               value={ask.prompt}
-              onChange={(event) => setAsk((current) => ({ ...current, prompt: event.target.value }))}
-              onKeyDown={(event) => (event.key === "Escape" && ask.prompt !== "" ? setAsk((current) => ({ ...current, prompt: "" })) : undefined)}
+              onChange={(event) => patch((current) => ({ ask: { ...current.ask, prompt: event.target.value } }))}
+              onKeyDown={(event) => (event.key === "Escape" && ask.prompt !== "" ? patch((current) => ({ ask: { ...current.ask, prompt: "" } })) : undefined)}
               placeholder={claudeMissing ? `claude CLI not found at “${status?.claude.path}”; set its path in the plugin settings` : "What do you want to see?"}
               title={claudeMissing ? undefined : "Describe the data in plain English, e.g. “active subscribers per plan, most popular first”"}
               aria-label="Describe the query in plain language"
@@ -363,7 +348,7 @@ function Workbench({ connection }: { connection: Connection }) {
           <IconButton label="Open saved queries" icon="ListView" onClick={() => appPanel.openFixedTab({ surface: { kind: "current" }, tab: SAVED_TAB })} />
           <span className="flex-1" />
           {view.kind === "results" ? null : (
-            <IconButton label="Back to results" icon="GridView" onClick={() => setView({ kind: "results" })}>
+            <IconButton label="Back to results" icon="GridView" onClick={() => patch({ view: { kind: "results" } })}>
               <ToolLabel>Results</ToolLabel>
             </IconButton>
           )}
@@ -375,7 +360,7 @@ function Workbench({ connection }: { connection: Connection }) {
           {view.kind === "plan" ? (
             <PlanView result={view.plan} sql={view.sql} />
           ) : view.kind === "table" ? (
-            <TableDetail table={view.table} onPreview={() => preview(view.table)} onClose={() => setView({ kind: "results" })} />
+            <TableDetail table={view.table} onPreview={() => preview(view.table)} onClose={() => patch({ view: { kind: "results" } })} />
           ) : (
             <Results run={run} sql={ranSql} running={busy} connectionName={connection.name} onCancel={cancel} onRetry={() => void execute(ranSql)} />
           )}

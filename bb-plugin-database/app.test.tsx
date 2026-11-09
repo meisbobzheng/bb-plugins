@@ -5,6 +5,7 @@ import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { inputOf } from "./components/ConnectionDialog";
 import { columnWidths } from "./components/Results";
 import { resetSession } from "./components/session";
+import { resetWorkbenches } from "./components/workbench";
 import type { Connection, HistoryEntry, QueryRun, SchemaSnapshot } from "./contract";
 
 vi.mock("./components/Editor", () => ({
@@ -107,6 +108,7 @@ const baseRpc = {
 describe("Database page", () => {
   beforeEach(() => {
     resetSession();
+    resetWorkbenches();
     Object.defineProperty(window, "localStorage", { value: memoryStorage(), configurable: true });
   });
   afterEach(cleanup);
@@ -245,6 +247,7 @@ describe("results grid", () => {
 
   beforeEach(() => {
     resetSession();
+    resetWorkbenches();
     Object.defineProperty(window, "localStorage", { value: memoryStorage(), configurable: true });
     window.localStorage.setItem(`database:draft:${CONNECTION.id}`, "select id, active from subscribers");
   });
@@ -296,6 +299,27 @@ describe("results grid", () => {
     await settle();
     expect(slot.getByRole("status").textContent).toMatch(/Running/);
     expect(slot.getByText("60")).toBeTruthy();
+  });
+
+  it("keeps the results and schema when you leave the page and come back", async () => {
+    await run({ query_run: () => RUN });
+    cleanup();
+    const app = await load();
+    const again = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: baseRpc });
+    expect(again.getByText("60")).toBeTruthy();
+    expect(again.getByText("subscribers")).toBeTruthy();
+  });
+
+  it("shows a query that finished while you were away", async () => {
+    let finish: (run: QueryRun) => void = () => undefined;
+    await run({ query_run: () => new Promise<QueryRun>((resolve) => (finish = resolve)) });
+    cleanup();
+    finish(RUN);
+    await settle();
+    const app = await load();
+    const again = renderSlot(app.navPanels[0]!, { subPath: "" }, { rpc: baseRpc });
+    expect(again.getByText("60")).toBeTruthy();
+    expect(again.getByRole("button", { name: /^Run/ })).toBeTruthy();
   });
 
   it("retries a query that could not reach the server", async () => {
