@@ -21,6 +21,8 @@ interface ConnectionRow {
   user_follows_database: number;
   auth: string;
   ssl: number;
+  via_host: string | null;
+  via_port: number | null;
   allow_writes: number;
   password: string | null;
   created_at: string;
@@ -74,6 +76,7 @@ function toConnection(row: ConnectionRow): Connection {
     userFollowsDatabase: row.user_follows_database === 1,
     auth: authSchema.parse(JSON.parse(row.auth)),
     ssl: row.ssl === 1,
+    via: row.via_host === null || row.via_port === null ? null : { host: row.via_host, port: row.via_port },
     allowWrites: row.allow_writes === 1,
     hasPassword: row.password !== null,
     createdAt: row.created_at,
@@ -160,17 +163,19 @@ export function createStore(storage: BbPluginApi["storage"]): Store {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`,
+    `ALTER TABLE connections ADD COLUMN via_host TEXT`,
+    `ALTER TABLE connections ADD COLUMN via_port INTEGER`,
   ]);
 
   const selectConnection = db.prepare<[string], ConnectionRow>("SELECT * FROM connections WHERE id = ?");
   const selectConnections = db.prepare<[], ConnectionRow>("SELECT * FROM connections ORDER BY name COLLATE NOCASE");
   const insertConnection = db.prepare(
-    `INSERT INTO connections (id, name, host, port, database, user, user_follows_database, auth, ssl, allow_writes, password, created_at, updated_at)
-     VALUES (@id, @name, @host, @port, @database, @user, @user_follows_database, @auth, @ssl, 0, @password, @now, @now)`,
+    `INSERT INTO connections (id, name, host, port, database, user, user_follows_database, auth, ssl, via_host, via_port, allow_writes, password, created_at, updated_at)
+     VALUES (@id, @name, @host, @port, @database, @user, @user_follows_database, @auth, @ssl, @via_host, @via_port, 0, @password, @now, @now)`,
   );
   const updateConnection = db.prepare(
     `UPDATE connections SET name = @name, host = @host, port = @port, database = @database, user = @user, user_follows_database = @user_follows_database,
-       auth = @auth, ssl = @ssl, password = COALESCE(@password, CASE WHEN @clear = 1 THEN NULL ELSE password END), updated_at = @now
+       auth = @auth, ssl = @ssl, via_host = @via_host, via_port = @via_port, password = COALESCE(@password, CASE WHEN @clear = 1 THEN NULL ELSE password END), updated_at = @now
      WHERE id = @id`,
   );
   const insertHistory = db.prepare(
@@ -207,6 +212,8 @@ export function createStore(storage: BbPluginApi["storage"]): Store {
         user_follows_database: input.userFollowsDatabase ? 1 : 0,
         auth: JSON.stringify(input.auth),
         ssl: input.ssl ? 1 : 0,
+        via_host: input.via?.host ?? null,
+        via_port: input.via?.port ?? null,
         password: input.auth.kind === "password" ? (input.password ?? null) : null,
         clear: input.auth.kind !== "password" || input.password === null ? 1 : 0,
         now,

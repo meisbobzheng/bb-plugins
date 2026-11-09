@@ -41,6 +41,7 @@ describe.skipIf(target === null)("plain-language requests", () => {
       userFollowsDatabase: false,
       auth: { kind: "password" },
       ssl: false,
+      via: null,
       password: target!.password || "unused",
     });
   });

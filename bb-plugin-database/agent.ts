@@ -36,7 +36,8 @@ export function describeRun(run: QueryRun): string {
 export function describeConnection(connection: Connection, active: boolean): string {
   const auth = connection.auth.kind === "rds-iam" ? `IAM via ${connection.auth.profile}` : "password";
   const user = connection.userFollowsDatabase ? "(= database)" : connection.user;
-  return [active ? "*" : " ", connection.name, `${connection.host}:${connection.port}/${connection.database}`, user, auth, connection.allowWrites ? "writes on" : "read-only"].join("\t");
+  const via = connection.via === null ? "" : ` via ${connection.via.host}:${connection.via.port}`;
+  return [active ? "*" : " ", connection.name, `${connection.host}:${connection.port}/${connection.database}${via}`, user, auth, connection.allowWrites ? "writes on" : "read-only"].join("\t");
 }
 
 export function detailTable(table: TableInfo): string {

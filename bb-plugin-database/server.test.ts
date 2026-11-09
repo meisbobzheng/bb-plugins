@@ -17,6 +17,7 @@ function input(overrides: Partial<ConnectionInput> = {}): ConnectionInput {
     userFollowsDatabase: false,
     auth: { kind: "password" },
     ssl: false,
+    via: null,
     password: target?.password || "unused",
     ...overrides,
   };

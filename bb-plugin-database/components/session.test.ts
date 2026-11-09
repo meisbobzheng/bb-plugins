@@ -3,7 +3,7 @@ import type { AwsProfile, Connection } from "../contract";
 import { groupByAccount } from "./session";
 
 function connection(id: string, name: string, auth: Connection["auth"]): Connection {
-  return { id, name, host: "h", port: 5432, database: "hss", user: "hss", userFollowsDatabase: true, auth, ssl: true, allowWrites: false, hasPassword: false, createdAt: "", updatedAt: "" };
+  return { id, name, host: "h", port: 5432, database: "hss", user: "hss", userFollowsDatabase: true, auth, ssl: true, via: null, allowWrites: false, hasPassword: false, createdAt: "", updatedAt: "" };
 }
 
 const iam = (profile: string): Connection["auth"] => ({ kind: "rds-iam", profile, region: "us-east-1" });

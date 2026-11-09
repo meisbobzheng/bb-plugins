@@ -22,6 +22,7 @@ const CONNECTION: Connection = {
   userFollowsDatabase: false,
   auth: { kind: "password" },
   ssl: false,
+  via: null,
   allowWrites: false,
   hasPassword: true,
   createdAt: "2026-10-21T00:00:00.000Z",
@@ -314,7 +315,7 @@ describe("results grid", () => {
 });
 
 describe("connection form", () => {
-  const form = { name: "x", host: "h", port: "5432", database: "db", user: "", userFollowsDatabase: true, authKind: "rds-iam" as const, profile: "nucleus-dev", region: "us-east-1", password: "", ssl: true };
+  const form = { name: "x", host: "h", port: "5432", database: "db", user: "", userFollowsDatabase: true, authKind: "rds-iam" as const, profile: "nucleus-dev", region: "us-east-1", password: "", ssl: true, via: "" };
 
   it("derives the role from the database when it follows it", () => {
     expect(inputOf(form, undefined)).toMatchObject({ user: "db", auth: { kind: "rds-iam", profile: "nucleus-dev", region: "us-east-1" } });
@@ -324,6 +325,13 @@ describe("connection form", () => {
     expect(inputOf({ ...form, port: "x" }, undefined)).toMatch(/Port/);
     expect(inputOf({ ...form, userFollowsDatabase: false }, undefined)).toMatch(/role/);
     expect(inputOf({ ...form, profile: "" }, undefined)).toMatch(/profile/);
+  });
+
+  it("connects through a local tunnel when one is given", () => {
+    expect(inputOf(form, undefined)).toMatchObject({ host: "h", port: 5432, via: null });
+    expect(inputOf({ ...form, via: " localhost:15432 " }, undefined)).toMatchObject({ host: "h", port: 5432, via: { host: "localhost", port: 15432 } });
+    expect(inputOf({ ...form, via: "localhost" }, undefined)).toMatch(/host:port/);
+    expect(inputOf({ ...form, via: "localhost:70000" }, undefined)).toMatch(/host:port/);
   });
 
   it("sends the password only when typed", () => {

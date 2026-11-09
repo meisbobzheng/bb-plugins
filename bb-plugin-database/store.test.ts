@@ -19,6 +19,7 @@ const base: ConnectionInput = {
   userFollowsDatabase: false,
   auth: { kind: "password" },
   ssl: false,
+  via: null,
   password: "secret",
 };
 
@@ -44,6 +45,14 @@ describe("connections", () => {
     store.saveConnection({ ...base, id, password: null }, NOW);
     expect(store.password(id)).toBeNull();
     expect(store.getConnection(id)?.hasPassword).toBe(false);
+  });
+
+  it("saves a tunnel address and clears it on update", () => {
+    const store = setup();
+    const { id } = store.saveConnection({ ...base, via: { host: "localhost", port: 15432 } }, NOW);
+    expect(store.getConnection(id)?.via).toEqual({ host: "localhost", port: 15432 });
+    store.saveConnection({ ...base, id, via: null }, NOW);
+    expect(store.getConnection(id)?.via).toBeNull();
   });
 
   it("drops a stored password when switching to IAM auth", () => {

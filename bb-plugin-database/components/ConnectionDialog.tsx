@@ -29,11 +29,12 @@ interface Form {
   region: string;
   password: string;
   ssl: boolean;
+  via: string;
 }
 
 function formOf(connection: Connection | null, defaults: { profile: string; region: string }): Form {
   if (connection === null) {
-    return { name: "", host: "", port: "5432", database: "", user: "", userFollowsDatabase: true, authKind: "rds-iam", profile: defaults.profile, region: defaults.region, password: "", ssl: true };
+    return { name: "", host: "", port: "5432", database: "", user: "", userFollowsDatabase: true, authKind: "rds-iam", profile: defaults.profile, region: defaults.region, password: "", ssl: true, via: "" };
   }
   return {
     name: connection.name,
@@ -47,6 +48,7 @@ function formOf(connection: Connection | null, defaults: { profile: string; regi
     region: connection.auth.kind === "rds-iam" ? connection.auth.region : defaults.region,
     password: "",
     ssl: connection.ssl,
+    via: connection.via === null ? "" : `${connection.via.host}:${connection.via.port}`,
   };
 }
 
@@ -58,6 +60,8 @@ export function inputOf(form: Form, id: string | undefined): ConnectionInput | s
   if (form.database.trim() === "") return "Enter the database name.";
   if (!form.userFollowsDatabase && form.user.trim() === "") return "Enter the database role, or turn on “Role follows database”.";
   if (form.authKind === "rds-iam" && form.profile.trim() === "") return "Choose an AWS profile.";
+  const via = form.via.trim() === "" ? null : /^(?<host>[^\s:]+):(?<port>\d+)$/.exec(form.via.trim())?.groups;
+  if (via === undefined || (via !== null && (Number(via.port) < 1 || Number(via.port) > 65535))) return "Connect through must be host:port, for example localhost:15432.";
   return {
     ...(id === undefined ? {} : { id }),
     name: form.name.trim(),
@@ -68,6 +72,7 @@ export function inputOf(form: Form, id: string | undefined): ConnectionInput | s
     userFollowsDatabase: form.userFollowsDatabase,
     auth: form.authKind === "rds-iam" ? { kind: "rds-iam", profile: form.profile.trim(), region: form.region.trim() || "us-east-1" } : { kind: "password" },
     ssl: form.ssl,
+    via: via === null ? null : { host: via.host!, port: Number(via.port) },
     ...(form.authKind === "password" && form.password !== "" ? { password: form.password } : {}),
   };
 }
@@ -176,6 +181,9 @@ export function ConnectionDialog({ open, connection, onClose, onSaved }: Connect
               <Input id="con-port" value={form.port} onChange={(event) => set("port", event.target.value)} inputMode="numeric" className="font-mono" />
             </Field>
           </div>
+          <Field label="Connect through" htmlFor="con-via" hint="Optional. A local port-forward to the host, such as an SSM tunnel. IAM tokens are still signed for the host above.">
+            <Input id="con-via" value={form.via} onChange={(event) => set("via", event.target.value)} placeholder="localhost:15432" className="font-mono" />
+          </Field>
           <label className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm">
             <span>
               Role follows database

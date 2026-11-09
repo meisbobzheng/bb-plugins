@@ -29,6 +29,9 @@ export const authSchema = z.discriminatedUnion("kind", [
 ]);
 export type Auth = z.infer<typeof authSchema>;
 
+export const endpointSchema = z.object({ host: z.string().trim().min(1).max(LIMITS.host), port: z.number().int().min(1).max(65535) }).strict();
+export type Endpoint = z.infer<typeof endpointSchema>;
+
 export const connectionFieldsSchema = z
   .object({
     name: z.string().trim().min(1).max(LIMITS.name),
@@ -39,6 +42,7 @@ export const connectionFieldsSchema = z
     userFollowsDatabase: z.boolean(),
     auth: authSchema,
     ssl: z.boolean(),
+    via: endpointSchema.nullable(),
   })
   .strict();
 export type ConnectionFields = z.infer<typeof connectionFieldsSchema>;

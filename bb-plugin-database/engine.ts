@@ -1,5 +1,5 @@
 import pg from "pg";
-import type { Connection, ExplainResult, QueryError, QueryRun, ResultSet, SchemaSnapshot, TestResult } from "./contract.js";
+import type { Connection, Endpoint, ExplainResult, QueryError, QueryRun, ResultSet, SchemaSnapshot, TestResult } from "./contract.js";
 import { DATABASES_SQL, INTROSPECTION_SQL, VERSION_SQL, shapeSnapshot, type Row } from "./introspect.js";
 import { newId } from "./store.js";
 import { cursorable, splitStatements } from "./sql.js";
@@ -57,8 +57,12 @@ export function effectiveUser(connection: Connection): string {
   return connection.userFollowsDatabase ? connection.database : connection.user;
 }
 
+export function endpointOf(connection: Connection): Endpoint {
+  return connection.via ?? { host: connection.host, port: connection.port };
+}
+
 function fingerprintOf(connection: Connection): string {
-  return JSON.stringify([connection.host, connection.port, connection.database, effectiveUser(connection), connection.ssl, connection.auth]);
+  return JSON.stringify([connection.host, connection.port, connection.via, connection.database, effectiveUser(connection), connection.ssl, connection.auth]);
 }
 
 function isDatabaseError(error: unknown): error is pg.DatabaseError {
@@ -114,8 +118,7 @@ export class Engine {
     if (existing !== undefined && existing.fingerprint === fingerprint) return existing;
     if (existing !== undefined) void existing.pool.end().catch(() => undefined);
     const pool = new Pool({
-      host: connection.host,
-      port: connection.port,
+      ...endpointOf(connection),
       database: connection.database,
       user: effectiveUser(connection),
       password: () => this.deps.password(connection),
@@ -150,7 +153,12 @@ export class Engine {
   async failure(error: unknown, connection: Connection, cancelled = false): Promise<QueryError> {
     const described = (await this.deps.authError(error, connection)) ?? describeError(error, cancelled);
     if (described.kind !== "connection" || described.hint !== null) return described;
-    return { ...described, hint: `Check that ${connection.host}:${connection.port} is reachable from the bb server, for example that your VPN is connected, then try again.` };
+    const { host, port } = endpointOf(connection);
+    const hint =
+      connection.via === null
+        ? `Check that ${host}:${port} is reachable from the bb server, for example that your VPN is connected, then try again.`
+        : `Check that the tunnel to ${connection.host} is listening on ${host}:${port}, then try again.`;
+    return { ...described, hint };
   }
 
   private async withClient<T>(connection: Connection, options: Pick<RunOptions, "readOnly" | "timeoutMs">, work: (client: PoolClient, entry: PoolEntry) => Promise<T>): Promise<T> {
