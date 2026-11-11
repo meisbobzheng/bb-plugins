@@ -1,0 +1,212 @@
+#!/bin/zsh
+emulate -R zsh
+setopt no_unset pipe_fail extended_glob null_glob no_nomatch
+
+TK_RUNNER=${0:A:h}
+TK_ROOT=${TK_ROOT:-$HOME/.travel-kit}
+path=(/usr/bin /bin /usr/sbin /sbin $path /opt/homebrew/bin /opt/homebrew/sbin /usr/local/bin $HOME/.local/bin $HOME/.bb/bin)
+typeset -U path
+export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 GIT_TERMINAL_PROMPT=0
+
+for lib in ui steps paths bbdb git scan kinds kit apply; do
+  source "$TK_RUNNER/lib/$lib.zsh" || { print -u2 "travel-kit: missing $TK_RUNNER/lib/$lib.zsh"; exit 1 }
+done
+unset lib
+
+TK_TMP=$(mktemp -d "${TMPDIR:-/tmp}/travel-kit.XXXXXX")
+trap 'rm -rf "$TK_TMP"' EXIT
+trap 'print -r -- ""; tk_warn "Stopped. Run the same command again to pick up where it left off."; exit 130' INT TERM
+
+tk_usage() {
+  cat <<EOF
+travel-kit: set up a travel laptop from your main one, and hand changes back.
+
+  On the main laptop
+    travel-kit generate --out DIR [--profile FILE] [--days N] [--zip]
+    travel-kit scan [--days N]                 list what would be exported (TSV)
+    travel-kit apply [OWNER/REPO]              apply handbacks from a travel laptop
+    travel-kit repos                           list your travel-kit-* handback repos
+
+  On the travel laptop
+    ./install.sh [--check] [--verbose] [--yes] set up from a kit (rerun to resume)
+    travel-kit doctor                          what's missing, without changing anything
+    travel-kit retry [KEY-GLOB]                rerun failed and skipped steps (or just KEY)
+    travel-kit handback [--dry-run]            push what changed here to the handback repo
+    travel-kit status                          kit, handback and step status
+    travel-kit log [KEY]                       show the latest log (or one step's)
+EOF
+}
+
+tk_register_install() {
+  local items=$1 kind name version extra session
+  tk_step macos "$(sw_vers -productVersion)"
+  tk_step disk "20 GB free"
+  tk_step network github.com
+  tk_step clt "Command Line Tools"
+  tk_step sudo "admin password"
+  tk_step homebrew Homebrew
+  local -a essentials=(gh)
+  while IFS=$'\t' read -r kind name version extra; do
+    [[ $kind == formula ]] && (( ${TK_ESSENTIAL_FORMULAE[(Ie)$name]} )) && essentials+=$name
+  done <"$items"
+  for name in ${(u)essentials}; do
+    tk_step essential "$name" "$(awk -F'\t' -v n="$name" '$1 == "formula" && $2 == n { print $3 }' "$items")"
+  done
+  grep -q $'^app\t' "$items" && tk_step iru "Self Service"
+  tk_step gate-1password "SSH agent"
+  tk_step gate-github "gh + SSH"
+  while IFS=$'\t' read -r kind name version extra; do
+    case $kind in
+      formula) (( ${essentials[(Ie)$name]} )) || tk_step formula "$name" "$version" ;;
+      app|tap|cask|mas|npm|uv|pipx|dotfile|config|claude|script|repo|marketplace) tk_step $kind "$name" "$version" "$extra" ;;
+      bbplugin) tk_step bbplugin "$name" "$version" "$extra" ;;
+    esac
+  done <"$items"
+  if [[ -f $TK_STAGE/home/.aws/config ]]; then
+    for session in ${(f)"$(HOME=$TK_STAGE/home tk_aws_sessions)"}; do tk_step gate-aws "$session"; done
+  fi
+  if grep -q $'^bb\t' "$items"; then
+    tk_step bb-app app "${BB_VERSION:-}"
+    tk_step bb-start "first start"
+    tk_step bb-content "threads + plugin data" "$(grep -c . "$TK_KIT/payload/bb/threads.txt" 2>/dev/null) threads"
+  fi
+  tk_step handback-repo GitHub
+  tk_step baseline "starting point for handbacks"
+  tk_step command travel-kit
+  tk_sort_steps
+}
+
+tk_sort_steps() {
+  local -a sorted=() phase entry
+  for phase in $TK_PHASES; do
+    for entry in $TK_STEPS; do
+      [[ ${TK_KIND_PHASE[${entry%%$'\t'*}]} == $phase ]] && sorted+=$entry
+    done
+  done
+  TK_STEPS=($sorted)
+}
+
+tk_phase_start() {
+  tk_brew_env
+  [[ $1 == (admin|essentials|packages) ]] && tk_sudo_check && tk_sudo_keepalive
+  [[ -S $TK_OP_SOCK ]] && export SSH_AUTH_SOCK=$TK_OP_SOCK
+  return 0
+}
+
+tk_hands_on_defaults() {
+  rehash
+  (( $+commands[claude] )) && TK_HANDS_ON+=("Sign in to Claude Code: run \`claude\`, then /login")
+  (( $+commands[codex] )) && TK_HANDS_ON+=("Sign in to Codex: run \`codex login\`")
+  tk_bb_app >/dev/null && TK_HANDS_ON+=("Open bb and check your threads; run \`bb machine list\` to confirm it shows only this Mac")
+  TK_HANDS_ON+=("Approve any privacy prompts (Accessibility, Screen Recording, Full Disk Access) as apps first open")
+}
+
+tk_install() {
+  local kit=$1
+  [[ -f $kit/kit.env && -f $kit/items.tsv ]] || tk_die "Not a travel kit: $kit (run install.sh from the unzipped kit folder)"
+  tk_load_env "$kit/kit.env"
+  [[ $KIT_KIND == install ]] || tk_die "$kit is a $KIT_KIND kit, not an install kit"
+  TK_KIT=$kit
+  mkdir -p "$TK_ROOT/kit"
+  print -r -- "$kit" >"$TK_ROOT/kit.path"
+  cp "$kit/kit.env" "$kit/items.tsv" "$TK_ROOT/kit/"
+  tk_copy_tree "$kit/runner" "$TK_ROOT/kit/runner"
+  tk_engine_init "$TK_ROOT"
+  TK_BACKUP_DIR=$TK_ROOT/backups/$(strftime '%Y%m%d-%H%M%S' $EPOCHSECONDS)
+  TK_STAGE=$TK_ROOT/staging/$KIT_ID
+  tk_banner "travel-kit · from $SRC_HOSTNAME · $(strftime '%F %R' $(( KIT_CREATED_MS / 1000 )))"
+  tk_say "Setting up ${TK_BOLD}$(hostname -s)${TK_RESET} for ${TK_BOLD}$USER${TK_RESET} (main laptop user: ${SRC_USER}). Safe to rerun: finished steps are skipped."
+  tk_info "Preparing files (paths from $SRC_HOME → $HOME)"
+  tk_stage "$kit/payload" "$TK_STAGE" "$KIT_ID"
+  tk_brew_env
+  tk_register_install "$kit/items.tsv"
+  tk_info "Checking what's already done"
+  tk_check_all
+  tk_print_plan
+  if [[ ${TK_MODE:-} == check ]]; then
+    return 0
+  fi
+  tk_run_all
+  tk_hands_on_defaults
+  tk_summary
+}
+
+tk_resolve_kit() {
+  local kit=$(<$TK_ROOT/kit.path 2>/dev/null)
+  [[ -n $kit && -f $kit/kit.env ]] || tk_die "Can't find the kit folder ($kit). Run install.sh from the unzipped kit again."
+  print -r -- "$kit"
+}
+
+tk_status() {
+  tk_load_env "$TK_ROOT/kit/kit.env" && tk_say "Kit: from $SRC_HOSTNAME, built $(strftime '%F %R' $(( KIT_CREATED_MS / 1000 )))"
+  if tk_load_env "$TK_ROOT/handback.env"; then
+    tk_say "Handbacks: $HANDBACK_REPO · $HANDBACK_SEQ pushed · next covers changes since $(strftime '%F %R' $(( HANDBACK_SINCE_MS / 1000 )))"
+  fi
+  local file state when message
+  for file in $TK_ROOT/state/*(N.); do
+    IFS=$'\t' read -r state when message <"$file"
+    [[ $state == ok ]] && continue
+    tk_say "  ${state}  ${${file:t}//__/:}${message:+  — $message}"
+  done
+}
+
+tk_main() {
+  local command=${1:-help}
+  (( $# )) && shift
+  local kit= profile= out= zip=0 dry=0 from= arg
+  TK_DAYS=7
+  while (( $# )); do
+    case $1 in
+      --kit) kit=$2; shift ;;
+      --profile) profile=$2; shift ;;
+      --out) out=$2; shift ;;
+      --days) TK_DAYS=$2; shift ;;
+      --zip) zip=1 ;;
+      --check) TK_MODE=check ;;
+      --verbose|-v) TK_VERBOSE=1 ;;
+      --yes|-y) TK_YES=1 ;;
+      --only) TK_ONLY=$2; shift ;;
+      --dry-run) dry=1 ;;
+      --from) from=$2; shift ;;
+      -h|--help) tk_usage; return 0 ;;
+      -*) tk_die "unknown option $1 (see travel-kit help)" ;;
+      *) arg=$1 ;;
+    esac
+    shift
+  done
+  case $command in
+    scan) tk_scan ;;
+    generate)
+      [[ -n $out ]] || tk_die "generate needs --out DIR"
+      mkdir -p "$out"
+      tk_generate "${out:A}" "$profile" $zip ;;
+    install) tk_install "${kit:-${TK_RUNNER:h}}" ;;
+    doctor) TK_MODE=check TK_VERBOSE=1 tk_install "$(tk_resolve_kit)" ;;
+    retry)
+      TK_RETRY_SKIPPED=1
+      [[ -n ${arg:-} ]] && TK_ONLY=$arg
+      tk_install "$(tk_resolve_kit)" ;;
+    handback)
+      tk_engine_init "$TK_ROOT"
+      tk_load_env "$TK_ROOT/kit/kit.env"
+      tk_handback $dry ;;
+    apply)
+      tk_engine_init "$TK_ROOT"
+      TK_BACKUP_DIR=$TK_ROOT/backups/apply-$(strftime '%Y%m%d-%H%M%S' $EPOCHSECONDS)
+      tk_apply "$from" "${arg:-}" ;;
+    status) tk_status ;;
+    repos) tk_handback_repos ;;
+    log)
+      if [[ -n ${arg:-} ]]; then
+        local logfile=($TK_ROOT/logs/latest/*-${arg//[:\/]/_}.log(N))
+        (( ${#logfile} )) || tk_die "no log for $arg in the latest run"
+        cat $logfile
+      else
+        ls -1 "$TK_ROOT/logs/latest/"
+      fi ;;
+    help) tk_usage ;;
+    *) tk_usage; return 1 ;;
+  esac
+}
+
+tk_main "$@"

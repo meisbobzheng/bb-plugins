@@ -19,6 +19,7 @@ one plugin with its own `package.json`, README, and tests. Themes live in
 | [Thread Meter](bb-plugin-thread-meter) | Context, token cost, and plan usage beside the composer's model picker. |
 | [Thread Router](bb-plugin-thread-router) | Files new threads into the best-matching sidebar section, or `other` when none fits, and names them like `hss-warrior`. |
 | [Thread Sidebar](bb-plugin-thread-sidebar) | A T3 Code-style sidebar thread list grouped by project, with threads waiting on you highlighted and listed first. |
+| [Travel Kit](bb-plugin-travel-kit) | Builds a kit that sets up a travel laptop, with bb as a fresh standalone server that keeps your recent threads, then hands changes back. |
 | [Vim](bb-plugin-vim) | Vim keys everywhere: `hjkl` through lists and panes, and `f` to click anything by its letter hint. |
 
 ## Install

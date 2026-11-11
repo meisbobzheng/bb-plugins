@@ -16,6 +16,7 @@
     { "name": "thread-meter", "source": "./bb-plugin-thread-meter" },
     { "name": "thread-router", "source": "./bb-plugin-thread-router" },
     { "name": "thread-sidebar", "source": "./bb-plugin-thread-sidebar" },
+    { "name": "travel-kit", "source": "./bb-plugin-travel-kit" },
     { "name": "vim", "source": "./bb-plugin-vim" }
   ]
 }
