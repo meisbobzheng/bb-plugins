@@ -164,6 +164,37 @@ tk_repo_fingerprints() {
   done
 }
 
+tk_repo_has_local_work() {
+  local repo=$1 wt branch
+  [[ -n $(tk_git -C "$repo" remote 2>/dev/null) ]] || return 0
+  [[ $(tk_git -C "$repo" rev-list --count --branches --tags --not --remotes 2>/dev/null) == 0 ]] || return 0
+  while IFS=$'\t' read -r wt branch; do
+    [[ -d $wt ]] && ! tk_git_clean "$wt" && return 0
+  done < <(tk_git_worktrees "$repo")
+  return 1
+}
+
+tk_enroll() {
+  local since=$1 main_home=$2
+  [[ -f $TK_ROOT/handback.env ]] && tk_die "This laptop is already enrolled ($(grep '^HANDBACK_REPO=' "$TK_ROOT/handback.env" | cut -d= -f2)). travel-kit status shows it."
+  local db="file:$HOME/.bb/bb.db?mode=ro" host=$(tk_bb_host_id)
+  [[ -z $since && -n $host ]] && since=$(sqlite3 "$db" "SELECT created_at FROM hosts WHERE id = $(tk_sql $host)" 2>/dev/null)
+  [[ -n $since ]] || since=$(( (EPOCHSECONDS - 30 * 86400) * 1000 ))
+  if [[ -z $main_home && -n $host ]]; then
+    local dir=$(sqlite3 "$db" "SELECT data_dir FROM host_daemon_sessions WHERE host_id <> $(tk_sql $host) ORDER BY created_at DESC LIMIT 1" 2>/dev/null)
+    main_home=${dir%/.bb}
+  fi
+  mkdir -p "$TK_ROOT/kit"
+  tk_copy_tree "$TK_RUNNER" "$TK_ROOT/kit/runner"
+  KIT_CREATED_MS=$since SRC_HOME=${main_home:-$HOME} SRC_HOST_ID=
+  tk_info "Creating the private handback repo"
+  tk_handback_repo_run || tk_die "Couldn't set up the handback repo. Check gh auth status and SSH to GitHub, then run travel-kit enroll again."
+  : >"$TK_ROOT/baseline.tsv"
+  : >"$TK_ROOT/baseline-repos.tsv"
+  tk_command_run
+  tk_info "Enrolled. The first handback covers bb threads since $(strftime '%F %R' $(( since / 1000 ))) and everything else on this laptop; the main laptop skips what it already has."
+}
+
 tk_diff_items() {
   local base=$1 now=$2 kind name version extra
   typeset -A old new
@@ -200,7 +231,7 @@ tk_join_parts() {
 tk_handback() {
   local dry=$1
   tk_load_env "$TK_ROOT/handback.env" || tk_die "No handback repo yet. Run travel-kit install first (it creates one)."
-  [[ -s $TK_ROOT/baseline.tsv ]] || tk_die "No baseline from install; run travel-kit retry 'baseline:*'"
+  [[ -f $TK_ROOT/baseline.tsv ]] || tk_die "No baseline yet; run travel-kit retry 'baseline:*' (or travel-kit enroll)"
   local started=$(( EPOCHSECONDS * 1000 )) seq=$(( HANDBACK_SEQ + 1 ))
   local repo=$TK_ROOT/handback
   tk_info "Updating the handback repo ($HANDBACK_REPO)"
@@ -212,18 +243,23 @@ tk_handback() {
   tk_repo_fingerprints >"$TK_TMP/repos.tsv"
   local name print_fp
   typeset -A old_fp
-  while IFS=$'\t' read -r name print_fp; do old_fp[$name]=$print_fp; done <"$TK_ROOT/baseline-repos.tsv"
+  [[ -f $TK_ROOT/baseline-repos.tsv ]] && while IFS=$'\t' read -r name print_fp; do old_fp[$name]=$print_fp; done <"$TK_ROOT/baseline-repos.tsv"
   while IFS=$'\t' read -r name print_fp; do
     [[ ${old_fp[$name]:-} == $print_fp ]] && continue
+    tk_repo_has_local_work "$HOME/dev/$name" || continue
     grep -q "^add"$'\t'"repo"$'\t'"$name"$'\t' "$changes" || print -r -- "change"$'\t'"repo"$'\t'"$name"$'\t'$'\t' >>"$changes"
   done <"$TK_TMP/repos.tsv"
   local dir=$repo/handbacks/$(printf '%04d' $seq)-$(strftime '%Y%m%d-%H%M' $EPOCHSECONDS)
   local items=$TK_TMP/payload-items.tsv
-  awk -F'\t' '$1 != "remove" { print $2 "\t" $3 "\t" $4 "\t" $5 }' "$changes" >"$items"
+  local op kind version extra
+  while IFS=$'\t' read -r op kind name version extra; do
+    [[ $op == remove ]] && continue
+    [[ $kind == repo ]] && ! tk_repo_has_local_work "$HOME/dev/$name" && continue
+    print -r -- "$kind"$'\t'"$name"$'\t'"$version"$'\t'"$extra"
+  done <"$changes" >"$items"
   print -r -- "bb"$'\t'"threads"$'\t'$'\t' >>"$items"
   print -r -- "bb"$'\t'"plugin-data"$'\t'$'\t' >>"$items"
   local -A summary
-  local op kind version extra
   while IFS=$'\t' read -r op kind name version extra; do (( summary[$op]++ )); done <"$changes"
   tk_info "Changes: ${summary[add]:-0} added, ${summary[change]:-0} changed, ${summary[remove]:-0} removed, plus bb threads updated since $(strftime '%F %R' $(( HANDBACK_SINCE_MS / 1000 )))"
   if [[ $dry == 1 ]]; then

@@ -207,6 +207,19 @@ describe("git", () => {
   });
 });
 
+describe("handback repos", () => {
+  it("only hands back repos with unpushed commits, uncommitted changes, or no remote", async () => {
+    const out = await zsh(`
+      B=$TK_TMP; git init -q --bare $B/origin.git
+      git init -q -b main $B/repo && cd $B/repo && print a > a && git add a && git commit -qm one && git remote add origin $B/origin.git && git push -q -u origin main
+      tk_repo_has_local_work $B/repo && print pushed-has-work || print pushed-clean
+      print b > b; tk_repo_has_local_work $B/repo && print dirty-has-work
+      git add b && git commit -qm two; tk_repo_has_local_work $B/repo && print unpushed-has-work
+      git init -q $B/local; tk_repo_has_local_work $B/local && print no-remote-has-work`);
+    expect(out.trim().split("\n")).toEqual(["pushed-clean", "dirty-has-work", "unpushed-has-work", "no-remote-has-work"]);
+  });
+});
+
 describe("step engine", () => {
   it("skips finished steps, records failures and blocks, and resumes on the next run", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "tk-steps-"));

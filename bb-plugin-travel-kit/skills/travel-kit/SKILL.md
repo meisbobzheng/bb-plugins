@@ -36,6 +36,7 @@ travel-kit doctor             # what's missing, changes nothing
 travel-kit retry <step-key>   # rerun one step, e.g. travel-kit retry 'cask:*'
 travel-kit log <step-key>     # that step's log from the latest run
 travel-kit status             # handback repo, steps that aren't done
+travel-kit enroll             # make a laptop that wasn't set up from a kit a travel laptop
 bb travel-kit handback        # push changes to the private handback repo
 bb travel-kit handback --dry-run
 ```

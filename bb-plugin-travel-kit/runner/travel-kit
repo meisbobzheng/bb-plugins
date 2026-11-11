@@ -31,6 +31,8 @@ travel-kit: set up a travel laptop from your main one, and hand changes back.
     ./install.sh [--check] [--verbose] [--yes] set up from a kit (rerun to resume)
     travel-kit doctor                          what's missing, without changing anything
     travel-kit retry [KEY-GLOB]                rerun failed and skipped steps (or just KEY)
+    travel-kit enroll [--since MS] [--main-home DIR]
+                                               turn a laptop set up some other way into a travel laptop
     travel-kit handback [--dry-run]            push what changed here to the handback repo
     travel-kit status                          kit, handback and step status
     travel-kit log [KEY]                       show the latest log (or one step's)
@@ -153,7 +155,7 @@ tk_status() {
 tk_main() {
   local command=${1:-help}
   (( $# )) && shift
-  local kit= profile= out= zip=0 dry=0 from= arg
+  local kit= profile= out= zip=0 dry=0 from= since= main_home= arg
   TK_DAYS=7
   while (( $# )); do
     case $1 in
@@ -168,6 +170,8 @@ tk_main() {
       --only) TK_ONLY=$2; shift ;;
       --dry-run) dry=1 ;;
       --from) from=$2; shift ;;
+      --since) since=$2; shift ;;
+      --main-home) main_home=$2; shift ;;
       -h|--help) tk_usage; return 0 ;;
       -*) tk_die "unknown option $1 (see travel-kit help)" ;;
       *) arg=$1 ;;
@@ -186,6 +190,9 @@ tk_main() {
       TK_RETRY_SKIPPED=1
       [[ -n ${arg:-} ]] && TK_ONLY=$arg
       tk_install "$(tk_resolve_kit)" ;;
+    enroll)
+      tk_engine_init "$TK_ROOT"
+      tk_enroll "$since" "$main_home" ;;
     handback)
       tk_engine_init "$TK_ROOT"
       tk_load_env "$TK_ROOT/kit/kit.env"

@@ -142,7 +142,13 @@ tk_apply_repos() {
   while IFS=$'\t' read -r op kind name version extra; do
     [[ $kind == repo && $op != remove ]] || continue
     local bundle=$TK_HB/payload/git/$name.bundle meta=$TK_HB/payload/git/$name.tsv
-    [[ -f $bundle ]] || continue
+    if [[ ! -f $bundle ]]; then
+      if [[ $op == add && -n $extra && ! -e $HOME/dev/$name ]]; then
+        tk_info "repo $name (cloning from $extra)"
+        tk_git clone -q "$extra" "$HOME/dev/$name" || tk_warn "    couldn't clone $extra"
+      fi
+      continue
+    fi
     tk_info "repo $name"
     tk_git_import "$HOME/dev/$name" "$bundle" "$meta" "$SRC_HOME" | sed -e 's/^/    /'
   done <"$changes"

@@ -45,6 +45,13 @@ sign-ins, privacy prompts). Logs are in `~/.travel-kit/logs/latest`.
 
 `travel-kit doctor` reports what's missing without changing anything.
 
+A laptop set up some other way becomes a travel laptop with `travel-kit enroll`.
+It creates the handback repo, and its first handback covers bb threads since
+this laptop's bb was set up plus everything else on it; the main laptop skips
+what it already has. Repos go into a handback only when they have unpushed
+commits, uncommitted changes, or no remote; the main laptop clones or fetches
+the rest from GitHub.
+
 ## How bb moves
 
 The kit never uses `bb server import`, which carries the old server's identity
