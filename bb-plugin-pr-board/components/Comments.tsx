@@ -667,15 +667,23 @@ function waitingStyle(selected: boolean) {
   };
 }
 
+export type CommentFilter = "waiting" | "unresolved" | "all";
+
+export function isWaitingOnViewer(thread: ReviewThread, viewer: string): boolean {
+  return !thread.isResolved && thread.comments.length > 0 && thread.comments.at(-1)?.author.login !== viewer;
+}
+
 export function CommentIndex({
   detail,
   suggestions,
   selectedId,
+  filter,
   onSelect,
 }: {
   detail: { threads: readonly ReviewThread[]; conversation: readonly ConversationComment[]; viewer: string; awaitingReply: readonly string[] };
   suggestions: readonly Suggestion[];
   selectedId: string | null;
+  filter: CommentFilter;
   onSelect(id: string): void;
 }) {
   const grouped = useMemo(() => suggestionsByComment(suggestions), [suggestions]);
@@ -687,7 +695,7 @@ export function CommentIndex({
       comment: thread.comments[0]!,
       where: `${thread.path}${thread.line === null ? "" : `:${thread.line}`}`,
       resolved: thread.isResolved,
-      waiting: !thread.isResolved && thread.comments.at(-1)?.author.login !== detail.viewer,
+      waiting: isWaitingOnViewer(thread, detail.viewer),
     })),
     ...detail.conversation.map((comment) => ({
       id: comment.id,
@@ -696,8 +704,14 @@ export function CommentIndex({
       resolved: false,
       waiting: awaiting.has(comment.id),
     })),
-  ];
-  if (items.length === 0) return <p className="px-2 py-6 text-center text-xs text-muted-foreground">No comments yet.</p>;
+  ].filter((item) => filter === "all" || (filter === "waiting" ? item.waiting : !item.resolved));
+  if (items.length === 0) {
+    return (
+      <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+        {filter === "waiting" ? "Nothing is waiting for your reply." : filter === "unresolved" ? "No unresolved comments." : "No comments yet."}
+      </p>
+    );
+  }
   return (
     <ul className="space-y-1">
       {items.map((item) => {

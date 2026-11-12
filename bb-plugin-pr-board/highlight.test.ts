@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Draft, Finding } from "./contract";
-import { highlightCss } from "./highlight";
+import { WORD_EMPHASIS_CSS, highlightCss } from "./highlight";
 
 function finding(overrides: Partial<Finding> = {}): Finding {
   return {
@@ -45,5 +45,10 @@ describe("highlightCss", () => {
 
   it("is empty when nothing is highlighted", () => {
     expect(highlightCss([], [], "split")).toBe("");
+  });
+
+  it("softens lines with changed words and strengthens the words themselves", () => {
+    expect(WORD_EMPHASIS_CSS).toContain("[data-line-type=change-addition][data-line]:has([data-diff-span])");
+    expect(WORD_EMPHASIS_CSS).toContain("[data-line-type=change-deletion] [data-diff-span]{background-color:");
   });
 });

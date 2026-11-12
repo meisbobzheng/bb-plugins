@@ -5,6 +5,18 @@ export const DRAFT_COLOR = "#8b5cf6";
 const MAX_HIGHLIGHT_LINES = 400;
 
 export type DiffStyle = "split" | "unified";
+export type ChangeHighlight = "words" | "lines";
+
+const WORD_LINE = (type: string) => `[data-line-type=${type}][data-line]:has([data-diff-span])`;
+const WORD_SPAN = (type: string, base: string, light: number, dark: number) =>
+  `[data-line-type=${type}] [data-diff-span]{background-color:light-dark(rgb(from var(${base}) r g b / ${light}),rgb(from var(${base}) r g b / ${dark}))}`;
+
+export const WORD_EMPHASIS_CSS = [
+  `${WORD_LINE("change-addition")},${WORD_LINE("change-deletion")}{--mix-light:95%;--mix-dark:92%}`,
+  `${WORD_LINE("change-addition")}[data-hovered],${WORD_LINE("change-deletion")}[data-hovered]{--mix-light:90%;--mix-dark:86%}`,
+  WORD_SPAN("change-addition", "--diffs-addition-base", 0.3, 0.42),
+  WORD_SPAN("change-deletion", "--diffs-deletion-base", 0.26, 0.4),
+].join("\n");
 
 interface LineSpan {
   side: Side;

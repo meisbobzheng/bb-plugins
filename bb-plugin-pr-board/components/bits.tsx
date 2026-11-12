@@ -60,6 +60,7 @@ export function lineLabel(startLine: number | null, endLine: number | null): str
 export function ToolbarToggle({
   pressed,
   label,
+  title = label,
   icon,
   showLabel,
   disabled = false,
@@ -67,6 +68,7 @@ export function ToolbarToggle({
 }: {
   pressed: boolean;
   label: string;
+  title?: string;
   icon: string;
   showLabel: boolean;
   disabled?: boolean;
@@ -78,7 +80,7 @@ export function ToolbarToggle({
       variant="ghost"
       className="h-7 px-2 text-xs"
       aria-pressed={pressed}
-      title={label}
+      title={title}
       aria-label={label}
       disabled={disabled}
       onClick={onClick}

@@ -16,14 +16,18 @@ export function SubmitReviewDialog({
   open,
   onOpenChange,
   pendingComments,
+  unviewed,
   isAuthor,
   onSubmit,
+  onReviewUnviewed,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
   pendingComments: number;
+  unviewed: readonly string[];
   isAuthor: boolean;
   onSubmit(event: ReviewEvent, body: string): Promise<void>;
+  onReviewUnviewed(path: string): void;
 }) {
   const [event, setEvent] = useState<ReviewEvent>("COMMENT");
   const [body, setBody] = useState("");
@@ -94,6 +98,23 @@ export function SubmitReviewDialog({
             );
           })}
         </fieldset>
+        {unviewed.length === 0 ? null : (
+          <div className="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm" role="note">
+            <p className="font-medium">
+              You haven't viewed {unviewed.length} file{unviewed.length === 1 ? "" : "s"} yet.
+            </p>
+            <ul className="mt-1 max-h-24 overflow-y-auto font-mono text-xs text-muted-foreground">
+              {unviewed.map((path) => (
+                <li key={path} className="truncate">
+                  {path}
+                </li>
+              ))}
+            </ul>
+            <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={() => onReviewUnviewed(unviewed[0]!)}>
+              Review them first
+            </Button>
+          </div>
+        )}
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel

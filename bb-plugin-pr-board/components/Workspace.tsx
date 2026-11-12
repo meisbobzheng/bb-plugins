@@ -5,6 +5,7 @@ import type {
   ConversationComment,
   Definition,
   DefinitionResult,
+  Draft,
   Finding,
   PullDetail,
   PullFile,
@@ -13,17 +14,18 @@ import type {
   ReviewState,
   rpcContract,
 } from "../contract";
-import type { DiffStyle } from "../highlight";
+import type { ChangeHighlight, DiffStyle } from "../highlight";
 import { isCommentable } from "../patch";
 import { REVIEW_THREAD_TAB, type PullRoute } from "../routes";
 import { cn } from "../lib/utils";
 import type { Composer, ReviewActions } from "./Annotations";
-import { CommentsView, type CommentActions } from "./Comments";
-import { ToolbarToggle } from "./bits";
+import { CommentsView, commentCount, isWaitingOnViewer, type CommentActions } from "./Comments";
+import { SeverityBadge, ToolbarToggle, lineLabel } from "./bits";
 import { errorMessage, useCached } from "./cache";
 import { DiffPane, type DefinitionRequest, type DiffFocus } from "./DiffPane";
+import { FileList, ViewedBox, type FileCounts } from "./FileList";
 import { DefinitionPicker, PeekPane, type PeekTarget } from "./PeekPane";
-import { Sidebar, type SidebarTab } from "./Sidebar";
+import { ReviewPanel, findingsInFileOrder, type PanelTab } from "./ReviewPanel";
 import { SubmitAddressDialog } from "./SubmitAddress";
 import { SubmitReviewDialog } from "./SubmitReview";
 import { Button } from "./ui/button";
@@ -43,13 +45,19 @@ type DiffStylePreference = DiffStyle | "auto";
 
 const HISTORY_LIMIT = 50;
 const NARROW_WIDTH = 900;
-const SPLIT_MIN_WIDTH = 860;
+const DOCKED_PANEL_WIDTH = 1280;
+const SPLIT_MIN_WIDTH = 900;
 const DIFF_STYLE_OPTIONS: ReadonlyArray<{ id: DiffStylePreference; label: string; icon: string | null }> = [
   { id: "auto", label: "Auto", icon: null },
   { id: "split", label: "Split", icon: "Columns2" },
   { id: "unified", label: "Unified", icon: "Rows2" },
 ];
 const DIFF_STYLES = DIFF_STYLE_OPTIONS.map((option) => option.id);
+const HIGHLIGHT_OPTIONS: ReadonlyArray<{ id: ChangeHighlight; label: string; title: string }> = [
+  { id: "words", label: "Words", title: "Highlight only the changed words" },
+  { id: "lines", label: "Lines", title: "Highlight whole changed lines" },
+];
+const HIGHLIGHTS = HIGHLIGHT_OPTIONS.map((option) => option.id);
 const lastPaths = new Map<string, string>();
 
 interface Pending {
@@ -70,6 +78,45 @@ function withPending(detail: PullDetail, pending: Pending | null): PullDetail {
     })),
     conversation: [...detail.conversation, ...pending.comments],
   };
+}
+
+function countBy<T>(items: readonly T[], key: (item: T) => string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const item of items) counts.set(key(item), (counts.get(key(item)) ?? 0) + 1);
+  return counts;
+}
+
+function Segmented<T extends string>({
+  label,
+  options,
+  value,
+  narrow,
+  onChange,
+}: {
+  label: string;
+  options: ReadonlyArray<{ id: T; label: string; title: string; ariaLabel?: string; icon?: string | null }>;
+  value: T;
+  narrow: boolean;
+  onChange(value: T): void;
+}) {
+  return (
+    <div className="flex shrink-0 rounded-md border border-border p-0.5" role="group" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          aria-pressed={value === option.id}
+          title={option.title}
+          aria-label={option.ariaLabel ?? option.title}
+          onClick={() => onChange(option.id)}
+          className="inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring aria-pressed:bg-state-active aria-pressed:text-foreground"
+        >
+          {option.icon === undefined || option.icon === null ? null : <Icon name={option.icon} className="size-3.5" aria-hidden />}
+          {narrow && option.icon !== undefined && option.icon !== null ? null : option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function isTyping(target: EventTarget | null): boolean {
@@ -173,15 +220,21 @@ function Workspace({
   const [rootRef, width] = useWidth<HTMLDivElement>();
   const [mainRef, mainWidth] = useWidth<HTMLElement>();
   const narrow = width !== null && width < NARROW_WIDTH;
+  const canDock = width === null || width >= DOCKED_PANEL_WIDTH;
   const [diffStylePreference, setDiffStylePreference] = usePreference<DiffStylePreference>("diff-style", "auto", DIFF_STYLES);
   const diffStyle: DiffStyle =
     diffStylePreference === "auto" ? (mainWidth !== null && mainWidth < SPLIT_MIN_WIDTH ? "unified" : "split") : diffStylePreference;
+  const [highlight, setHighlight] = usePreference<ChangeHighlight>("change-highlight", "words", HIGHLIGHTS);
   const [wrap, setWrap] = usePreference<boolean>("wrap", false);
   const [sidebarOpen, setSidebarOpen] = usePreference<boolean>("sidebar", true);
   const [filesPanelOpen, setFilesPanelOpen] = usePreference<boolean>("files-panel", false);
   const filesOpen = narrow ? filesPanelOpen : sidebarOpen;
   const setFilesOpen = narrow ? setFilesPanelOpen : setSidebarOpen;
-  const [tab, setTab] = useState<SidebarTab>("files");
+  const [panelPinned, setPanelPinned] = usePreference<boolean>("review-panel", true);
+  const docked = canDock && panelPinned;
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [tab, setTab] = useState<PanelTab>("findings");
+  const [focusedFindingId, setFocusedFindingId] = useState<string | null>(null);
   const [location, setLocation] = useState<Location | null>(() => {
     const path = lastPaths.get(pullKey);
     return path !== undefined && detail.files.some((file) => file.path === path) ? { kind: "diff", path, focus: null } : null;
@@ -245,12 +298,23 @@ function Workspace({
     setHistory(history.slice(0, -1));
     setLocation(last.kind === "diff" && last.focus !== null ? { ...last, focus: { ...last.focus, seq: ++seq.current } } : last);
     if (last.kind === "comments") setTab("comments");
-    else if (current?.kind === "comments") setTab("files");
     setPicker(null);
-  }, [current?.kind, history]);
+  }, [history]);
 
-  const selectFile = useCallback((path: string) => goTo({ kind: "diff", path, focus: null }, false), [goTo]);
-  const changeTab = (next: SidebarTab) => {
+  const selectFile = useCallback(
+    (path: string) => {
+      setFocusedFindingId(null);
+      goTo({ kind: "diff", path, focus: null }, false);
+    },
+    [goTo],
+  );
+  const showPanel = (next: PanelTab) => {
+    changeTab(next);
+    if (docked) return;
+    if (canDock) setPanelPinned(true);
+    else setDrawerOpen(true);
+  };
+  const changeTab = (next: PanelTab) => {
     setTab(next);
     if (next === "comments") {
       if (current?.kind !== "comments") goTo({ kind: "comments", commentId: null, seq: nextSeq() }, true);
@@ -262,6 +326,7 @@ function Workspace({
   };
   const showComments = () => {
     setTab("comments");
+    if (!docked) setDrawerOpen(true);
     setLocation((previous) => (previous?.kind === "comments" ? previous : { kind: "comments", commentId: null, seq: nextSeq() }));
   };
   const selectComment = (commentId: string) => goTo({ kind: "comments", commentId, seq: nextSeq() }, current?.kind !== "comments");
@@ -277,18 +342,36 @@ function Workspace({
   const fileForFinding = (finding: Finding): PullFile | undefined =>
     files.find((file) => file.path === finding.path || file.previousPath === finding.path);
 
-  const selectFinding = (finding: Finding) => {
+  const selectFinding = (finding: Finding, remember = true) => {
+    setFocusedFindingId(finding.id);
     const file = fileForFinding(finding);
     if (file === undefined) {
-      goTo({ kind: "peek", target: { kind: "repo", sha: detail.headSha, path: finding.path, line: finding.startLine ?? 1, seq: nextSeq() } }, true);
+      goTo({ kind: "peek", target: { kind: "repo", sha: detail.headSha, path: finding.path, line: finding.startLine ?? 1, seq: nextSeq() } }, remember);
       return;
     }
     const focus =
       finding.startLine === null || finding.endLine === null
         ? null
         : { side: finding.side, line: finding.startLine, endLine: finding.endLine, seq: nextSeq() };
-    goTo({ kind: "diff", path: file.path, focus }, true);
+    goTo({ kind: "diff", path: file.path, focus }, remember);
   };
+
+  const orderedFindings = useMemo(() => findingsInFileOrder(files, review.findings.filter((finding) => !finding.dismissed)), [files, review.findings]);
+  const focusedIndex = orderedFindings.findIndex((finding) => finding.id === focusedFindingId);
+  const stepFinding = (delta: number) => {
+    const fromHere = () => {
+      const after = orderedFindings.findIndex((finding) => {
+        const file = fileForFinding(finding);
+        return file === undefined || files.indexOf(file) >= Math.max(currentIndex, 0);
+      });
+      return delta > 0 ? Math.max(after, 0) : (after < 0 ? orderedFindings.length : after) - 1;
+    };
+    const next = orderedFindings[focusedIndex < 0 ? fromHere() : focusedIndex + delta];
+    if (next !== undefined) selectFinding(next, false);
+  };
+
+  const selectDraft = (draft: Draft) =>
+    goTo({ kind: "diff", path: draft.path, focus: { side: draft.side, line: draft.startLine, endLine: draft.endLine, seq: nextSeq() } }, true);
 
   const jumpTo = (definition: Definition, sha: string) => {
     const focusAt = (side: DiffFocus["side"]): DiffFocus => ({ side, line: definition.line, endLine: definition.line, seq: nextSeq() });
@@ -505,7 +588,6 @@ function Workspace({
       }
       const focus =
         thread.line === null ? null : { side: thread.side, line: thread.startLine ?? thread.line, endLine: thread.line, seq: nextSeq() };
-      setTab("files");
       goTo({ kind: "diff", path: file.path, focus }, true);
     },
     openThread(threadId) {
@@ -538,20 +620,34 @@ function Workspace({
     refreshDetail();
   };
 
+  const viewedAndNext = () => {
+    if (currentFile === null) return;
+    if (!currentFile.viewed) toggleViewed(currentFile);
+    const next = [...files.slice(currentIndex + 1), ...files.slice(0, currentIndex)].find((file) => !file.viewed);
+    if (next === undefined) toast.success("Every file is viewed.");
+    else selectFile(next.path);
+  };
+
+  const onKey = useRef<(event: KeyboardEvent) => void>(() => {});
+  onKey.current = (event) => {
+    if (isTyping(event.target) || event.metaKey) return;
+    if ((event.altKey && event.key === "ArrowLeft") || (event.ctrlKey && event.key === "-")) {
+      event.preventDefault();
+      back();
+      return;
+    }
+    if (event.altKey || event.ctrlKey) return;
+    if (event.key === "Escape" && drawerOpen) setDrawerOpen(false);
+    else if (event.key === "n" || event.key === "p") stepFinding(event.key === "n" ? 1 : -1);
+    else if (current?.kind === "comments") return;
+    else if (event.key === "j" || event.key === "k") stepFile(event.key === "j" ? 1 : -1);
+    else if (event.key === "v") viewedAndNext();
+  };
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (isTyping(event.target) || event.metaKey) return;
-      if (current?.kind === "comments" && (event.key === "j" || event.key === "k")) return;
-      if ((event.altKey && event.key === "ArrowLeft") || (event.ctrlKey && event.key === "-")) {
-        event.preventDefault();
-        back();
-      } else if (!event.altKey && !event.ctrlKey && (event.key === "j" || event.key === "k")) {
-        stepFile(event.key === "j" ? 1 : -1);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [back, current?.kind, stepFile]);
+    const listener = (event: KeyboardEvent) => onKey.current(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   const scoped = useMemo(() => {
     const path = currentFile?.path;
@@ -564,6 +660,26 @@ function Workspace({
     };
   }, [currentFile?.path, currentFile?.previousPath, shown.threads, review.drafts, review.findings]);
 
+  const fileCounts = useMemo((): FileCounts => {
+    const pathOf = (finding: Finding) => files.find((file) => file.path === finding.path || file.previousPath === finding.path)?.path ?? finding.path;
+    const unresolved = shown.threads.filter((thread) => !thread.isResolved);
+    return {
+      findings: countBy(orderedFindings, pathOf),
+      waiting: countBy(
+        unresolved.filter((thread) => isWaitingOnViewer(thread, detail.viewer)),
+        (thread) => thread.path,
+      ),
+      threads: countBy(
+        unresolved.filter((thread) => !isWaitingOnViewer(thread, detail.viewer)),
+        (thread) => thread.path,
+      ),
+      drafts: countBy(review.drafts, (draft) => draft.path),
+    };
+  }, [detail.viewer, files, orderedFindings, review.drafts, shown.threads]);
+
+  const findingsHere = currentFile === null ? [] : orderedFindings.filter((finding) => fileForFinding(finding) === currentFile);
+  const waitingHere = scoped.threads.filter((thread) => isWaitingOnViewer(thread, detail.viewer));
+  const waitingCount = shown.threads.filter((thread) => isWaitingOnViewer(thread, detail.viewer)).length + detail.awaitingReply.length;
   const fullFile = currentFile !== null && fullFiles.has(currentFile.path);
   const showFullFile = () => {
     if (currentFile !== null) setFullFiles((previous) => new Set(previous).add(currentFile.path));
@@ -571,30 +687,40 @@ function Workspace({
   const peekTarget = current?.kind === "peek" ? current.target : null;
   const peekFile =
     peekTarget?.kind === "repo" && peekTarget.sha === detail.headSha ? files.find((file) => file.path === peekTarget.path) : undefined;
-  const sidebar = (
-    <Sidebar
+  const fileList = (
+    <FileList files={files} selectedPath={currentFile?.path ?? null} counts={fileCounts} onSelectFile={selectFile} onToggleViewed={toggleViewed} />
+  );
+  const panel = (
+    <ReviewPanel
+      detail={shown}
       files={files}
-      selectedPath={currentFile?.path ?? null}
-      findings={review.findings}
-      drafts={review.drafts}
-      threads={shown.threads}
-      conversation={shown.conversation}
-      viewer={detail.viewer}
-      awaitingReply={detail.awaitingReply}
-      suggestions={review.suggestions}
-      selectedCommentId={current?.kind === "comments" ? current.commentId : null}
+      review={review}
       tab={tab}
+      focusedFindingId={focusedFindingId}
+      selectedCommentId={current?.kind === "comments" ? current.commentId : null}
       onTab={changeTab}
-      onSelectFile={selectFile}
-      onToggleViewed={toggleViewed}
-      onSelectFinding={selectFinding}
+      onClose={docked ? null : () => setDrawerOpen(false)}
+      onSelectFinding={(finding) => selectFinding(finding)}
+      onSelectDraft={selectDraft}
       onDismissAllFindings={dismissAllFindings}
       onSelectComment={selectComment}
+      onOpenThread={(threadId) => navigate.toThread(threadId)}
     />
   );
+  const railItems: ReadonlyArray<{ id: PanelTab; icon: string; label: string; count: number; tone: string }> = [
+    { id: "findings", icon: "Bot", label: "Findings", count: orderedFindings.length, tone: "bg-warning/30 text-warning-text" },
+    { id: "overview", icon: "AlignLeft", label: "Overview", count: 0, tone: "" },
+    { id: "comments", icon: "MessageSquare", label: "Comments", count: waitingCount, tone: "bg-destructive/20 text-destructive-text" },
+  ];
+  const diffStyleOptions = DIFF_STYLE_OPTIONS.map((option) => ({
+    ...option,
+    label: option.id === "auto" && diffStylePreference === "auto" ? `Auto (${diffStyle})` : option.label,
+    title: option.id === "auto" ? `Auto: split when the diff is at least ${SPLIT_MIN_WIDTH}px wide` : option.label,
+    ariaLabel: `${option.label} diff`,
+  }));
 
   return (
-    <div ref={rootRef} data-vim-defer="j k" className="flex h-full min-h-0 flex-col">
+    <div ref={rootRef} data-vim-defer="j k n p v" className="flex h-full min-h-0 flex-col">
       <WorkspaceHeader
         detail={detail}
         review={review}
@@ -608,10 +734,7 @@ function Workspace({
           refreshDetail();
           reloadState();
         }}
-        onShowFindings={() => {
-          changeTab("findings");
-          setFilesOpen(true);
-        }}
+        onShowFindings={() => showPanel("findings")}
         onRunReview={runReview}
         onExplain={explain}
         onWatchVideo={() => setVideoOpen(true)}
@@ -620,24 +743,24 @@ function Workspace({
         onSubmitAddress={() => setSubmitAddressOpen(true)}
         onSubmit={() => setSubmitOpen(true)}
       />
-      <div className={cn("flex min-h-0 flex-1", narrow && "flex-col")}>
+      <div className={cn("relative flex min-h-0 flex-1", narrow && "flex-col")}>
         {filesOpen ? (
           narrow ? (
-            <section className="h-[32vh] min-h-48 shrink-0 border-b border-border" aria-label="Files and findings">
-              {sidebar}
+            <section className="h-[32vh] min-h-48 shrink-0 border-b border-border" aria-label="Files">
+              {fileList}
             </section>
           ) : (
-            <aside className="w-72 shrink-0 border-r border-border">{sidebar}</aside>
+            <aside className="w-64 shrink-0 border-r border-border bg-card">{fileList}</aside>
           )
         ) : null}
         <main ref={mainRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1">
+          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-card px-2 py-1">
             <Button
               size="icon"
               variant="ghost"
               className="size-7"
               aria-pressed={filesOpen}
-              title={narrow ? "Toggle files and findings" : "Toggle the file list"}
+              title="Toggle the file list"
               aria-label="Toggle the file list"
               onClick={() => setFilesOpen(!filesOpen)}
             >
@@ -645,20 +768,6 @@ function Workspace({
             </Button>
             <Button size="icon" variant="ghost" className="size-7" disabled={history.length === 0} title="Go back (⌥←)" aria-label="Go back" onClick={back}>
               <Icon name="ArrowLeft" className="size-3.5" />
-            </Button>
-            <Button size="icon" variant="ghost" className="size-7" disabled={currentIndex <= 0} title="Previous file (k)" aria-label="Previous file" onClick={() => stepFile(-1)}>
-              <Icon name="ArrowUp" className="size-3.5" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-7"
-              disabled={currentIndex < 0 || currentIndex >= files.length - 1}
-              title="Next file (j)"
-              aria-label="Next file"
-              onClick={() => stepFile(1)}
-            >
-              <Icon name="ArrowDown" className="size-3.5" />
             </Button>
             <span className="min-w-0 flex-1 basis-40 truncate px-1 font-mono text-xs" title={currentFile?.path}>
               {currentFile === null
@@ -669,24 +778,18 @@ function Workspace({
                     : ""
                 : `${currentIndex + 1}/${files.length}  ${currentFile.path}`}
             </span>
-            {narrow ? null : <span className="hidden text-[11px] text-muted-foreground 2xl:inline">⌘-click a symbol to go to its definition · j/k files</span>}
-            <div className="flex rounded-md border border-border p-0.5" role="group" aria-label="Diff layout">
-              {DIFF_STYLE_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={diffStylePreference === option.id}
-                  title={option.id === "auto" ? `Auto: ${diffStyle} at this width` : option.label}
-                  aria-label={`${option.label} diff`}
-                  onClick={() => setDiffStylePreference(option.id)}
-                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring aria-pressed:bg-state-active aria-pressed:text-foreground"
-                >
-                  {option.icon === null ? null : <Icon name={option.icon} className="size-3.5" aria-hidden />}
-                  {narrow && option.icon !== null ? null : option.label}
-                </button>
-              ))}
-            </div>
-            <ToolbarToggle pressed={wrap} label="Wrap" icon="TextWrap" showLabel={!narrow} onClick={() => setWrap(!wrap)} />
+            {narrow ? null : <span className="hidden text-[11px] text-muted-foreground 2xl:inline">⌘-click a symbol to go to its definition</span>}
+            <Segmented label="Diff layout" options={diffStyleOptions} value={diffStylePreference} narrow={narrow} onChange={setDiffStylePreference} />
+            <Segmented label="Change highlight" options={HIGHLIGHT_OPTIONS} value={highlight} narrow={false} onChange={setHighlight} />
+            <ToolbarToggle
+              pressed={wrap || diffStyle === "split"}
+              label="Wrap"
+              title={diffStyle === "split" ? "Split always wraps, so both sides stay lined up" : "Wrap long lines"}
+              icon="TextWrap"
+              showLabel={!narrow}
+              disabled={diffStyle === "split"}
+              onClick={() => setWrap(!wrap)}
+            />
             {currentFile !== null ? (
               <>
                 <ToolbarToggle
@@ -702,16 +805,81 @@ function Workspace({
                     })
                   }
                 />
-                <ToolbarToggle
-                  pressed={currentFile.viewed}
-                  label="Viewed"
-                  icon={currentFile.viewed ? "CircleCheck" : "Circle"}
-                  showLabel={!narrow}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-pressed={currentFile.viewed}
+                  aria-label="Viewed"
+                  title={currentFile.viewed ? "You viewed this file. Click to mark it not viewed." : "Mark this file viewed"}
+                  className={cn("h-7 shrink-0 px-2 text-xs", currentFile.viewed && "border-success/50 bg-success/10 text-success")}
                   onClick={() => toggleViewed(currentFile)}
-                />
+                >
+                  <ViewedBox viewed={currentFile.viewed} />
+                  {narrow ? null : currentFile.viewed ? "Viewed" : "Mark viewed"}
+                </Button>
               </>
             ) : null}
+            {canDock ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7"
+                aria-pressed={panelPinned}
+                title="Toggle the review panel"
+                aria-label="Toggle the review panel"
+                onClick={() => setPanelPinned(!panelPinned)}
+              >
+                <Icon name="PanelLeft" className="size-3.5 rotate-180" />
+              </Button>
+            ) : null}
           </div>
+          {current?.kind === "diff" && (findingsHere.length > 0 || waitingHere.length > 0 || orderedFindings.length > 0) ? (
+            <div className="flex shrink-0 items-center gap-1.5 border-b border-border bg-warning/5 px-2 py-1 text-xs" role="group" aria-label="In this file">
+              <span className="shrink-0 font-medium">{findingsHere.length + waitingHere.length === 0 ? "Nothing flagged in this file" : "In this file"}</span>
+              <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+                {findingsHere.map((finding) => (
+                  <button
+                    key={finding.id}
+                    type="button"
+                    aria-pressed={finding.id === focusedFindingId}
+                    title={`${finding.title} (${lineLabel(finding.startLine, finding.endLine)})`}
+                    onClick={() => selectFinding(finding, false)}
+                    className="inline-flex max-w-64 shrink-0 items-center gap-1 rounded-full border border-border bg-background py-0.5 pl-0.5 pr-2 outline-none hover:border-ring/60 focus-visible:ring-1 focus-visible:ring-ring aria-pressed:border-ring aria-pressed:ring-1 aria-pressed:ring-ring"
+                  >
+                    <SeverityBadge severity={finding.severity} />
+                    <span className="truncate">{finding.title}</span>
+                  </button>
+                ))}
+                {waitingHere.map((thread) => (
+                  <button
+                    key={thread.id}
+                    type="button"
+                    title="Waiting for your reply"
+                    onClick={() => commentActions.viewInDiff(thread)}
+                    className="inline-flex max-w-64 shrink-0 items-center gap-1 rounded-full border border-border bg-background py-0.5 pl-0.5 pr-2 outline-none hover:border-ring/60 focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <span className="rounded-full bg-destructive/15 px-1.5 text-[10px] font-semibold text-destructive-text">reply</span>
+                    <span className="truncate">
+                      {thread.comments.at(-1)?.author.login} on {thread.line === null ? "this file" : `line ${thread.line}`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {orderedFindings.length === 0 ? null : (
+                <span className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                  <Button size="icon" variant="ghost" className="size-6" title="Previous finding (p)" aria-label="Previous finding" onClick={() => stepFinding(-1)}>
+                    <Icon name="ChevronLeft" fallback="ArrowLeft" className="size-3.5" />
+                  </Button>
+                  <span className="tabular-nums" aria-label="Finding position">
+                    {focusedIndex < 0 ? "–" : focusedIndex + 1}/{orderedFindings.length}
+                  </span>
+                  <Button size="icon" variant="ghost" className="size-6" title="Next finding (n)" aria-label="Next finding" onClick={() => stepFinding(1)}>
+                    <Icon name="ChevronRight" className="size-3.5" />
+                  </Button>
+                </span>
+              )}
+            </div>
+          ) : null}
           {picker === null ? null : (
             <DefinitionPicker
               result={picker.result}
@@ -722,7 +890,7 @@ function Workspace({
               }}
             />
           )}
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div data-scroll-root className="min-h-0 flex-1 overflow-auto">
             {current === null ? <p className="p-5 text-sm text-muted-foreground">This pull request has no changed files.</p> : null}
             {current?.kind === "diff" && currentFile !== null ? (
               <DiffPane
@@ -734,9 +902,11 @@ function Workspace({
                 drafts={scoped.drafts}
                 threads={scoped.threads}
                 diffStyle={diffStyle}
+                highlight={highlight}
                 wrap={wrap}
                 fullFile={fullFile}
                 focus={current.focus}
+                focusedFindingId={focusedFindingId}
                 composer={composer?.path === currentFile.path ? composer : null}
                 actions={actions}
                 onCompose={setComposer}
@@ -768,14 +938,105 @@ function Workspace({
               />
             ) : null}
           </div>
+          {current?.kind === "diff" && currentFile !== null ? (
+            <div className="flex shrink-0 items-center gap-1 border-t border-border bg-card px-2 py-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                disabled={currentIndex <= 0}
+                title="Previous file (k)"
+                aria-label="Previous file"
+                onClick={() => stepFile(-1)}
+              >
+                <Icon name="ArrowUp" className="size-3.5" />
+                {narrow ? null : "Previous"}
+              </Button>
+              <span className="min-w-0 flex-1 truncate text-center text-xs text-muted-foreground">
+                {currentFile.viewed ? (
+                  <span className="text-success">You viewed this file</span>
+                ) : findingsHere.length > 0 ? (
+                  `${findingsHere.length} finding${findingsHere.length === 1 ? "" : "s"} here · not viewed yet`
+                ) : (
+                  "Not viewed yet"
+                )}
+              </span>
+              <Button size="sm" className="h-7 px-2.5 text-xs" title="Mark this file viewed and open the next one you haven't viewed (v)" onClick={viewedAndNext}>
+                <Icon name="Check" className="size-3.5" />
+                Viewed · next unviewed
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                disabled={currentIndex < 0 || currentIndex >= files.length - 1}
+                title="Next file (j)"
+                aria-label="Next file"
+                onClick={() => stepFile(1)}
+              >
+                {narrow ? null : "Next"}
+                <Icon name="ArrowDown" className="size-3.5" />
+              </Button>
+            </div>
+          ) : null}
         </main>
+        {docked ? (
+          <aside className="w-80 shrink-0 border-l border-border bg-card xl:w-96" aria-label="Review panel">
+            {panel}
+          </aside>
+        ) : (
+          <>
+            {drawerOpen ? (
+              <aside
+                className={cn(
+                  "absolute z-20 border-border bg-card shadow-lg",
+                  narrow ? "inset-x-0 bottom-10 top-0 border-b" : "inset-y-0 right-10 w-[min(24rem,calc(100%-3rem))] border-l",
+                )}
+                aria-label="Review panel"
+              >
+                {panel}
+              </aside>
+            ) : null}
+            <nav className={cn("flex shrink-0 items-center gap-1 border-border bg-card", narrow ? "border-t px-2 py-1" : "w-10 flex-col border-l py-2")} aria-label="Review panel tabs">
+              {railItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={drawerOpen && tab === item.id}
+                  title={item.label}
+                  aria-label={item.label}
+                  onClick={() => {
+                    if (drawerOpen && tab === item.id) setDrawerOpen(false);
+                    else {
+                      changeTab(item.id);
+                      setDrawerOpen(true);
+                    }
+                  }}
+                  className="relative flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring aria-pressed:bg-state-active aria-pressed:text-foreground"
+                >
+                  <Icon name={item.icon} className="size-4" />
+                  {item.count > 0 ? (
+                    <span className={cn("absolute -right-0.5 -top-0.5 min-w-3.5 rounded-full px-0.5 text-[9px] font-bold leading-[14px] tabular-nums", item.tone)}>
+                      {item.count}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </nav>
+          </>
+        )}
       </div>
       <SubmitReviewDialog
         open={submitOpen}
         onOpenChange={setSubmitOpen}
         pendingComments={review.drafts.length}
+        unviewed={files.filter((file) => !file.viewed).map((file) => file.path)}
         isAuthor={detail.author.login === detail.viewer}
         onSubmit={submitReview}
+        onReviewUnviewed={(path) => {
+          setSubmitOpen(false);
+          selectFile(path);
+        }}
       />
       <VideoDialog pull={pull} video={review.video} headSha={detail.headSha} open={videoOpen} onOpenChange={setVideoOpen} />
       <SubmitAddressDialog

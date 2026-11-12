@@ -46,6 +46,16 @@ export function findLine(host: HTMLElement | null, side: Side | null, line: numb
   return root?.querySelector<HTMLElement>(lineSelector(side, line, diffStyle)) ?? null;
 }
 
+export function reveal(host: HTMLElement, element: HTMLElement, block: "center" | "start"): void {
+  const root = host.closest<HTMLElement>("[data-scroll-root]");
+  if (root === null) {
+    element.scrollIntoView({ block });
+    return;
+  }
+  const offset = element.getBoundingClientRect().top - root.getBoundingClientRect().top;
+  root.scrollTop += block === "center" ? offset - root.clientHeight / 3 : offset;
+}
+
 export interface LineFocus {
   side: Side | null;
   line: number;
@@ -67,8 +77,8 @@ export function useScrollToLine(
     let attempts = 0;
     const tick = () => {
       const element = findLine(host.current, focus.side, focus.line, diffStyle);
-      if (element !== null) {
-        element.scrollIntoView({ block: "center" });
+      if (element !== null && host.current !== null) {
+        reveal(host.current, element, "center");
         return;
       }
       if (++attempts < 90) frame = requestAnimationFrame(tick);

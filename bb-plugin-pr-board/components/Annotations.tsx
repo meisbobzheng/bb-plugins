@@ -34,7 +34,7 @@ export interface ReviewActions {
 }
 
 export type AnnotationData =
-  | { kind: "finding"; finding: Finding; outdated: boolean }
+  | { kind: "finding"; finding: Finding; outdated: boolean; focused: boolean }
   | { kind: "thread"; thread: ReviewThread }
   | { kind: "draft"; draft: Draft }
   | { kind: "composer"; composer: Composer; suggestion: string | null };
@@ -75,10 +75,20 @@ function useBusy() {
 const SIDE_LABEL: Record<Side, string> = { additions: "new", deletions: "old" };
 const unsent = new WeakMap<Composer, string>();
 
-export function FindingCard({ finding, outdated, actions }: { finding: Finding; outdated: boolean; actions: ReviewActions }) {
+export function FindingCard({
+  finding,
+  outdated,
+  focused,
+  actions,
+}: {
+  finding: Finding;
+  outdated: boolean;
+  focused: boolean;
+  actions: ReviewActions;
+}) {
   const { busy, run } = useBusy();
   return (
-    <Card className="border-warning/50 bg-warning/5">
+    <Card className={cn("border-warning/50 bg-warning/5", focused && "ring-2 ring-ring")}>
       <div className="flex flex-wrap items-center gap-1.5">
         <Icon name="Bot" className="size-3.5 text-warning-text" aria-hidden />
         <SeverityBadge severity={finding.severity} />
@@ -294,7 +304,7 @@ export function CommentEditor({ composer, suggestion, actions }: { composer: Com
 export function AnnotationView({ data, actions }: { data: AnnotationData; actions: ReviewActions }) {
   switch (data.kind) {
     case "finding":
-      return <FindingCard finding={data.finding} outdated={data.outdated} actions={actions} />;
+      return <FindingCard finding={data.finding} outdated={data.outdated} focused={data.focused} actions={actions} />;
     case "thread":
       return <ThreadCard thread={data.thread} actions={actions} />;
     case "draft":

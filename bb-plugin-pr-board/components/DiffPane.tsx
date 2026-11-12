@@ -4,11 +4,11 @@ import { FileDiff, type FileDiffProps } from "@pierre/diffs/react";
 import { experimental_useCodeTheme, useBbNavigate, useRpc, type PluginRpcClient } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { Draft, Finding, PullDetail, PullFile, ReviewThread, Side, rpcContract } from "../contract";
-import { highlightCss, type DiffStyle } from "../highlight";
+import { highlightCss, WORD_EMPHASIS_CSS, type ChangeHighlight, type DiffStyle } from "../highlight";
 import { isCommentable } from "../patch";
 import { lineLabel } from "./bits";
 import { AnnotationView, annotationKey, FindingCard, ThreadCard, type AnnotationData, type Composer, type ReviewActions } from "./Annotations";
-import { identifierAt, isModifierClick, useModifierUnderline, useScrollToLine, type LineFocus } from "./code";
+import { identifierAt, isModifierClick, reveal, useModifierUnderline, useScrollToLine, type LineFocus } from "./code";
 import { Button } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { prefetch, useCached } from "./cache";
@@ -76,9 +76,11 @@ export function DiffPane({
   drafts,
   threads,
   diffStyle,
+  highlight,
   wrap,
   fullFile,
   focus,
+  focusedFindingId,
   composer,
   actions,
   onCompose,
@@ -92,9 +94,11 @@ export function DiffPane({
   drafts: readonly Draft[];
   threads: readonly ReviewThread[];
   diffStyle: DiffStyle;
+  highlight: ChangeHighlight;
   wrap: boolean;
   fullFile: boolean;
   focus: DiffFocus | null;
+  focusedFindingId: string | null;
   composer: Composer | null;
   actions: ReviewActions;
   onCompose(composer: Composer): void;
@@ -162,7 +166,7 @@ export function DiffPane({
       ...inlineFindings.map((finding) => ({
         side: finding.side,
         lineNumber: finding.endLine,
-        metadata: { kind: "finding" as const, finding, outdated: outdated(finding) },
+        metadata: { kind: "finding" as const, finding, outdated: outdated(finding), focused: finding.id === focusedFindingId },
       })),
       ...inlineThreads.map(({ thread, line }) => ({ side: thread.side, lineNumber: line, metadata: { kind: "thread" as const, thread } })),
       ...drafts
@@ -182,7 +186,7 @@ export function DiffPane({
       });
     }
     return list;
-  }, [composer, detail.headSha, drafts, inlineFindings, inlineThreads, loaded]);
+  }, [composer, detail.headSha, drafts, focusedFindingId, inlineFindings, inlineThreads, loaded]);
 
   const handlers = useRef({ gutter: (_range: SelectedLineRange) => {}, token: (_props: TokenProps, _event: MouseEvent) => {} });
   handlers.current.gutter = (range) => {
@@ -211,18 +215,21 @@ export function DiffPane({
     });
   };
 
-  const css = useMemo(() => highlightCss(inlineFindings, drafts, diffStyle), [diffStyle, drafts, inlineFindings]);
+  const css = useMemo(
+    () => [highlightCss(inlineFindings, drafts, diffStyle), highlight === "words" ? WORD_EMPHASIS_CSS : ""].filter((rule) => rule.length > 0).join("\n"),
+    [diffStyle, drafts, highlight, inlineFindings],
+  );
   const options = useMemo(
     (): NonNullable<FileDiffProps<AnnotationData>["options"]> => ({
       theme: codeTheme.name,
       themeType: codeTheme.mode,
       diffStyle,
-      overflow: wrap ? "wrap" : "scroll",
+      overflow: wrap || diffStyle === "split" ? "wrap" : "scroll",
       disableFileHeader: true,
       useTokenTransformer: true,
       expandUnchanged: fullFile,
       hunkSeparators: "line-info",
-      lineDiffType: "word-alt",
+      lineDiffType: highlight === "words" ? "word-alt" : "none",
       enableGutterUtility: true,
       enableLineSelection: true,
       lineHoverHighlight: "both",
@@ -232,7 +239,7 @@ export function DiffPane({
       onTokenEnter: (props, event) => underline.enter(props.tokenElement, isModifierClick(event)),
       onTokenLeave: (props) => underline.leave(props.tokenElement),
     }),
-    [codeTheme.mode, codeTheme.name, css, diffStyle, fullFile, underline, wrap],
+    [codeTheme.mode, codeTheme.name, css, diffStyle, fullFile, highlight, underline, wrap],
   );
 
   const reachable = focus !== null && inFile(focus.side, focus.line) ? focus : null;
@@ -244,7 +251,7 @@ export function DiffPane({
     if (!fullFile && canExpand) onShowFullFile();
   });
   useEffect(() => {
-    if (focus !== null && reachable === null) host.current?.scrollIntoView({ block: "start" });
+    if (focus !== null && reachable === null && host.current !== null) reveal(host.current, host.current, "start");
   }, [focus, reachable]);
 
   if (file.patch === null) {
@@ -277,7 +284,12 @@ export function DiffPane({
                   Finding on {lineLabel(finding.startLine, finding.endLine)}, past the end of this file at this commit
                 </p>
               ) : null}
-              <FindingCard finding={finding} outdated={finding.headSha !== null && finding.headSha !== detail.headSha} actions={actions} />
+              <FindingCard
+                finding={finding}
+                outdated={finding.headSha !== null && finding.headSha !== detail.headSha}
+                focused={finding.id === focusedFindingId}
+                actions={actions}
+              />
               {finding.endLine !== null && canExpand && !fullFile && inFile(finding.side, finding.endLine) ? (
                 <Button size="sm" variant="ghost" className="absolute right-4 top-3 h-6 text-xs" onClick={onShowFullFile}>
                   <Icon name="Maximize2" className="size-3" />

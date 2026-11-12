@@ -126,31 +126,48 @@ The refresh button beside the PR number fetches the PR again. If that fails,
 the saved PR stays on screen and the button turns into **Update failed ·
 retry**, whose tooltip has GitHub's error.
 
-The page has:
+The page has three columns: the files on the left, the diff in the middle, and
+the review panel on the right.
 
-- **Files**: every changed file with its status, finding, unresolved-thread,
-  and pending-comment counts. The circle marks a file viewed on GitHub. `j` and
-  `k` move between files. Once a file's diff loads, the next file's contents
-  load in the background, so `j` shows it at once.
-- **Findings**: the recorded findings, blockers first. Click one to jump to
-  its lines. Dismissed findings are hidden until **Show dismissed**.
-- **Comments**: unresolved code comments plus conversation comments from
-  others; comments from bots, GitHub Actions, and Copilot (and code comments
-  they started) are listed but not counted. The tab lists every code comment and conversation comment (and
-  review with text); click one to scroll to it in the main pane, which shows
-  each comment with its replies, a reply box, and the address thread's
-  suggestions.
-- **The diff**: split or unified, wrapped or not, collapsed or the full file.
-  Lines a finding covers are shaded amber, darker for blockers and majors;
-  lines with a pending comment are shaded violet. Findings, GitHub review
-  threads, and pending comments render under their last line. Findings on
-  lines outside the shown hunks, and outdated GitHub comments, are listed
-  above the diff.
-- **Description**: the PR body.
+- **Files**: every changed file grouped by directory, with its status and its
+  finding, waiting-for-your-reply (red), other unresolved-thread, and
+  pending-comment counts. The bar at the top shows how many you have viewed.
+  The box before a file marks it viewed on GitHub, and **Hide viewed files**
+  leaves only the ones you still have to look at. `j` and `k` move between
+  files. Once a file's diff loads, the next file's contents load in the
+  background, so `j` shows it at once.
+- **The diff**: the bar above it has the diff layout, **Words** or **Lines**,
+  wrap, full file, and **Mark viewed**. **Words** shades a changed line lightly
+  and only its changed words strongly, so what is new stands out; **Lines**
+  shades whole lines. Lines a finding covers are shaded amber, darker for
+  blockers and majors; lines with a pending comment are shaded violet.
+  Findings, GitHub review threads, and pending comments render under their
+  last line. Findings on lines outside the shown hunks, and outdated GitHub
+  comments, are listed above the diff.
+- **In this file**: the strip under the bar lists the file's findings and the
+  comments in it waiting for your reply; click one to jump to it. ‹ and › (or
+  `p` and `n`) step through every open finding in file order, moving to the
+  next file at the end of one, and the count shows where you are.
+- **Viewed · next unviewed** (`v`), at the bottom, marks the file viewed and
+  opens the next file you have not viewed. ↑ and ↓ beside it step through the
+  files.
+- **Findings** panel tab: the open findings grouped by file in file order,
+  with their severity counts, **Dismiss all**, and **Show dismissed**, then
+  your pending comments. Click one to jump to its lines.
+- **Overview** panel tab: the PR description, its branches and size, how many
+  files you have viewed, and links to the review and address threads.
+- **Comments** panel tab: **Waiting on you** (the default when anything is),
+  **Unresolved**, or **All** code comments, conversation comments, and reviews
+  with text. The tab's count is unresolved code comments plus conversation
+  comments from others; comments from bots, GitHub Actions, and Copilot (and
+  code comments they started) are listed but not counted. Click one to scroll
+  to it in the main pane, which shows each comment with its replies, a reply
+  box, and the address thread's suggestions.
 - **Run review**: sends the review command to the thread again. Its ▾ menu
   has **Explain in a video** (see below).
-- **Address comments** (under Run review) and **Submit Address** (under Submit
-  review): see below.
+- **Address comments** and, in its ▾ menu, **Submit Address**: see below.
+- **Submit review**: see Commenting. It lists the files you have not viewed
+  yet, with **Review them first**.
 
 ### Explainer video
 
@@ -232,13 +249,16 @@ pull request. The button needs an address thread, and the server refuses when
 that thread's worktree has no changes.
 
 The diff layout is **Auto** by default: split when the diff area is at least
-860 pixels wide, unified when it is narrower. **Split** and **Unified** fix it.
-The ↑ and ↓ buttons step through the files.
+900 pixels wide, unified when it is narrower. **Split** and **Unified** fix it.
+Split always wraps long lines, so both sides stay lined up.
 
-On a page narrower than 900 pixels, such as a vertical monitor with the thread
-panel open, the file list and findings move into a collapsible panel above the
-diff (the list button toggles it), the header's actions move to their own row,
-and toolbar buttons show icons only.
+The review panel sits beside the diff on a page at least 1280 pixels wide (the
+panel button in the diff's bar hides it). On a narrower page, such as one with
+bb's thread panel open, it folds into a strip of tab buttons with counts, and
+a tab opens over the diff instead of squeezing it; Escape closes it. On a page
+narrower than 900 pixels, the file list moves into a collapsible panel above
+the diff (the list button toggles it), the tab buttons move below the diff, the
+header's actions move to their own row, and toolbar buttons show icons only.
 
 ### Commenting
 

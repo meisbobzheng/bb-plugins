@@ -306,7 +306,7 @@ describe("review workspace", () => {
       { rpc: workspaceRpc(STATE) },
     );
     expect(await slot.findByText("Add thing")).toBeTruthy();
-    expect(slot.getByText("Files 1/2")).toBeTruthy();
+    expect(slot.getByText("1 of 2 viewed")).toBeTruthy();
     expect(slot.getByText("agent working")).toBeTruthy();
     await waitFor(() =>
       expect(slot.inspection.rpcCalls.filter((call) => call.method === "fileAt" && (call.input as { path: string }).path === "cmd/main.go")).toHaveLength(2),
@@ -321,14 +321,15 @@ describe("review workspace", () => {
       expect(css).toContain('[data-additions] [data-line="3"]');
       expect(css).toContain("var(--warning)");
     });
-    expect(slot.getAllByText("Inline b into a")).toHaveLength(1);
-    expect(slot.getByText("Pending note")).toBeTruthy();
-
-    fireEvent.click(slot.getByRole("tab", { name: "Findings 1" }));
-    expect(slot.getAllByText("Inline b into a")).toHaveLength(2);
+    expect(slot.getAllByText("Pending note").length).toBeGreaterThan(0);
+    const panel = slot.getByRole("complementary", { name: "Review panel" });
+    expect(within(panel).getByRole("tab", { name: "Findings 1" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(panel).getByText("Inline b into a")).toBeTruthy();
+    expect(within(slot.getByRole("group", { name: "In this file" })).getByText("Inline b into a")).toBeTruthy();
 
     fireEvent.click(slot.getByRole("button", { name: /Submit review/ }));
     expect(await slot.findByText("1 pending comment will be posted with this review.")).toBeTruthy();
+    expect(slot.getByText("You haven't viewed 1 file yet.")).toBeTruthy();
   });
 
   it("looks up the definition of a ⌘-clicked symbol at its position in the new file", async () => {
@@ -398,8 +399,7 @@ describe("review workspace", () => {
     fireEvent.change(await slot.findByRole("textbox", { name: "Comment" }), { target: { value: "My own words" } });
     fireEvent.click(slot.getByTitle("docs/readme.md"));
     await waitFor(() => expect(slot.queryByRole("textbox", { name: "Comment" })).toBeNull());
-    fireEvent.click(slot.getByRole("tab", { name: /^Findings/ }));
-    fireEvent.click(slot.getByRole("button", { name: /Inline b into a/ }));
+    fireEvent.click(within(slot.getByRole("complementary", { name: "Review panel" })).getByRole("button", { name: /Inline b into a/ }));
     expect(((await slot.findByRole("textbox", { name: "Comment" })) as HTMLTextAreaElement).value).toBe("My own words");
   });
 
@@ -509,12 +509,13 @@ describe("review workspace", () => {
       { rpc: workspaceRpc({ ...STATE, findings: [pastEnd], drafts: [] }, { pull: () => ({ ...DETAIL, number: 20 }) }) },
     );
     await slot.findByText("Add thing");
-    fireEvent.click(slot.getByRole("tab", { name: "Findings 1" }));
-    fireEvent.click(slot.getByRole("button", { name: /Stale copy/ }));
+    fireEvent.click(within(slot.getByRole("complementary", { name: "Review panel" })).getByRole("button", { name: /Stale copy/ }));
     expect(await slot.findByText("Finding on L96–119, past the end of this file at this commit")).toBeTruthy();
     expect(slot.queryByRole("button", { name: "Show in full file" })).toBeNull();
+    const shown = () => slot.getAllByText("Stale copy").filter((element) => element.closest("[data-scroll-root]") !== null);
+    expect(shown()).toHaveLength(1);
     fireEvent.click(slot.getByRole("button", { name: "Full file" }));
-    expect(slot.getAllByText("Stale copy")).toHaveLength(2);
+    expect(shown()).toHaveLength(1);
   });
 
   it("dismisses every open finding at once with an Undo that restores them", async () => {
@@ -526,7 +527,6 @@ describe("review workspace", () => {
       { rpc: workspaceRpc({ ...STATE, findings: [...STATE.findings, second] }, { pull: () => ({ ...DETAIL, number: 21 }), dismissFindings: () => ({}) }) },
     );
     await slot.findByText("Add thing");
-    fireEvent.click(slot.getByRole("tab", { name: "Findings 2" }));
     fireEvent.click(slot.getByRole("button", { name: "Dismiss all" }));
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
     await waitFor(() =>
@@ -537,15 +537,53 @@ describe("review workspace", () => {
     );
   });
 
+  it("steps through findings across files in file order, and marks a file viewed before opening the next unviewed one", async () => {
+    const util = { path: "cmd/util.go", previousPath: null, status: "added" as const, additions: 1, deletions: 0, patch: "@@ -0,0 +1 @@\n+package main", viewed: false };
+    const readme = { ...STATE.findings[0]!, id: "f3", path: "docs/readme.md", startLine: 1, endLine: 1, severity: "nit" as const, title: "Say more" };
+    const slot = renderSlot(
+      boardPanel(),
+      { subPath: "pr/acme/app/22" },
+      {
+        rpc: workspaceRpc(
+          { ...STATE, findings: [readme, ...STATE.findings] },
+          { pull: () => ({ ...DETAIL, number: 22, files: [...DETAIL.files, util] }), setViewed: () => ({}) },
+        ),
+      },
+    );
+    await slot.findByText("Add thing");
+    const position = () => slot.getByLabelText("Finding position").textContent;
+    expect(position()).toBe("–/2");
+    fireEvent.keyDown(window, { key: "n" });
+    expect(position()).toBe("1/2");
+    expect(slot.getByText(/1\/3\s+cmd\/main\.go/)).toBeTruthy();
+    fireEvent.keyDown(window, { key: "n" });
+    expect(position()).toBe("2/2");
+    expect(slot.getByText(/2\/3\s+docs\/readme\.md/)).toBeTruthy();
+    fireEvent.keyDown(window, { key: "p" });
+    expect(slot.getByText(/1\/3\s+cmd\/main\.go/)).toBeTruthy();
+
+    fireEvent.click(slot.getByRole("button", { name: /Viewed · next unviewed/ }));
+    expect(slot.getByText(/3\/3\s+cmd\/util\.go/)).toBeTruthy();
+    await waitFor(() =>
+      expect(slot.inspection.rpcCalls.filter((call) => call.method === "setViewed").map((call) => call.input)).toEqual([
+        { repo: "acme/app", number: 22, pullNodeId: "PR_node", path: "cmd/main.go", viewed: true },
+      ]),
+    );
+    expect(slot.getByText("2 of 3 viewed")).toBeTruthy();
+  });
+
   it("stacks the file list above a unified diff when the page is narrow", async () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 700, 900));
     const slot = renderSlot(boardPanel(), { subPath: "pr/acme/app/7" }, { rpc: workspaceRpc(STATE) });
     await slot.findByText("Add thing");
-    expect(slot.queryByRole("region", { name: "Files and findings" })).toBeNull();
+    expect(slot.queryByRole("region", { name: "Files" })).toBeNull();
+    expect(slot.queryByRole("complementary", { name: "Review panel" })).toBeNull();
     await waitFor(() => expect(document.querySelector("diffs-container")?.shadowRoot?.querySelector("[data-unified]")).toBeTruthy());
 
     fireEvent.click(slot.getByRole("button", { name: "Toggle the file list" }));
-    expect(slot.getByRole("region", { name: "Files and findings" })).toBeTruthy();
+    expect(slot.getByRole("region", { name: "Files" })).toBeTruthy();
+    fireEvent.click(slot.getByRole("button", { name: "Findings" }));
+    expect(within(slot.getByRole("complementary", { name: "Review panel" })).getByText("Inline b into a")).toBeTruthy();
     fireEvent.click(slot.getByRole("button", { name: "Split diff" }));
     await waitFor(() => expect(document.querySelector("diffs-container")?.shadowRoot?.querySelector("[data-additions]")).toBeTruthy());
   });
@@ -618,6 +656,8 @@ describe("comments", () => {
       },
     );
     fireEvent.click(await slot.findByRole("tab", { name: "Comments 2" }));
+    expect(slot.queryByRole("button", { name: /dave\s*Please add docs/ })).toBeNull();
+    fireEvent.click(slot.getByRole("button", { name: "All" }));
     const listed = (name: RegExp) => slot.getAllByRole("button", { name }).find((button) => button.getAttribute("aria-current") !== null || button.className.includes("rounded-md border"));
     expect(listed(/carol\s*Rename b/)?.getAttribute("title")).toBe("Waiting for your reply");
     expect(listed(/carol\s*Rename b/)?.style.color).toBe("var(--attention)");
@@ -642,7 +682,7 @@ describe("comments", () => {
     fireEvent.change(slot.getByRole("textbox", { name: "Reply" }), { target: { value: "Renamed it to c." } });
 
     fireEvent.click(slot.getByRole("button", { name: "View in diff" }));
-    expect(slot.getByRole("tab", { name: /^Files/ }).getAttribute("aria-selected")).toBe("true");
+    expect(slot.getByText(/1\/2\s+cmd\/main\.go/)).toBeTruthy();
     fireEvent.click(slot.getByRole("button", { name: "Go back" }));
     expect(slot.getByRole("tab", { name: /^Comments/ }).getAttribute("aria-selected")).toBe("true");
     expect((slot.getByRole("textbox", { name: "Reply" }) as HTMLTextAreaElement).value).toBe("Renamed it to c.");
@@ -690,19 +730,20 @@ describe("comments", () => {
     await waitFor(() => expect(loads).toBe(4));
   });
 
-  it("stacks the review and address buttons and confirms Submit Address before sending it", async () => {
+  it("offers Submit Address from Address comments' menu and confirms it before sending it", async () => {
     const slot = renderSlot(
       boardPanel(),
       { subPath: "pr/acme/app/10" },
       { rpc: workspaceRpc(SUGGESTED, { pull: () => ({ ...COMMENTED, number: 10 }), submitAddress: () => ({ threadId: "thr_address", delivery: "queued" }) }) },
     );
     expect(await slot.findByText("Add thing")).toBeTruthy();
-    const buttons = ["Run review", "Submit review", "Address comments", "Submit Address"].map((name) => slot.getByRole("button", { name: new RegExp(`^${name}`) }));
-    const grid = buttons[1]?.parentElement;
-    expect([...(grid?.children ?? [])]).toEqual([buttons[0]?.parentElement, ...buttons.slice(1)]);
-    expect(grid?.className).toContain("grid-cols-2");
-    await waitFor(() => expect(buttons[3]?.hasAttribute("disabled")).toBe(false));
-    fireEvent.click(buttons[3]!);
+    for (const name of ["Run review", "Address comments", "Submit review"]) expect(slot.getByRole("button", { name: new RegExp(`^${name}`) })).toBeTruthy();
+    await waitFor(() => expect(slot.inspection.rpcCalls.some((call) => call.method === "reviewState")).toBe(true));
+    const trigger = slot.getByRole("button", { name: "More address actions" });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    const item = await screen.findByRole("menuitem", { name: /Submit Address/ });
+    await waitFor(() => expect(item.hasAttribute("data-disabled")).toBe(false));
+    fireEvent.click(item);
     const dialog = await slot.findByRole("dialog");
     expect(dialog.textContent).toContain("it may fix it with edits that don't change behavior");
     expect(dialog.textContent).toContain("If a check still fails or needs a logic change, it stops without committing or pushing.");
