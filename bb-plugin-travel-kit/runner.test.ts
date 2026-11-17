@@ -263,6 +263,24 @@ describe("apply repos", () => {
   });
 });
 
+describe("apply files", () => {
+  it("asks to install or skip a script the main laptop lacks, and records a skip as skipped", async () => {
+    const out = await zsh(`
+      tk_engine_init $HOME/.travel-kit; KIT_SEQ=1 TK_STAGE=$TK_TMP/stage
+      for n in skipped wanted; do
+        mkdir -p $TK_STAGE/root$TK_TMP/bin; print -r -- '#!/bin/zsh' > $TK_STAGE/root$TK_TMP/bin/$n
+        print -r -- "add\tscript\t$TK_TMP/bin/$n\tabc\t" >> $TK_TMP/changes.tsv
+      done
+      tk_choose() { [[ $1 == *skipped* ]] && print s || print i }
+      tk_apply_files $TK_TMP/changes.tsv
+      for n in skipped wanted; do
+        [[ -x $TK_TMP/bin/$n ]] && print $n-installed || print $n-absent
+        tk_state_get $(tk_apply_key add-script $TK_TMP/bin/$n)
+      done`);
+    expect(out.trim().split("\n").filter((line) => !line.includes("✓"))).toEqual(["skipped-absent", "skipped", "wanted-installed", "ok"]);
+  });
+});
+
 describe("scan", () => {
   it("lists custom scripts but not shims that launch an app bundle", async () => {
     const out = await zsh(`

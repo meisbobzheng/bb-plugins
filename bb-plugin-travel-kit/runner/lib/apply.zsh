@@ -117,7 +117,16 @@ tk_apply_files() {
       tk_state_set $key ok
       continue
     fi
-    choice=${all_kind[$kind]:-}
+    if [[ ! -e $to ]]; then
+      choice=${all_kind[add-$kind]:-}
+      [[ -z $choice ]] && choice=$(tk_choose "  + $kind $name was added on the travel laptop. [s]kip, [i]nstall, [a]ll $kind, [n]one $kind?" sian)
+      [[ $choice == a ]] && all_kind[add-$kind]=i choice=i
+      [[ $choice == n ]] && all_kind[add-$kind]=s choice=s
+      [[ $choice == s ]] && { tk_state_set $key skipped; continue }
+      choice=t
+    else
+      choice=${all_kind[$kind]:-}
+    fi
     while [[ -z $choice ]]; do
       choice=$(tk_choose "  ≠ $kind $name changed on the travel laptop. [m] keep main, [t]ake travel, [d]iff, [a]ll travel $kind?" mtda)
       if [[ $choice == d ]]; then
