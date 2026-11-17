@@ -138,14 +138,25 @@ tk_apply_files() {
 }
 
 tk_apply_repos() {
-  local changes=$1 op kind name version extra
+  local changes=$1 op kind name version extra key choice all=
   while IFS=$'\t' read -r op kind name version extra; do
     [[ $kind == repo && $op != remove ]] || continue
     local bundle=$TK_HB/payload/git/$name.bundle meta=$TK_HB/payload/git/$name.tsv
     if [[ ! -f $bundle ]]; then
-      if [[ $op == add && -n $extra && ! -e $HOME/dev/$name ]]; then
-        tk_info "repo $name (cloning from $extra)"
-        tk_git clone -q "$extra" "$HOME/dev/$name" || tk_warn "    couldn't clone $extra"
+      [[ $op == add && -n $extra && ! -e $HOME/dev/$name ]] || continue
+      key=$(tk_apply_key "$op-$kind" "$name")
+      [[ -n $(tk_state_get $key) ]] && continue
+      choice=$all
+      [[ -z $choice ]] && choice=$(tk_choose "  + repo $name is on the travel laptop with nothing unpushed. [s]kip, [c]lone, [a]ll repos, [n]o repos?" scan)
+      [[ $choice == a ]] && all=c choice=c
+      [[ $choice == n ]] && all=s choice=s
+      if [[ $choice == s ]]; then
+        tk_state_set $key skipped
+      elif tk_git clone -q "$extra" "$HOME/dev/$name"; then
+        tk_state_set $key ok
+        tk_say "    ${TK_GREEN}✓${TK_RESET} cloned"
+      else
+        tk_warn "    couldn't clone $extra"
       fi
       continue
     fi
@@ -163,6 +174,10 @@ tk_apply_bb() {
   tk_say "  bb: ${count:-0} threads changed on the travel laptop. The travel copy wins."
   local host=$(tk_bb_host_id)
   [[ -n $host ]] || { tk_error "bb isn't set up on this laptop"; return 1 }
+  if [[ -z ${TK_BB_SETTINGS:-} ]]; then
+    TK_BB_SETTINGS=$(tk_choose "  bb settings, theme and skills from the travel laptop: [k]eep this laptop's, [t]ake the travel laptop's?" kt)
+    [[ $TK_BB_SETTINGS == t ]] && TK_BB_SETTINGS=take || TK_BB_SETTINGS=keep
+  fi
   local was_running=0
   tk_bb_running && was_running=1
   if (( was_running )) && ! tk_confirm "  bb has to quit for a moment to merge them. Quit bb now?"; then
@@ -174,7 +189,7 @@ tk_apply_bb() {
   tk_sqlite_snapshot "$HOME/.bb/bb.db" "$TK_BACKUP_DIR/bb/bb.db" || return 1
   tk_say "  backed up bb's database to $TK_BACKUP_DIR/bb/bb.db"
   local rc=0
-  tk_bb_merge_payload "$payload" "$host" upsert || rc=1
+  tk_bb_merge_payload "$payload" "$host" upsert $TK_BB_SETTINGS || rc=1
   (( was_running )) && tk_bb_launch
   (( rc == 0 )) && tk_state_set $key ok
   return $rc

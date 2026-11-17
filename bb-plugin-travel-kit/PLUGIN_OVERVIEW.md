@@ -13,8 +13,8 @@ Set up a loaner laptop from your own in one run, and bring your work back.
   and only that machine, with your threads remapped to its username and paths
   and still resumable.
 - **Handbacks to a private GitHub repo** while you travel. Back home, threads
-  take the travel copy, and you're asked about each app, package, and config
-  change.
+  take the travel copy, and you're asked about each app, package, config
+  change, and repo to clone, and once about bb settings.
 
 ## How it works
 

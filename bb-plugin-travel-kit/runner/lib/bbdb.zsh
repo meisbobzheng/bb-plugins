@@ -93,6 +93,10 @@ tk_bb_export_content() {
   sqlite3 "$out" "VACUUM;"
 }
 
+tk_bb_drop_settings() {
+  sqlite3 "$1" "DELETE FROM app_settings; DELETE FROM app_settings_values; DELETE FROM ui_preferences; DELETE FROM app_theme;"
+}
+
 tk_bb_content_threads() {
   sqlite3 "$1" "SELECT id FROM threads"
 }

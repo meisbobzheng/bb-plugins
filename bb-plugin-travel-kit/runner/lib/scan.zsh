@@ -94,12 +94,18 @@ tk_scan_pipx() {
   done
 }
 
+tk_app_shim() {
+  local -a body=(${(f)"$(sed 1d "$1" 2>/dev/null)"})
+  (( ${#body} == 1 )) && [[ ${body[1]} == *.app/Contents/MacOS/* ]]
+}
+
 tk_scan_scripts() {
   local dir file
   for dir in ${~TK_SCRIPT_DIRS}; do
     for file in $dir/*(N.x); do
       (( ${TK_SCRIPT_IGNORE[(Ie)${file:t}]} )) && continue
       [[ $(head -c 2 "$file" 2>/dev/null) == '#!' ]] || continue
+      tk_app_shim "$file" && continue
       tk_emit script "${file/#$HOME/~}" "$(tk_hash_path "$file")"
     done
   done

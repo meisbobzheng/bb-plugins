@@ -467,12 +467,13 @@ tk_bb_content_run() {
 }
 
 tk_bb_merge_payload() {
-  local payload=$1 host=$2 mode=$3
+  local payload=$1 host=$2 mode=$3 settings=${4:-take}
   local work=$TK_TMP/content.db
   if [[ -f $payload/content.db ]]; then
     cp "$payload/content.db" "$work"
     tk_rewrite_sqlite "$work" ${(f)"$(tk_home_pairs "$SRC_HOME" "$HOME" | tr '\t' '\n')"} "$SRC_HOST_ID" "$host" || return 1
     [[ $mode == upsert ]] && { tk_bb_align_ids "$work" "$HOME/.bb/bb.db" || return 1 }
+    [[ $settings == keep ]] && tk_bb_drop_settings "$work"
     tk_sqlite_merge "$work" "$HOME/.bb/bb.db" "$mode" || return 1
     print -r -- "merged $(sqlite3 "$work" 'SELECT count(*) FROM threads') threads into bb"
   fi
@@ -491,8 +492,10 @@ tk_bb_merge_payload() {
     fi
     [[ -d $dir/host-data ]] && tk_copy_tree "$dir/host-data" "$HOME/.bb/plugins/$id/host-data"
   done
+  local -a subs=(thread-storage attachments)
+  [[ $settings == take ]] && subs+=(theme skills)
   local sub
-  for sub in thread-storage attachments theme skills; do
+  for sub in $subs; do
     [[ -d $payload/$sub ]] && tk_copy_tree "$payload/$sub" "$HOME/.bb/$sub"
   done
   if [[ -d $payload/claude-projects ]]; then

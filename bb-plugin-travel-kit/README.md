@@ -49,8 +49,8 @@ A laptop set up some other way becomes a travel laptop with `travel-kit enroll`.
 It creates the handback repo, and its first handback covers bb threads since
 this laptop's bb was set up plus everything else on it; the main laptop skips
 what it already has. Repos go into a handback only when they have unpushed
-commits, uncommitted changes, or no remote; the main laptop clones or fetches
-the rest from GitHub.
+commits, uncommitted changes, or no remote; the main laptop asks before cloning
+any of the rest it doesn't have from GitHub.
 
 ## How bb moves
 
@@ -62,7 +62,8 @@ quits it, merges that content with the old host ID and home paths rewritten to
 the new ones, and starts it again. Claude Code session folders are renamed for
 the new paths so threads resume. Handbacks merge the same way in the other
 direction, keeping the main laptop's IDs when a project, environment, or
-section already exists there.
+section already exists there. Applying asks once whether to take the travel
+laptop's bb settings, theme, and skills or keep the main laptop's.
 
 ## What never leaves the laptop
 

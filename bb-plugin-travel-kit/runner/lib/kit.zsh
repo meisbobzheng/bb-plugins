@@ -46,7 +46,7 @@ tk_kit_payload() {
     mkdir -p "$payload/bb"
     tk_bb_export_content "$HOME/.bb/bb.db" "$payload/bb/content.db" "$(tk_bb_host_id)" "$since" "$include_inactive" || return 1
     if ! tk_has_item bb settings "$items"; then
-      sqlite3 "$payload/bb/content.db" "DELETE FROM app_settings; DELETE FROM app_settings_values; DELETE FROM ui_preferences; DELETE FROM app_theme;"
+      tk_bb_drop_settings "$payload/bb/content.db"
     fi
     tk_bb_content_threads "$payload/bb/content.db" >"$payload/bb/threads.txt"
     tk_info "  $(grep -c . "$payload/bb/threads.txt") threads"
@@ -167,7 +167,7 @@ tk_repo_fingerprints() {
 tk_repo_has_local_work() {
   local repo=$1 wt branch
   [[ -n $(tk_git -C "$repo" remote 2>/dev/null) ]] || return 0
-  [[ $(tk_git -C "$repo" rev-list --count --branches --tags --not --remotes 2>/dev/null) == 0 ]] || return 0
+  [[ $(tk_git -C "$repo" rev-list --count --branches --not --remotes 2>/dev/null) == 0 ]] || return 0
   while IFS=$'\t' read -r wt branch; do
     [[ -d $wt ]] && ! tk_git_clean "$wt" && return 0
   done < <(tk_git_worktrees "$repo")
@@ -253,12 +253,13 @@ tk_handback() {
   local items=$TK_TMP/payload-items.tsv
   local op kind version extra
   while IFS=$'\t' read -r op kind name version extra; do
-    [[ $op == remove ]] && continue
+    [[ $op == remove || $kind == bb ]] && continue
     [[ $kind == repo ]] && ! tk_repo_has_local_work "$HOME/dev/$name" && continue
     print -r -- "$kind"$'\t'"$name"$'\t'"$version"$'\t'"$extra"
   done <"$changes" >"$items"
   print -r -- "bb"$'\t'"threads"$'\t'$'\t' >>"$items"
   print -r -- "bb"$'\t'"plugin-data"$'\t'$'\t' >>"$items"
+  print -r -- "bb"$'\t'"settings"$'\t'$'\t' >>"$items"
   local -A summary
   while IFS=$'\t' read -r op kind name version extra; do (( summary[$op]++ )); done <"$changes"
   tk_info "Changes: ${summary[add]:-0} added, ${summary[change]:-0} changed, ${summary[remove]:-0} removed, plus bb threads updated since $(strftime '%F %R' $(( HANDBACK_SINCE_MS / 1000 )))"

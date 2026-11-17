@@ -45,6 +45,9 @@ CREATE TRIGGER segs_ai AFTER INSERT ON thread_search_segments BEGIN INSERT INTO 
 CREATE TRIGGER segs_ad AFTER DELETE ON thread_search_segments BEGIN DELETE FROM thread_search_segments_fts WHERE rowid = old.rowid; END;
 CREATE TABLE plugin_kv (plugin_id TEXT, key TEXT, value TEXT, PRIMARY KEY (plugin_id, key));
 CREATE TABLE app_settings_values (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE ui_preferences (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE app_theme (id TEXT PRIMARY KEY, value TEXT);
 `;
 
 describe("paths", () => {
@@ -164,6 +167,30 @@ SQL
     ]);
   });
 
+  it("merges a handback's bb settings, theme and skills only when told to take them", async () => {
+    const out = await zsh(`
+      SRC_HOME=/Users/travel SRC_HOST_ID=host_travel
+      mkdir -p $HOME/.bb $TK_TMP/hb/theme
+      sqlite3 $HOME/.bb/bb.db <<'SQL'
+${BB_SCHEMA}
+INSERT INTO hosts VALUES ('host_main', 'main');
+INSERT INTO app_settings_values VALUES ('theme', 'main');
+SQL
+      sqlite3 $TK_TMP/hb/content.db <<'SQL'
+${BB_SCHEMA}
+INSERT INTO threads (id, title) VALUES ('thr_t', 'travel');
+INSERT INTO app_settings_values VALUES ('theme', 'travel');
+SQL
+      print dark > $TK_TMP/hb/theme/t.json
+      tk_bb_merge_payload $TK_TMP/hb host_main upsert keep >/dev/null
+      sqlite3 $HOME/.bb/bb.db "SELECT 'keep', value, (SELECT count(*) FROM threads) FROM app_settings_values"
+      [[ -e $HOME/.bb/theme ]] && print keep-copied-theme
+      tk_bb_merge_payload $TK_TMP/hb host_main upsert take >/dev/null
+      sqlite3 $HOME/.bb/bb.db "SELECT 'take', value FROM app_settings_values"
+      cat $HOME/.bb/theme/t.json`);
+    expect(out.trim().split("\n")).toEqual(["keep|main|1", "take|travel", "dark"]);
+  });
+
   it("clears password, token, and secret columns and empties auth tables in plugin databases", async () => {
     const out = await zsh(`
       db=$TK_TMP/plugin.db
@@ -213,10 +240,39 @@ describe("handback repos", () => {
       B=$TK_TMP; git init -q --bare $B/origin.git
       git init -q -b main $B/repo && cd $B/repo && print a > a && git add a && git commit -qm one && git remote add origin $B/origin.git && git push -q -u origin main
       tk_repo_has_local_work $B/repo && print pushed-has-work || print pushed-clean
+      git tag v0 $(git commit-tree HEAD^{tree} -m orphan); tk_repo_has_local_work $B/repo && print tag-has-work || print tag-clean
       print b > b; tk_repo_has_local_work $B/repo && print dirty-has-work
       git add b && git commit -qm two; tk_repo_has_local_work $B/repo && print unpushed-has-work
       git init -q $B/local; tk_repo_has_local_work $B/local && print no-remote-has-work`);
-    expect(out.trim().split("\n")).toEqual(["pushed-clean", "dirty-has-work", "unpushed-has-work", "no-remote-has-work"]);
+    expect(out.trim().split("\n")).toEqual(["pushed-clean", "tag-clean", "dirty-has-work", "unpushed-has-work", "no-remote-has-work"]);
+  });
+});
+
+describe("apply repos", () => {
+  it("asks before cloning a clean repo from GitHub, skips without a terminal, and remembers the answer", async () => {
+    const out = await zsh(`
+      tk_engine_init $HOME/.travel-kit; KIT_SEQ=1 TK_HB=$TK_TMP/hb
+      git init -q --bare $TK_TMP/origin.git
+      print -r -- "add\trepo\tclean\tmain\t$TK_TMP/origin.git" > $TK_TMP/changes.tsv
+      tk_apply_repos $TK_TMP/changes.tsv
+      [[ -e $HOME/dev/clean ]] && print cloned || print not-cloned
+      tk_state_get $(tk_apply_key add-repo clean)
+      tk_choose() { print -u2 asked-again; print c }
+      tk_apply_repos $TK_TMP/changes.tsv 2>&1`);
+    expect(out.trim().split("\n")).toEqual(["not-cloned", "skipped"]);
+  });
+});
+
+describe("scan", () => {
+  it("lists custom scripts but not shims that launch an app bundle", async () => {
+    const out = await zsh(`
+      d=$TK_TMP/bin; mkdir -p $d; TK_SCRIPT_DIRS=($d)
+      print -r -- '#!/bin/sh\n/Applications/Tailscale.app/Contents/MacOS/Tailscale "$@"' > $d/tailscale
+      print -r -- '#!/bin/zsh\naws ssm start-session' > $d/druid-forward
+      print -r -- '#!/bin/zsh\nset -e\nexec /Applications/Wireshark.app/Contents/MacOS/Wireshark -k' > $d/pcap
+      chmod +x $d/*
+      tk_scan_scripts | cut -f2`);
+    expect(out.trim().split("\n")).toEqual([expect.stringMatching(/\/druid-forward$/), expect.stringMatching(/\/pcap$/)]);
   });
 });
 
