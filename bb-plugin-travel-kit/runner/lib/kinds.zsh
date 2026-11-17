@@ -53,7 +53,8 @@ tk_bb() {
   "$cli" "$@"
 }
 
-tk_bb_running() { tk_bb status >/dev/null 2>&1 }
+tk_bb_running() { tk_bb project list --json >/dev/null 2>&1 }
+tk_bb_app_running() { [[ $(osascript -e 'application id "dev.bb.desktop" is running' 2>/dev/null) == true ]] }
 
 tk_bb_app() {
   local app
@@ -389,7 +390,7 @@ tk_bb_quit() {
   print -r -- "quitting bb so its database can be updated safely"
   osascript -e 'tell application id "dev.bb.desktop" to quit' >/dev/null 2>&1
   local waited=0
-  while tk_bb_running || pgrep -qf '/bb\.app/Contents/'; do
+  while tk_bb_running || tk_bb_app_running; do
     sleep 1
     (( waited++ > 60 )) && { print -r -- "bb didn't quit; quit it with ⌘Q and rerun"; return 1 }
   done
